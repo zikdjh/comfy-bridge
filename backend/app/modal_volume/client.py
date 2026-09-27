@@ -61,10 +61,15 @@ class ModalCliError(RuntimeError):
 
 
 def auth_env() -> dict[str, str]:
-    """设置页保存的 Modal 凭证 → CLI 环境变量；未配置时返回空（回落 ~/.modal.toml）。"""
+    """设置页保存的 Modal 凭证 → CLI 环境变量；未配置时返回空（回落 ~/.modal.toml）。
+
+    strip 兜底：历史存量里可能已有带尾部空白的凭证（粘贴带入），
+    直接注入会让 CLI 报 Token validation failed。
+    """
     modal = get_settings().modal
-    if modal.token_id and modal.token_secret:
-        return {"MODAL_TOKEN_ID": modal.token_id, "MODAL_TOKEN_SECRET": modal.token_secret}
+    token_id, token_secret = modal.token_id.strip(), modal.token_secret.strip()
+    if token_id and token_secret:
+        return {"MODAL_TOKEN_ID": token_id, "MODAL_TOKEN_SECRET": token_secret}
     return {}
 
 
