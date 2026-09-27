@@ -27,13 +27,13 @@
 - [x] `frontend/src/components/common/ConsolePane.tsx` — 快照 capRef 裁剪（replace 截断 + 追加 trim 双路径，行 100/108/114/149）。**修正上轮误报**：此前因工具输出损坏误判"未完成"，本轮实测已写入
 - [x] `frontend/src/pages/volume/index.tsx` — 卷选择器跟随主卷名 `meta?.volume` effect（+8/−0）
 
-## 二、明确未完成（待做）
+## 二、待做项（✅ 2026-09-27 全部完成）
 
-- [ ] `frontend/src/pages/models/index.tsx` 同步防双击（文件未被 P2 触碰；disabled×8 为既有代码，非守卫）
-- [ ] 前端依赖清理：`zustand` 仍在 `frontend/package.json`（探针=1），确认无 import 后移除
-- [ ] 死代码：workflows 页未用导入、`flagLabel`（相关文件未被触碰）
-- [x] ~~README：部署一节补全 + e2e/ 目录描述修正~~ — 已补「部署（Modal 云端 Runner）」与「打包（M4）」两节；e2e/ 描述改为"预留，当前为空"（实测仅 .gitkeep）
-- [ ] CLI JSON 解析去重
+- [x] ~~`frontend/src/pages/models/index.tsx` 同步防双击~~ — `97c7571`：sync() 加 in-flight ref 守卫（原 disabled×8 为空列表态，非守卫）
+- [x] ~~前端依赖清理：`zustand`~~ — `36d59db`：src 零 import 探针确认后移出 package.json，pnpm-lock 同步再生
+- [x] ~~死代码：workflows 页未用导入、`flagLabel`~~ — `36d59db`：删 useState/Descriptions 未用导入与 flagLabel 函数
+- [x] ~~README：部署一节补全 + e2e/ 目录描述修正~~ — `d456f49`
+- [x] ~~CLI JSON 解析去重~~ — `36d59db`：modal_volume/client 新增 cli_json_list()，替换 4 处重复实现（行为不变，真实 CLI 输出冒烟验证）
 - [x] ~~sync/ 空包~~ — 实测目录不存在，无需处理
 
 ## 三、收尾验证与提交步骤（✅ 2026-09-27 全部完成，记录如下）
