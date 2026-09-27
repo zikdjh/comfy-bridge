@@ -19,7 +19,9 @@ async def list_requests(
     status: str = Query(default="all"),
 ) -> dict:
     items = await asyncio.to_thread(store.list_requests, limit, backend, status)
-    return {"total": len(items), "items": items}
+    # total = 过滤后的真实总数（此前取 len(items) 受 limit 截断，"共 N 条"失真）
+    total = await asyncio.to_thread(store.count_requests, backend, status)
+    return {"total": total, "returned": len(items), "items": items}
 
 
 @router.get("/{req_id}")

@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import shutil
 from pathlib import Path
 
@@ -55,14 +56,20 @@ async def overview(category: str = Query("checkpoints")) -> dict:
         return {"ok": False, "reason": "本机未找到 modal CLI", "category": category, "rows": []}
 
     local_dir = Path(resolved[category])
-    local_files: dict[str, str] = {}
-    if local_dir.is_dir():
-        for path in sorted(local_dir.rglob("*")):
-            if len(local_files) >= _MAX_LISTED_FILES:
-                break
-            if path.is_file() and not path.name.startswith("."):
-                rel = path.relative_to(local_dir).as_posix()
-                local_files[rel] = _human(path.stat().st_size)
+
+    def _scan_local() -> dict[str, str]:
+        # 模型盘可能很大：rglob 扫描放线程池，不阻塞事件循环
+        files: dict[str, str] = {}
+        if local_dir.is_dir():
+            for path in sorted(local_dir.rglob("*")):
+                if len(files) >= _MAX_LISTED_FILES:
+                    break
+                if path.is_file() and not path.name.startswith("."):
+                    rel = path.relative_to(local_dir).as_posix()
+                    files[rel] = _human(path.stat().st_size)
+        return files
+
+    local_files = await asyncio.to_thread(_scan_local)
 
     cloud_files: dict[str, str] = {}
     cloud_error: str | None = None

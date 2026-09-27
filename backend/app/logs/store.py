@@ -154,6 +154,23 @@ def list_requests(limit: int = 50, backend: str | None = None, status: str | Non
     return [_row_to_dict(r) for r in rows]
 
 
+def count_requests(backend: str | None = None, status: str | None = None) -> int:
+    """过滤条件下的请求总数（/requests 的 total 用；list_requests 受 limit 截断）。"""
+    sql = "SELECT COUNT(*) FROM requests"
+    conds, params = [], []
+    if backend and backend != "all":
+        conds.append("backend = ?")
+        params.append(backend)
+    if status and status != "all":
+        conds.append("status = ?")
+        params.append(status)
+    if conds:
+        sql += " WHERE " + " AND ".join(conds)
+    with _lock:
+        (n,) = _get_conn().execute(sql, params).fetchone()
+    return n
+
+
 def get_request(req_id: int) -> dict | None:
     with _lock:
         row = _get_conn().execute("SELECT * FROM requests WHERE id = ?", (req_id,)).fetchone()

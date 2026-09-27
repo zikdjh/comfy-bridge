@@ -129,6 +129,12 @@ async def _upload_inputs(payload: dict) -> None:
     if to_upload:
         console.log(f"[{pid}] 上传输入文件 {len(to_upload)} 个 → 数据卷 input/")
     for name in to_upload:
+        # 输入名来自提交方工作流：只允许 input/ 内的相对路径，
+        # 防 .. / 绝对路径把 input 外的本地文件推上云端卷
+        p = Path(name)
+        if p.is_absolute() or ".." in p.parts:
+            logger.warning("跳过越界输入引用: %r", name)
+            continue
         local = input_root / name
         await modal_cli.run("volume", "put", modal_cli.volume_name(), "-f", str(local), f"input/{name}")
         logger.info("输入已上传数据卷: %s", name)
@@ -317,8 +323,13 @@ async def _download_outputs(outputs: dict) -> int:
                     continue
                 subfolder = item.get("subfolder") or ""
                 ftype = item.get("type") or "output"
+                # subfolder/filename 来自云端 history 响应（不完全可信）：
+                # 先校验落点在 output_dir 内（防 .. / 盘符绝对路径越界写盘），再拉取
+                dest = (out_root / subfolder / filename).resolve()
+                if not dest.is_relative_to(out_root.resolve()):
+                    logger.warning("跳过越界输出条目: subfolder=%r filename=%r", subfolder, filename)
+                    continue
                 data = await runner_client.fetch_view(filename, subfolder, ftype)
-                dest = (out_root / subfolder / filename)
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes(data)
                 count += 1

@@ -39,7 +39,7 @@ async def local_log_stream(request: Request, tail: int = Query(default=300, ge=1
 @router.get("/modal")
 async def modal_logs(tail: int = Query(default=300, ge=1, le=500)) -> dict:
     """Modal Runner 控制台快照（REST 兜底，实时请用 /modal/stream）。"""
-    return {"online": True, "entries": runner_console.snapshot(tail)}
+    return {"online": runner_client.available(), "entries": runner_console.snapshot(tail)}
 
 
 @router.get("/modal/stream")

@@ -68,7 +68,7 @@ async def handle_object_info(request: Request, node_type: str | None) -> Respons
         url += f"?{request.url.query}"
     client = get_upstream_client()
     try:
-        up = await client.get(url)
+        up = await client.get(url, timeout=20.0)  # 共享客户端 read=None，这里必须显式限时
     except httpx.HTTPError as exc:
         return JSONResponse(status_code=502, content={"error": f"本地 ComfyUI 不可达: {exc}"})
 

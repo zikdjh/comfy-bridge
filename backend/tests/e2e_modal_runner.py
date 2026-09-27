@@ -68,5 +68,9 @@ recs = get("/api/v1/requests?limit=3")["items"]
 rec = next((r for r in recs if r["prompt_id"] == pid), {})
 print("final record:", json.dumps({k: rec.get(k) for k in ("id", "status", "backend", "final_backend", "error", "duration_ms")}, ensure_ascii=False))
 
+if rec.get("status") != "done":
+    print(f"E2E FAIL: terminal status={rec.get('status')!r} error={rec.get('error')}", file=sys.stderr)
+    sys.exit(1)
+
 media = get("/api/v1/media/local?kind=all&limit=5")
 print("media latest:", json.dumps(media["items"][:3], ensure_ascii=False))

@@ -84,9 +84,10 @@ async def _send_json(client_id: str, event: dict) -> None:
 
 def _upstream_ws_url() -> str:
     comfy_url = get_settings().local.comfy_url.rstrip("/")
-    rest = comfy_url.split("://", 1)[1]
-    scheme = "wss" if comfy_url.startswith("https") else "ws"
-    return f"{scheme}://{rest}/ws"
+    if "://" not in comfy_url:
+        return "ws://127.0.0.1:8188/ws"  # 配置畸形时兜底，不让 /ws 直接 500
+    scheme, rest = comfy_url.split("://", 1)
+    return f"{'wss' if scheme == 'https' else 'ws'}://{rest}/ws"
 
 
 def _tap_event(raw: str) -> None:

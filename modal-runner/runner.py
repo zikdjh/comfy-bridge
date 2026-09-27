@@ -54,6 +54,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import urllib.request
 from pathlib import Path
 
@@ -166,9 +167,26 @@ def seed_extra_model_paths() -> None:
 
 
 def install_custom_node_deps() -> None:
-    """节点文件在数据卷上而 Python 依赖在镜像外，冷启动时按 requirements.txt 补齐。"""
+    """节点文件在数据卷上而 Python 依赖在镜像外，冷启动时按 requirements.txt 补齐。
+
+    单节点限时 300s 并把结果打到 stdout（经桥接器控制台可见）：
+    依赖大/坏的节点不再静默吞错，也不会耗尽 600s 冷启动预算。
+    """
     for req in sorted((Path(DATA_ROOT) / "custom_nodes").glob("*/requirements.txt")):
-        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", str(req)], check=False)
+        name = req.parent.name
+        try:
+            r = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-q", "-r", str(req)],
+                check=False, timeout=300, capture_output=True, text=True,
+            )
+        except subprocess.TimeoutExpired:
+            print(f"[comfybridge] {name}: 依赖安装超时(>300s)，跳过（节点可能不可用）", flush=True)
+            continue
+        if r.returncode != 0:
+            tail = (r.stderr or r.stdout or "").strip().splitlines()
+            print(f"[comfybridge] {name}: 依赖安装失败 rc={r.returncode}: {tail[-1] if tail else ''}", flush=True)
+        else:
+            print(f"[comfybridge] {name}: 依赖就绪", flush=True)
 
 
 def load_extra_launch_args() -> list[str]:
@@ -217,7 +235,16 @@ def launch_comfyui() -> None:
 
     cmd += load_extra_launch_args()  # 管理台「设置 → 启动命令」下发的追加参数
 
-    subprocess.Popen(cmd, cwd=COMFY_DIR)
+    proc = subprocess.Popen(cmd, cwd=COMFY_DIR)
+
+    # watchdog：ComfyUI 中途崩溃时立刻结束容器（否则容器空转到 12h 超时，
+    # 端口只表现为 502，无任何日志线索）。进程退出 → os._exit 让 Modal 重建容器。
+    def _watchdog() -> None:
+        code = proc.wait()
+        print(f"[comfybridge] ComfyUI 进程退出 code={code}，结束容器等待 Modal 重建", flush=True)
+        os._exit(1 if code else 0)
+
+    threading.Thread(target=_watchdog, name="comfyui-watchdog", daemon=True).start()
 
 
 # ------------------------------------------------------------------ 云函数

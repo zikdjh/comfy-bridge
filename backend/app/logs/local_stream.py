@@ -64,7 +64,7 @@ async def _sleep_or_disconnected(request, delay: float) -> bool:
     return await request.is_disconnected()
 
 
-async def local_log_events(request, tail: int = 300) -> AsyncIterator[str]:
+async def _log_events_impl(request, tail: int = 300, client_ids: list[str] | None = None) -> AsyncIterator[str]:
     """SSE 事件流：快照 → 实时增量；通道断开自动重连，重连后重新下发快照。"""
 
     def _sse(event: str, payload: dict) -> str:
@@ -74,6 +74,8 @@ async def local_log_events(request, tail: int = 300) -> AsyncIterator[str]:
     base = settings.local.comfy_url.rstrip("/")
     ws_url = base.replace("http://", "ws://", 1).replace("https://", "wss://", 1) + "/ws"
     client_id = f"comfybridge-{uuid.uuid4().hex[:12]}"
+    if client_ids is not None:
+        client_ids.append(client_id)  # 供外层 finally 断开时取消订阅
     tail = max(1, min(tail, 500))
 
     async with httpx.AsyncClient(base_url=base, timeout=_CONNECT_TIMEOUT) as client:
@@ -118,3 +120,24 @@ async def local_log_events(request, tail: int = 300) -> AsyncIterator[str]:
 
             if await _sleep_or_disconnected(request, _RECONNECT_DELAY):
                 return
+
+
+async def local_log_events(request, tail: int = 300) -> AsyncIterator[str]:
+    """SSE 日志流：包装实现体，保证会话结束（含客户端断开）时取消 ComfyUI 侧订阅。
+
+    ComfyUI 的 /internal/logs/subscribe 按 clientId 累积订阅者；SSE 断开若不回发
+    enabled=False，重连次数越多 ComfyUI 侧订阅者越多。finally 里不允许 yield，
+    但允许 await 清理（PEP 525）。
+    """
+    client_ids: list[str] = []
+    try:
+        async for chunk in _log_events_impl(request, tail, client_ids):
+            yield chunk
+    finally:
+        for cid in client_ids:
+            try:
+                base = get_settings().local.comfy_url.rstrip("/")
+                async with httpx.AsyncClient(base_url=base, timeout=_CONNECT_TIMEOUT) as client:
+                    await _subscribe(client, cid, False)
+            except Exception:  # noqa: BLE001 —— ComfyUI 已下线等场景，清理失败不抛
+                pass
