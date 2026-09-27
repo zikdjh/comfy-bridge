@@ -335,6 +335,10 @@ function DownloadCard({
   const queryClient = useQueryClient();
   const [url, setUrl] = useState("");
   const [volume, setVolume] = useState(defaultVolume);
+  // 主卷名后到时跟随（DownloadCard 的初始值同样早于 meta）
+  useEffect(() => {
+    if (defaultVolume) setVolume(defaultVolume);
+  }, [defaultVolume]);
   const [dest, setDest] = useState("models/checkpoints");
   const [filename, setFilename] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -975,6 +979,10 @@ export default function VolumePage() {
   const { data: usage } = useVolumeUsage();
   const mainVolume = meta?.volume ?? "comfyui-data";
   const [volume, setVolume] = useState(mainVolume);
+  // meta 异步加载完成后把卷选择器同步到主卷（初始默认值在 meta 到达前就已固定）
+  useEffect(() => {
+    if (meta?.volume) setVolume(meta.volume);
+  }, [meta?.volume]);
   const [path, setPath] = useState("");
   const volumeNames = usage?.volumes.map((v) => v.name) ?? [];
   return (

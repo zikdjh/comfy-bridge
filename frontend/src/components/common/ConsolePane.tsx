@@ -103,7 +103,9 @@ export function ConsolePane({ title, openStream, downloadPrefix, footnote, empty
   useEffect(() => {
     const close = openStream({
       onSnapshot: (entries) => {
-        bufferRef.current = entries.map((e) => ({ ...e, id: idRef.current++ }));
+        const fresh = entries.map((e) => ({ ...e, id: idRef.current++ }));
+        // 快照替换同样按上限裁剪：上限选 200 而快照 300 条时不再超限（与 append 路径一致）
+        bufferRef.current = fresh.length > capRef.current ? fresh.slice(-capRef.current) : fresh;
         if (!pausedRef.current) bump();
       },
       onAppend: (entries) => {
