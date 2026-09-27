@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Modal 云平台与 SDK / CLI 参考</title>
+<style>
+  :root {
+    --bg: #f6f7fb;
+    --card: #ffffff;
+    --ink: #1f2430;
+    --ink-soft: #5a6272;
+    --line: #e4e7ef;
+    --accent: #0d9373;
+    --accent-soft: #e6f5f0;
+    --code-bg: #14161f;
+    --code-ink: #e6e9f2;
+    --badge-bg: #e6f5f0;
+    --badge-ink: #0b7a5f;
+    --badge-warn-bg: #fdf1e2;
+    --badge-warn-ink: #b06a10;
+    --ok: #1a9e6c;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+  body {
+    margin: 0;
+    font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.65;
+    font-size: 15px;
+  }
+  code, pre, .mono {
+    font-family: "JetBrains Mono", Consolas, "Cascadia Code", "Courier New", monospace;
+  }
+  header.hero {
+    background: linear-gradient(135deg, #0b3d33 0%, #0d9373 55%, #3fc79d 100%);
+    color: #fff;
+    padding: 40px 24px 30px;
+    text-align: center;
+  }
+  header.hero h1 { margin: 0 0 10px; font-size: 26px; letter-spacing: 1px; }
+  header.hero p { margin: 4px 0; opacity: .92; font-size: 14px; }
+  header.hero .meta { font-size: 12.5px; opacity: .8; margin-top: 10px; }
+  nav.toc {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(255,255,255,.94);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--line);
+    padding: 10px 16px;
+    display: flex; flex-wrap: wrap; gap: 6px 14px; justify-content: center;
+    font-size: 13.5px;
+  }
+  nav.toc a { color: var(--ink-soft); text-decoration: none; padding: 3px 8px; border-radius: 6px; }
+  nav.toc a:hover { color: var(--accent); background: var(--accent-soft); }
+  main { max-width: 1080px; margin: 0 auto; padding: 26px 20px 60px; }
+  section { margin-bottom: 44px; }
+  h2 {
+    font-size: 20px; margin: 0 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--accent);
+  }
+  h3 { font-size: 16px; margin: 22px 0 8px; color: var(--ink); }
+  p.lead { color: var(--ink-soft); margin-top: 0; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 16px 18px; margin: 14px 0;
+  }
+  .card h3 { margin-top: 0; }
+  .card .note { color: var(--ink-soft); font-size: 13.5px; }
+
+  pre.cmd {
+    position: relative;
+    background: var(--code-bg); color: var(--code-ink);
+    border-radius: 10px; padding: 13px 44px 13px 16px;
+    overflow-x: auto; font-size: 13.5px; line-height: 1.6;
+    margin: 10px 0;
+  }
+  pre.cmd .cm { color: #7c86a8; }
+  pre.cmd .k { color: #8fd3ff; }
+  pre.cmd .v { color: #ffd28f; }
+  .copy-btn {
+    position: absolute; top: 8px; right: 8px;
+    background: #262b3d; color: #b9c1d9; border: 1px solid #3a415a;
+    border-radius: 6px; font-size: 12px; padding: 3px 9px; cursor: pointer;
+  }
+  .copy-btn:hover { color: #fff; border-color: #0d9373; }
+  .copy-btn.done { color: #6fe3ae; border-color: #2f7d5b; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--card); font-size: 13.5px; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  thead th { background: var(--accent-soft); color: var(--badge-ink); font-weight: 600; white-space: nowrap; }
+  tbody tr:nth-child(even) { background: #fafbfe; }
+  td code {
+    background: #eef6f3; color: #14523f; padding: 1.5px 6px; border-radius: 5px;
+    font-size: 12.5px; white-space: nowrap;
+  }
+  td.def { color: var(--ink-soft); white-space: nowrap; font-size: 12.5px; }
+  .badge {
+    display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px;
+    background: var(--badge-bg); color: var(--badge-ink); margin-left: 6px; white-space: nowrap;
+  }
+  .badge.warn { background: var(--badge-warn-bg); color: var(--badge-warn-ink); }
+  .badge.green { background: #e5f6ef; color: var(--ok); }
+
+  .search-box { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; }
+  .search-box input {
+    flex: 1; max-width: 420px; padding: 9px 14px; font-size: 14px;
+    border: 1px solid var(--line); border-radius: 9px; outline: none; background: #fff;
+  }
+  .search-box input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .search-count { font-size: 13px; color: var(--ink-soft); }
+  .arg-group { margin-bottom: 18px; }
+  .arg-group h3 {
+    margin: 14px 0 8px; font-size: 15px; color: var(--badge-ink);
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .arg-group h3::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--accent); display: inline-block; }
+  .hidden-group { display: none; }
+  .hidden-row { display: none; }
+
+  ul.tight li { margin: 5px 0; }
+  .footer {
+    text-align: center; color: var(--ink-soft); font-size: 12.5px;
+    padding: 20px; border-top: 1px solid var(--line);
+  }
+  a { color: var(--accent); }
+  .kvs { display: grid; grid-template-columns: 150px 1fr; gap: 6px 14px; font-size: 14px; }
+  .kvs dt { color: var(--ink-soft); }
+  .kvs dd { margin: 0; }
+  @media (max-width: 640px) {
+    .kvs { grid-template-columns: 1fr; }
+    td.def { white-space: normal; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>Modal 云平台与 SDK / CLI 参考</h1>
+  <p>面向 AI / 数据负载的 Serverless 云平台 · 平台概述 · 核心概念 · Python / TypeScript / Go SDK · CLI 命令 · 计费</p>
+  <div class="meta">整理日期：2026-09-25 · 依据：modal.com 官网与 docs.modal.com 官方文档</div>
+</header>
+
+<nav class="toc">
+  <a href="#overview">① 平台概述</a>
+  <a href="#concepts">② 核心概念与工作流</a>
+  <a href="#pysdk">③ Python SDK</a>
+  <a href="#cli">④ CLI 命令参考</a>
+  <a href="#othersdk">⑤ TypeScript / Go SDK</a>
+  <a href="#pricing">⑥ 计费与套餐</a>
+  <a href="#tips">⑦ 使用提示</a>
+  <a href="#refs">⑧ 参考来源</a>
+</nav>
+
+<main>
+
+<!-- ===================== 1 平台概述 ===================== -->
+<section id="overview">
+  <h2>① 平台概述</h2>
+  <p class="lead">Modal（Modal Labs 出品，modal.com）是一个<strong>面向 AI / 数据工作负载的 Serverless 云计算平台</strong>：开发者只写普通 Python 代码，通过装饰器声明资源（GPU、镜像、存储、并发等），代码即可在云端容器中运行并自动伸缩——无需管理 Kubernetes、Docker 或云厂商账号。</p>
+
+  <div class="card">
+    <h3>核心特性</h3>
+    <dl class="kvs">
+      <dt>Serverless GPU / CPU</dt><dd>按秒计费、无闲置费用；跨云（AWS / GCP / OCI 等）资源池化，自动选择运行位置</dd>
+      <dt>一切皆代码</dt><dd>容器环境（Image）、GPU 规格、存储挂载、调度全部用 Python 声明，无需 YAML</dd>
+      <dt>自动伸缩</dt><dd>按需扩缩容器（0 → N → 0），支持预热（min_containers）、并发复用（modal.concurrent）</dd>
+      <dt>典型用途</dt><dd>模型推理服务、微调/批处理训练、AI Agent 代码执行沙箱（Sandboxes）、定时任务、数据管道</dd>
+      <dt>周边产品</dt><dd>Modal Notebooks（在线 Jupyter，闲置自动关机）、GPU Pods / Spot Pods（常驻 GPU 机器）、LLM 推理端点</dd>
+      <dt>官方 SDK</dt><dd>Python（主力，功能最全）、TypeScript / JavaScript（Beta）、Go（Beta）</dd>
+    </dl>
+  </div>
+</section>
+
+<!-- ===================== 2 核心概念 ===================== -->
+<section id="concepts">
+  <h2>② 核心概念与工作流</h2>
+  <div class="card">
+    <h3>概念速览</h3>
+    <dl class="kvs">
+      <dt>App</dt><dd>应用的容器/命名单元，聚合 Function、Image 等资源：<code>app = modal.App("my-app")</code></dd>
+      <dt>Function</dt><dd>用 <code>@app.function()</code> 装饰的函数，是云端执行的基本单元，可声明 GPU、内存、超时等</dd>
+      <dt>Image</dt><dd>容器镜像（环境）定义，链式构建：<code>modal.Image.debian_slim().uv_pip_install(...)</code>，按层缓存</dd>
+      <dt>Volume</dt><dd>分布式文件存储，跨容器共享持久数据（模型权重、数据集）</dd>
+      <dt>Secret</dt><dd>密钥管理，以环境变量注入容器（API Key、HuggingFace token 等）</dd>
+      <dt>Queue / Dict</dt><dd>云端消息队列 / 分布式字典，用于任务分发与共享状态</dd>
+      <dt>Sandbox</dt><dd>安全隔离的代码执行环境（可扩展到数千个），AI Agent 跑生成代码的主流方案</dd>
+      <dt>Web Endpoint</dt><dd>把函数/Web 服务暴露为 HTTPS URL（自动伸缩的 HTTP 服务）</dd>
+      <dt>Cls</dt><dd><code>@app.cls()</code> 把类作为有状态的云端服务（常用于加载一次模型的推理类）</dd>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h3>最小示例（官方文档原文）</h3>
+    <pre class="cmd">import modal
+
+app = modal.App("example-inference")
+image = modal.Image.debian_slim().uv_pip_install("transformers[torch]")
+
+@app.function(gpu="h100", image=image)
+def chat(prompt: str | None = None) -&gt; list[dict]:
+    from transformers import pipeline      <span class="cm"># 重依赖在函数内导入，加快冷启动</span>
+    chatbot = pipeline(model="Qwen/Qwen3-1.7B", device_map="cuda", max_new_tokens=1024)
+    ...
+    return result
+
+@app.local_entrypoint()                    <span class="cm"># 本地入口：modal run xxx.py 时执行</span>
+def main():
+    print(chat.remote("你好"))             <span class="cm"># .remote() 在云端容器中执行</span></pre>
+    <pre class="cmd">modal run chat.py        <span class="cm"># 临时运行一次：本地触发、云端执行，跑完即退</span>
+modal deploy chat.py     <span class="cm"># 常驻部署：生成稳定的 Web 端点/定时任务，按用量计费</span>
+modal serve chat.py      <span class="cm"># 开发模式：代码热重载的 Web 端点</span></pre>
+    <p class="note"><code>modal run</code> 适合一次性任务与调试；<code>modal deploy</code> 后应用常驻 Modal 平台（Web 端点、定时调度生效），有请求才启动容器、按秒计费。</p>
+  </div>
+</section>
+
+<!-- ===================== 3 Python SDK ===================== -->
+<section id="pysdk">
+  <h2>③ Python SDK</h2>
+
+  <div class="card">
+    <h3>安装与认证</h3>
+    <pre class="cmd">pip install modal
+modal setup               <span class="cm"># 打开浏览器完成账号认证，写入 ~/.modal.toml</span>
+modal token new           <span class="cm"># 手动创建 API token（CI/服务器用）</span></pre>
+    <p class="note">CI 环境可用环境变量 <code>MODAL_TOKEN_ID</code> / <code>MODAL_TOKEN_SECRET</code> 认证。使用 GPU 需在账户绑定有效支付方式。</p>
+  </div>
+
+  <div class="search-box">
+    <input type="text" id="argSearch" placeholder="🔍 输入关键字过滤下方所有表格，如 gpu、volume、deploy…">
+    <span class="search-count" id="argCount"></span>
+  </div>
+
+  <!-- App.function 参数 -->
+  <div class="arg-group">
+    <h3>@app.function() 常用参数 <span class="badge green">SDK 参考</span></h3>
+    <table>
+      <thead><tr><th style="width:22%">参数</th><th style="width:20%">类型 / 默认值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>gpu</code></td><td class="def">str | list[str] | None</td><td>GPU 类型，如 <code>"H100"</code>、<code>"L40S"</code>、多卡 <code>"H100:8"</code>、回退列表 <code>["H100","A100-40GB:2"]</code></td></tr>
+        <tr><td><code>cpu</code></td><td class="def">float | (request, limit)</td><td>CPU 核数（支持小数，最低 0.125）；传元组可设硬上限</td></tr>
+        <tr><td><code>memory</code></td><td class="def">int MiB | (request, limit)</td><td>内存请求（MiB）；传元组可设硬上限</td></tr>
+        <tr><td><code>image</code></td><td class="def">Image | None</td><td>函数使用的容器镜像</td></tr>
+        <tr><td><code>timeout</code></td><td class="def">int，默认 300 秒</td><td>单次输入执行（含启动）的最长时间</td></tr>
+        <tr><td><code>startup_timeout</code></td><td class="def">int | None</td><td>容器启动最长时间，优先级高于 timeout</td></tr>
+        <tr><td><code>scaledown_window</code></td><td class="def">int | None 秒</td><td>容器空闲后保留多久再缩容（原 container_idle_timeout）</td></tr>
+        <tr><td><code>min_containers</code></td><td class="def">int | None</td><td>空闲时也保持的最少暖容器数（原 keep_warm，降低冷启动）</td></tr>
+        <tr><td><code>max_containers</code></td><td class="def">int | None</td><td>并发运行容器数上限</td></tr>
+        <tr><td><code>buffer_containers</code></td><td class="def">int | None</td><td>高负载下额外预热的空闲容器数</td></tr>
+        <tr><td><code>retries</code></td><td class="def">int | Retries | None</td><td>单个输入失败时的自动重试次数</td></tr>
+        <tr><td><code>schedule</code></td><td class="def">Period | Cron | None</td><td>定时调度：<code>modal.Period(hours=5)</code> 或 <code>modal.Cron("0 8 * * 1")</code></td></tr>
+        <tr><td><code>secrets</code></td><td class="def">list[Secret] | None</td><td>注入容器的密钥（环境变量）</td></tr>
+        <tr><td><code>volumes</code></td><td class="def">dict[路径, Volume] | None</td><td>挂载 Volume / CloudBucketMount，如 <code>{"/data": vol}</code></td></tr>
+        <tr><td><code>network_file_systems</code></td><td class="def">dict | {}</td><td>挂载 NetworkFileSystem</td></tr>
+        <tr><td><code>env</code></td><td class="def">dict | None</td><td>容器内环境变量</td></tr>
+        <tr><td><code>cloud</code></td><td class="def">"aws" | "gcp" | "oci" | "auto"</td><td>指定底层云厂商</td></tr>
+        <tr><td><code>region</code></td><td class="def">str | list[str] | None</td><td>运行区域（有 1.15–1.75× 区域加价）</td></tr>
+        <tr><td><code>nonpreemptible</code></td><td class="def">bool，默认 False</td><td>使用不可抢占实例（约 3× 基础价格）</td></tr>
+        <tr><td><code>enable_memory_snapshot</code></td><td class="def">bool，默认 False</td><td>启用内存快照，大幅加快冷启动</td></tr>
+        <tr><td><code>block_network</code></td><td class="def">bool，默认 False</td><td>屏蔽容器的外网访问</td></tr>
+        <tr><td><code>single_use_containers</code></td><td class="def">bool，默认 False</td><td>容器处理一个输入后即销毁（替代已弃用的 max_inputs）</td></tr>
+        <tr><td><code>name</code> / <code>is_generator</code> / <code>proxy</code> / <code>i6pn</code> / <code>include_source</code> 等</td><td class="def">—</td><td>函数命名、生成器标记、代理、区域内 IPv6 网络、源码打包等高级选项</td></tr>
+      </tbody>
+    </table>
+    <p class="note">类用 <code>@app.cls()</code> 装饰，参数与 function() 基本一致（无 schedule / name）。</p>
+  </div>
+
+  <!-- GPU -->
+  <div class="arg-group">
+    <h3>GPU 类型与多卡写法 <span class="badge green">GPU</span></h3>
+    <table>
+      <thead><tr><th style="width:22%">gpu 取值</th><th style="width:30%">显存 / 上限</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>"T4"</code> / <code>"L4"</code> / <code>"A10"</code> / <code>"L40S"</code></td><td class="def">最多 8 卡（A10 最多 4 卡）</td><td>入门/推理性价比档，官方建议推理从 L40S（48GB）起步</td></tr>
+        <tr><td><code>"A100"</code> / <code>"A100-40GB"</code> / <code>"A100-80GB"</code></td><td class="def">最多 8 卡</td><td>裸 <code>"A100"</code> 可能自动升级为 80GB 版</td></tr>
+        <tr><td><code>"H100"</code> / <code>"H100!"</code></td><td class="def">80GB，最多 8 卡</td><td>可能自动升级到 H200（价格不变）；加 <code>!</code> 禁止升级</td></tr>
+        <tr><td><code>"H200"</code> / <code>"B200"</code> / <code>"B200+"</code> / <code>"B300"</code></td><td class="def">最多 8 卡（最高 2304GB）</td><td>Blackwell 代：B300 需 CUDA 13.1+；<code>B200+</code> 可能分配到 B300 但按 B200 计费</td></tr>
+        <tr><td><code>"RTX-PRO-6000"</code></td><td class="def">最多 8 卡</td><td>RTX PRO 6000 Blackwell 工作站卡</td></tr>
+        <tr><td><code>"H100:8"</code> 写法</td><td class="def">类型:数量</td><td>多卡同机：<code>@app.function(gpu="H100:8")</code>；同一函数内所有 GPU 在同一物理机</td></tr>
+        <tr><td>回退列表</td><td class="def">list[str]</td><td>按顺序优先分配：<code>gpu=["H100", "A100-40GB:2"]</code></td></tr>
+      </tbody>
+    </table>
+    <p class="note">多节点（跨机）分布式训练目前为私测，需联系 support@modal.com；单机多卡已支持。</p>
+  </div>
+
+  <!-- Image -->
+  <div class="arg-group">
+    <h3>Image 镜像构建方法 <span class="badge green">Image</span></h3>
+    <table>
+      <thead><tr><th style="width:30%">方法</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>modal.Image.debian_slim(python_version="3.13")</code></td><td>默认基础镜像：精简 Debian，Python 版本默认与本地一致</td></tr>
+        <tr><td><code>.uv_pip_install(...)</code> / <code>.pip_install(...)</code></td><td>安装 Python 包（推荐 uv，可固定版本如 <code>"torch==2.8.0"</code>）</td></tr>
+        <tr><td><code>.apt_install("git", "curl")</code></td><td>安装系统包</td></tr>
+        <tr><td><code>.env({"PORT": "6443"})</code></td><td>设置环境变量（名称与值须为字符串）</td></tr>
+        <tr><td><code>.run_commands("git clone …")</code></td><td>执行任意 shell 命令作为构建层</td></tr>
+        <tr><td><code>.run_function(download_models, gpu=..., secrets=[...], volumes={...})</code></td><td>在构建期执行 Python 函数（如预下载模型），可接受 function 的大部分参数</td></tr>
+        <tr><td><code>.add_local_dir(...) / .add_local_file(...) / .add_local_python_source("模块名")</code></td><td>挂载/打包本地文件与 Python 模块；默认启动时挂载不新建层（重部署快），<code>copy=True</code> 强制烧进镜像</td></tr>
+        <tr><td><code>modal.Image.micromamba().micromamba_install("pymc==5.10.4", channels=["conda-forge"])</code></td><td>需要系统包 + Python 包混合安装时用 conda 系</td></tr>
+        <tr><td><code>modal.Image.from_registry("repo/image:tag")</code></td><td>复用 Docker Hub 等现有镜像（也可基于自定义 Dockerfile）</td></tr>
+        <tr><td><code>with image.imports():</code></td><td>声明全局作用域导入（配合内存快照优化冷启动）</td></tr>
+      </tbody>
+    </table>
+    <pre class="cmd">image = (
+    modal.Image.debian_slim(python_version="3.13")
+    .apt_install("git")
+    .uv_pip_install("torch==2.8.0")
+    .env({"HALT_AND_CATCH_FIRE": "0"})
+    .run_commands("git clone https://github.com/modal-labs/agi &amp;&amp; echo 'ready to go!'")
+)</pre>
+    <p class="note">镜像按层缓存，常变层放最后；<code>force_build=True</code> 强制单层重建，<code>MODAL_IGNORE_CACHE=1</code> 从头重建且不破坏缓存。</p>
+  </div>
+
+  <!-- 调度 -->
+  <div class="arg-group">
+    <h3>定时任务 <span class="badge green">Schedule</span></h3>
+    <table>
+      <thead><tr><th style="width:30%">方式</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>schedule=modal.Period(hours=5)</code></td><td>固定间隔触发；重新部署会重置计时</td></tr>
+        <tr><td><code>schedule=modal.Cron("0 8 * * 1", timezone="Asia/Shanghai")</code></td><td>cron 语法按固定时刻触发，不受重新部署影响；默认 UTC，可指定时区</td></tr>
+      </tbody>
+    </table>
+    <pre class="cmd">@app.function(schedule=modal.Cron("0 6 * * *", timezone="America/New_York"))
+def daily_job(): ...
+
+<span class="cm"># 定时任务需部署后生效：</span>
+modal deploy daily_job.py</pre>
+  </div>
+
+  <!-- Web 端点 -->
+  <div class="arg-group">
+    <h3>Web 端点 <span class="badge green">Web Endpoints</span></h3>
+    <table>
+      <thead><tr><th style="width:30%">装饰器</th><th>适用场景与说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>@modal.fastapi_endpoint()</code></td><td>一行把普通 Python 函数变 Web 端点（内部包成 FastAPI）；支持 GET 查询参数 / POST JSON（method="POST"）</td></tr>
+        <tr><td><code>@modal.asgi_app()</code></td><td>函数返回 ASGI 应用（FastAPI、Starlette、FastHTML 等）</td></tr>
+        <tr><td><code>@modal.wsgi_app()</code></td><td>函数返回 WSGI 应用（Flask、Django 等）</td></tr>
+        <tr><td><code>@modal.web_server(8000)</code></td><td>暴露任意非 ASGI/WSGI 服务器（aiohttp、tornado、http.server 等）：请求转发到容器内该端口，服务器须绑定 <code>0.0.0.0</code></td></tr>
+      </tbody>
+    </table>
+    <pre class="cmd">@app.function(image=image)
+@modal.fastapi_endpoint()
+def square(x: int):
+    return {"square": x ** 2}
+<span class="cm"># 部署后 URL 形如：https://&lt;工作区&gt;--&lt;应用名&gt;-&lt;函数名&gt;.modal.run</span></pre>
+    <p class="note">要点：请求体上限 4 GiB；支持 WebSocket；常搭配 <code>@modal.concurrent(max_inputs=100)</code> 提升单容器并发；新账户限速 200 请求/秒；可用 <code>Modal-Key</code>/<code>Modal-Secret</code> 请求头做代理认证。</p>
+  </div>
+
+  <!-- 存储 -->
+  <div class="arg-group">
+    <h3>存储与密钥 <span class="badge green">Volume / Secret</span></h3>
+    <pre class="cmd">volume = modal.Volume.from_name("my-data", create_if_missing=True)
+secret = modal.Secret.from_name("huggingface-secret")   <span class="cm"># 在 Dashboard 或 CLI 创建</span>
+hf_cache = modal.Volume.from_name("huggingface-cache", create_if_missing=True)
+
+@app.function(gpu="A100", volumes={"/data": volume, "/root/.cache/huggingface": hf_cache},
+              secrets=[secret])
+def train(): ...</pre>
+    <p class="note">Volume 用于模型权重/数据集共享与持久化；另有 <code>modal.CloudBucketMount</code> 直接挂载 S3/GCS 桶、<code>modal.NetworkFileSystem</code> 旧式网络文件系统、<code>modal.Dict</code>/<code>modal.Queue</code> 云端键值与队列。</p>
+  </div>
+</section>
+
+<!-- ===================== 4 CLI ===================== -->
+<section id="cli">
+  <h2>④ CLI 命令参考（modal 命令行）</h2>
+  <p class="lead">随 <code>pip install modal</code> 安装；也可独立安装（无需 Python 环境）：<code>curl -LsSf https://modal.com/install.sh | sh</code> 风格脚本。全部子命令如下：</p>
+
+  <div class="arg-group">
+    <h3>核心命令 <span class="badge green">Commands</span></h3>
+    <table>
+      <thead><tr><th style="width:24%">命令</th><th>功能</th></tr></thead>
+      <tbody>
+        <tr><td><code>modal run 文件.py</code></td><td>本地触发、云端执行一次（跑 local_entrypoint 或指定函数）</td></tr>
+        <tr><td><code>modal deploy 文件.py</code></td><td>部署应用为常驻服务（Web 端点、定时任务生效）</td></tr>
+        <tr><td><code>modal serve 文件.py</code></td><td>开发模式：暴露 Web Function 并随代码改动热重载</td></tr>
+        <tr><td><code>modal shell [命令]</code></td><td>在 Modal 容器内运行命令或交互式 shell</td></tr>
+        <tr><td><code>modal curl &lt;URL&gt;</code></td><td>向 Modal 端点发送带认证的请求</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="arg-group">
+    <h3>部署管理 <span class="badge green">Deployments</span></h3>
+    <table>
+      <thead><tr><th style="width:24%">命令</th><th>功能</th></tr></thead>
+      <tbody>
+        <tr><td><code>modal app</code></td><td>管理已部署/运行中的应用（列表、停止等）</td></tr>
+        <tr><td><code>modal container</code></td><td>管理并连接正在运行的容器（日志、exec）</td></tr>
+        <tr><td><code>modal endpoint</code></td><td>创建和管理 LLM 推理端点</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="arg-group">
+    <h3>存储对象 <span class="badge green">Storage</span></h3>
+    <table>
+      <thead><tr><th style="width:24%">命令</th><th>功能</th></tr></thead>
+      <tbody>
+        <tr><td><code>modal volume</code></td><td>读取/编辑 Volume 卷（ls、put、get、rm 等）</td></tr>
+        <tr><td><code>modal secret</code></td><td>管理 Secret 密钥</td></tr>
+        <tr><td><code>modal image</code></td><td>管理镜像</td></tr>
+        <tr><td><code>modal queue</code> / <code>modal dict</code></td><td>管理/检查 modal.Queue 与 modal.Dict 对象内容</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="arg-group">
+    <h3>配置与账号 <span class="badge green">Config</span></h3>
+    <table>
+      <thead><tr><th style="width:24%">命令</th><th>功能</th></tr></thead>
+      <tbody>
+        <tr><td><code>modal setup</code></td><td>引导式完成账号认证与配置</td></tr>
+        <tr><td><code>modal token new / list</code></td><td>创建/管理 API token</td></tr>
+        <tr><td><code>modal profile</code></td><td>切换多账号 profile</td></tr>
+        <tr><td><code>modal workspace</code> / <code>modal environment</code></td><td>管理工作区 / 环境（dev、prod 隔离）</td></tr>
+        <tr><td><code>modal config</code></td><td>管理当前 profile 的客户端配置</td></tr>
+        <tr><td><code>modal bootstrap</code></td><td>初始化一个示例应用</td></tr>
+        <tr><td><code>modal skills</code></td><td>安装/更新 Modal 的 Agent Skills（供 AI 编码助手使用）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="arg-group">
+    <h3>可观测性 <span class="badge green">Observability</span></h3>
+    <table>
+      <thead><tr><th style="width:24%">命令</th><th>功能</th></tr></thead>
+      <tbody>
+        <tr><td><code>modal dashboard</code></td><td>在浏览器打开 Modal 控制台</td></tr>
+        <tr><td><code>modal billing</code></td><td>查看工作区账单/用量信息</td></tr>
+        <tr><td><code>modal changelog</code></td><td>查看 Modal 更新日志</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===================== 5 其他 SDK ===================== -->
+<section id="othersdk">
+  <h2>⑤ TypeScript / JavaScript 与 Go SDK（均为 Beta）</h2>
+
+  <div class="card">
+    <h3>TypeScript / JavaScript SDK</h3>
+    <pre class="cmd">npm install modal        <span class="cm"># 要求 Node 22+；也支持 Deno / Bun；附完整 TS 类型</span></pre>
+    <pre class="cmd">import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+const app = await modal.apps.fromName("sandbox-app", { createIfMissing: true });
+const image = modal.images.fromRegistry("alpine:3.21");
+const sb = await modal.sandboxes.create(app, image, { command: ["cat"] });
+
+<span class="cm">// 调用已部署的函数（Python 定义）</span>
+const echo = await modal.functions.fromName("my-app", "echo");
+const ret = await echo.remote(["Hello, Modal!"]);</pre>
+    <p class="note">限制：Python 仍是唯一的 Function 运行时——JS SDK 只能<strong>查找并调用</strong>已部署函数、创建 Sandbox 等，不能定义 Function；批量调用暂不支持。认证优先级：客户端参数 &gt; <code>MODAL_TOKEN_ID</code>/<code>MODAL_TOKEN_SECRET</code> 环境变量 &gt; <code>~/.modal.toml</code>。处于 0.X Beta 阶段，可能含破坏性变更。</p>
+  </div>
+
+  <div class="card">
+    <h3>Go SDK</h3>
+    <pre class="cmd">go get github.com/modal-labs/modal-client/go@latest   <span class="cm"># 要求 Go 1.25.0+</span></pre>
+    <pre class="cmd">mc, err := modal.NewClient()
+if err != nil {
+    log.Fatal(err)
+}
+defer mc.Close()
+<span class="cm">// 同样支持调用已部署 Function（Remote / Spawn+Get）与创建 Sandbox</span></pre>
+    <p class="note">能力范围与 JS SDK 类似（Beta、不能定义 Function、Sandbox 支持较完整：Exec、资源限制、Secret、出站域名白名单）。</p>
+  </div>
+</section>
+
+<!-- ===================== 6 计费 ===================== -->
+<section id="pricing">
+  <h2>⑥ 计费与套餐</h2>
+  <p class="lead">按秒计费、以 CPU 周期为最小单位，<strong>闲置资源不收费</strong>（缩容到 0 就不花钱）。</p>
+
+  <div class="arg-group">
+    <h3>GPU 单价 <span class="badge green">按秒</span></h3>
+    <table>
+      <thead><tr><th style="width:30%">GPU</th><th style="width:20%">$/秒</th><th>折算 $/小时</th></tr></thead>
+      <tbody>
+        <tr><td>Nvidia B300</td><td class="def">$0.001972</td><td class="def">≈ $7.10</td></tr>
+        <tr><td>Nvidia B200</td><td class="def">$0.001736</td><td class="def">≈ $6.25</td></tr>
+        <tr><td>Nvidia H200 SXM</td><td class="def">$0.001261</td><td class="def">≈ $4.54</td></tr>
+        <tr><td>Nvidia H100 SXM5</td><td class="def">$0.001097</td><td class="def">≈ $3.95</td></tr>
+        <tr><td>Nvidia RTX PRO 6000</td><td class="def">$0.000842</td><td class="def">≈ $3.03</td></tr>
+        <tr><td>Nvidia A100 80GB</td><td class="def">$0.000694</td><td class="def">≈ $2.50</td></tr>
+        <tr><td>Nvidia A100 40GB</td><td class="def">$0.000583</td><td class="def">≈ $2.10</td></tr>
+        <tr><td>Nvidia L40S</td><td class="def">$0.000542</td><td class="def">≈ $1.95</td></tr>
+        <tr><td>Nvidia A10</td><td class="def">$0.000306</td><td class="def">≈ $1.10</td></tr>
+        <tr><td>Nvidia L4</td><td class="def">$0.000222</td><td class="def">≈ $0.80</td></tr>
+        <tr><td>Nvidia T4</td><td class="def">$0.000164</td><td class="def">≈ $0.59</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="arg-group">
+    <h3>CPU / 内存 / 存储 <span class="badge green">按秒</span></h3>
+    <table>
+      <thead><tr><th style="width:30%">资源</th><th>单价</th></tr></thead>
+      <tbody>
+        <tr><td>CPU（物理核，≈2 vCPU）</td><td class="def">$0.0000131 / 核 / 秒（最低 0.125 核/容器，≈$0.047/核时）</td></tr>
+        <tr><td>内存</td><td class="def">$0.00000222 / GiB / 秒（≈$0.008/GiB时）</td></tr>
+        <tr><td>Volume 卷存储</td><td class="def">$0.09 / GiB / 月（每月免费 1 TiB）</td></tr>
+        <tr><td>Sandbox / Notebook CPU</td><td class="def">$0.00003942 / 核 / 秒</td></tr>
+        <tr><td>Sandbox / Notebook 内存</td><td class="def">$0.00000667 / GiB / 秒</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="arg-group">
+    <h3>套餐对比 <span class="badge green">Plans</span></h3>
+    <table>
+      <thead><tr><th>项目</th><th>Starter（免费）</th><th>Team</th><th>Enterprise</th></tr></thead>
+      <tbody>
+        <tr><td>月费</td><td>$0 + 计算费用</td><td>$250 + 计算费用</td><td>定制</td></tr>
+        <tr><td>每月免费额度</td><td>$30 credits</td><td>$100 credits</td><td>定制</td></tr>
+        <tr><td>席位</td><td>最多 3 人</td><td>无限</td><td>无限</td></tr>
+        <tr><td>容器 / GPU 并发</td><td>100 / 10</td><td>5000 / 50</td><td>定制</td></tr>
+        <tr><td>日志保留</td><td>1 天</td><td>30 天</td><td>定制</td></tr>
+        <tr><td>自定义域名</td><td>✗</td><td>✓</td><td>✓</td></tr>
+        <tr><td>部署回滚</td><td>3 个版本</td><td>✓</td><td>定制</td></tr>
+        <tr><td>支持</td><td>社区 Slack</td><td>私有 Slack + 嵌入式 ML 服务</td><td>同 Team + 定制</td></tr>
+        <tr><td>安全（HIPAA/SSO/审计）</td><td>✗</td><td>部分功能（含静态 IP 出口代理）</td><td>✓</td></tr>
+      </tbody>
+    </table>
+    <p class="note">附加计价：指定区域运行按基础价 1.15–1.75×；不可抢占执行约 3×。学生/学术用户最多可申请 $10k 免费额度，初创公司可申请免费计算额度；支持通过 AWS / GCP Marketplace 使用承诺消费。</p>
+  </div>
+</section>
+
+<!-- ===================== 7 提示 ===================== -->
+<section id="tips">
+  <h2>⑦ 使用提示</h2>
+  <ul class="tight">
+    <li><strong>冷启动优化</strong>：函数内导入重依赖 + <code>with image.imports()</code>；预热 <code>min_containers=1</code>；延长 <code>scaledown_window</code>；开 <code>enable_memory_snapshot=True</code>。</li>
+    <li><strong>推理选卡</strong>：官方建议从 L40S（48GB）起步，性价比高；大模型再上 H100/H200/B200。</li>
+    <li><strong>GPU 自动升级</strong>：<code>H100</code> 可能被升级为 H200（同价），<code>A100</code> 可能升级 80GB；要锁定写 <code>H100!</code>。</li>
+    <li><strong>run vs deploy</strong>：调试用 <code>modal run</code>，上线用 <code>modal deploy</code>；<code>Period</code> 定时任务重部署会重置计时，要固定时刻用 <code>Cron</code>。</li>
+    <li><strong>状态复用</strong>：模型加载等重初始化放 <code>@app.cls()</code> 的 <code>@modal.enter()</code> 中，配合 <code>@modal.concurrent()</code> 单容器多并发，避免每次请求都加载模型。</li>
+    <li><strong>本地目录</strong>：本地 Python 模块用 <code>add_local_python_source</code> 打包；<code>add_local_*</code> 默认启动时挂载而非烧进镜像，重部署更快。</li>
+    <li><strong>镜像缓存</strong>：按层缓存且级联失效，常变层放最后；构建慢时用 <code>MODAL_IGNORE_CACHE=1</code> 排查。</li>
+    <li><strong>非 Python 客户端</strong>：JS/Go SDK 只能调用已部署的 Python 函数和管理 Sandbox，定义 Function 仍需 Python。</li>
+  </ul>
+</section>
+
+<!-- ===================== 8 参考 ===================== -->
+<section id="refs">
+  <h2>⑧ 参考来源</h2>
+  <ul class="tight">
+    <li>官网与定价：<a href="https://modal.com" target="_blank">modal.com</a> · <a href="https://modal.com/pricing" target="_blank">modal.com/pricing</a></li>
+    <li>核心概念指南：<a href="https://modal.com/docs/guide" target="_blank">docs.modal.com/docs/guide</a></li>
+    <li>GPU 配置：<a href="https://modal.com/docs/guide/gpu" target="_blank">docs/guide/gpu</a> · 镜像：<a href="https://modal.com/docs/guide/images" target="_blank">docs/guide/images</a> · Web 端点：<a href="https://modal.com/docs/guide/web-endpoints" target="_blank">docs/guide/web-endpoints</a> · 定时任务：<a href="https://modal.com/docs/guide/cron" target="_blank">docs/guide/cron</a></li>
+    <li>CLI 参考：<a href="https://modal.com/docs/reference/cli" target="_blank">docs/reference/cli</a> · App.function API：<a href="https://modal.com/docs/sdk/py/latest/App" target="_blank">docs/sdk/py/latest/App</a></li>
+    <li>TS SDK：<a href="https://modal.com/docs/sdk/js/latest/intro" target="_blank">docs/sdk/js/latest/intro</a> · Go SDK：<a href="https://modal.com/docs/sdk/go/latest/intro" target="_blank">docs/sdk/go/latest/intro</a></li>
+  </ul>
+</section>
+
+</main>
+
+<footer class="footer">
+  Modal 云平台与 SDK / CLI 参考 · 生成于 2026-09-25 · 价格与 API 以官网实时页面为准
+</footer>
+
+<script>
+  // 表格搜索过滤
+  const input = document.getElementById('argSearch');
+  const count = document.getElementById('argCount');
+  const groups = Array.from(document.querySelectorAll('.arg-group'));
+  const totalRows = document.querySelectorAll('.arg-group tbody tr').length;
+
+  function applyFilter() {
+    const q = input.value.trim().toLowerCase();
+    let visible = 0;
+    groups.forEach(g => {
+      let groupVisible = 0;
+      g.querySelectorAll('tbody tr').forEach(row => {
+        const hit = !q || row.textContent.toLowerCase().includes(q);
+        row.classList.toggle('hidden-row', !hit);
+        if (hit) { groupVisible++; visible++; }
+      });
+      g.classList.toggle('hidden-group', groupVisible === 0);
+    });
+    count.textContent = q ? `匹配 ${visible} / ${totalRows} 行` : `共 ${totalRows} 行`;
+  }
+  input.addEventListener('input', applyFilter);
+  applyFilter();
+
+  // 代码块复制按钮
+  document.querySelectorAll('pre.cmd').forEach(pre => {
+    const btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.textContent = '复制';
+    btn.addEventListener('click', () => {
+      const text = Array.from(pre.cloneNode(true).childNodes)
+        .filter(n => !(n.nodeType === 1 && n.classList.contains('copy-btn')))
+        .map(n => n.textContent)
+        .join('').replace(/[ \t]+/g, ' ').trim();
+      const done = ok => {
+        btn.textContent = ok ? '已复制' : '复制失败';
+        btn.classList.toggle('done', ok);
+        setTimeout(() => { btn.textContent = '复制'; btn.classList.remove('done'); }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => done(true), () => done(false));
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        try { done(document.execCommand('copy')); } catch (e) { done(false); }
+        document.body.removeChild(ta);
+      }
+    });
+    pre.appendChild(btn);
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyBridge 前端组件选型</title>
+<style>
+  :root {
+    --bg: #f6f7fb; --card: #ffffff; --ink: #1f2430; --ink-soft: #5a6272;
+    --line: #e4e7ef; --accent: #4f5be8; --accent-soft: #eef0fe;
+    --code-bg: #14161f; --code-ink: #e6e9f2;
+    --badge-bg: #eef0fe; --badge-ink: #4353d8;
+    --badge-warn-bg: #fdf1e2; --badge-warn-ink: #b06a10; --ok: #1a9e6c;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+  body {
+    margin: 0; font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.7; font-size: 15px;
+  }
+  code, pre { font-family: "JetBrains Mono", Consolas, "Cascadia Code", monospace; }
+  header.hero { background: linear-gradient(135deg, #232a63 0%, #4f5be8 55%, #8a7bff 100%); color: #fff; padding: 40px 24px 30px; text-align: center; }
+  header.hero h1 { margin: 0 0 10px; font-size: 26px; letter-spacing: 1px; }
+  header.hero p { margin: 4px 0; opacity: .92; font-size: 14px; }
+  header.hero .meta { font-size: 12.5px; opacity: .8; margin-top: 10px; }
+  nav.toc {
+    position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,.94); backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--line); padding: 10px 16px;
+    display: flex; flex-wrap: wrap; gap: 6px 12px; justify-content: center; font-size: 13.5px;
+  }
+  nav.toc a { color: var(--ink-soft); text-decoration: none; padding: 3px 8px; border-radius: 6px; }
+  nav.toc a:hover { color: var(--accent); background: var(--accent-soft); }
+  main { max-width: 1080px; margin: 0 auto; padding: 26px 20px 60px; }
+  section { margin-bottom: 46px; }
+  h2 { font-size: 20px; margin: 0 0 14px; padding-left: 12px; border-left: 4px solid var(--accent); }
+  h3 { font-size: 16px; margin: 22px 0 8px; }
+  h4 { font-size: 14.5px; margin: 16px 0 6px; color: var(--badge-ink); }
+  p.lead { color: var(--ink-soft); margin-top: 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin: 14px 0; }
+  .card h3 { margin-top: 0; }
+  .card .note { color: var(--ink-soft); font-size: 13.5px; }
+  table { width: 100%; border-collapse: collapse; background: var(--card); font-size: 13.5px; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  thead th { background: var(--accent-soft); color: var(--badge-ink); font-weight: 600; white-space: nowrap; }
+  tbody tr:nth-child(even) { background: #fafbfe; }
+  td code { background: #f0f2fa; color: #33398f; padding: 1.5px 6px; border-radius: 5px; font-size: 12.5px; }
+  .badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--badge-bg); color: var(--badge-ink); margin-left: 6px; white-space: nowrap; }
+  .badge.green { background: #e5f6ef; color: var(--ok); }
+  .badge.warn { background: var(--badge-warn-bg); color: var(--badge-warn-ink); }
+  .kvs { display: grid; grid-template-columns: 150px 1fr; gap: 6px 14px; font-size: 14px; }
+  .kvs dt { color: var(--ink-soft); }
+  .kvs dd { margin: 0; }
+  ul.tight li { margin: 5px 0; }
+  .footer { text-align: center; color: var(--ink-soft); font-size: 12.5px; padding: 20px; border-top: 1px solid var(--line); }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>ComfyBridge 前端组件选型</h1>
+  <p>UI 库 · 状态 · 数据请求 · 表格表单 · 图表 · 上传 · 质量工具链 —— 每个领域给出选择、备选与理由</p>
+  <div class="meta">版本 v0.1 · 2026-09-25 · 依赖清单已同步至 frontend/package.json · 界面设计见《ComfyBridge 前端界面规划》</div>
+</header>
+
+<nav class="toc">
+  <a href="#x1">1 选型总览</a>
+  <a href="#x2">2 关键决策</a>
+  <a href="#x3">3 AntD 组件 → 页面映射</a>
+  <a href="#x4">4 明确不引入清单</a>
+  <a href="#x5">5 依赖基线与质量工具链</a>
+</nav>
+
+<main>
+
+<!-- ============ 1 ============ -->
+<section id="x1">
+  <h2>1 选型总览</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:18%">领域</th><th style="width:24%">选择</th><th style="width:28%">主要备选</th><th>一句话理由</th></tr></thead>
+      <tbody>
+        <tr><td>UI 组件库</td><td><strong>Ant Design 5</strong></td><td>shadcn/ui+Tailwind、Semi、Arco、MUI</td><td>密集表格/表单/抽屉开箱即用，单人开发速度第一</td></tr>
+        <tr><td>样式方案</td><td><strong>AntD Token + CSS Modules</strong></td><td>Tailwind、styled-components</td><td>AntD 覆盖 95% 场景，不为剩下 5% 引心智负担</td></tr>
+        <tr><td>服务端状态</td><td><strong>TanStack Query v5</strong></td><td>SWR、RTK Query</td><td>缓存/失效/重试标准答案，配合 SSE invalidate</td></tr>
+        <tr><td>客户端状态</td><td><strong>zustand</strong></td><td>jotai、Redux Toolkit</td><td>轻量单 store；本应用客户端状态很少（实时流+UI 偏好）</td></tr>
+        <tr><td>HTTP 客户端</td><td><strong>原生 fetch 薄封装</strong></td><td>axios</td><td>需求简单（JSON/流/分块上传），省一个依赖</td></tr>
+        <tr><td>实时推送</td><td><strong>原生 EventSource（SSE）</strong></td><td>socket.io、原生 WS</td><td>后端已定 SSE；自带自动重连</td></tr>
+        <tr><td>路由</td><td><strong>react-router-dom v6</strong></td><td>TanStack Router</td><td>7 个静态路由，稳定熟悉即可</td></tr>
+        <tr><td>表格</td><td><strong>AntD Table（virtual）</strong></td><td>TanStack Table、AG Grid</td><td>排序/筛选/固定列够用；大数据量用其虚拟滚动</td></tr>
+        <tr><td>表单</td><td><strong>AntD Form</strong></td><td>react-hook-form + zod</td><td>条件构建器用 Form.List 足够；校验真相在后端 pydantic</td></tr>
+        <tr><td>图表</td><td><strong>ECharts 5（echarts-for-react）</strong></td><td>Recharts、Chart.js</td><td>堆叠/甘特式定制能力强，中文文档好</td></tr>
+        <tr><td>时间线甘特</td><td><strong>纯 CSS 自绘</strong></td><td>gantt 库</td><td>六阶段条形图 = div 宽度百分比，不值得引库</td></tr>
+        <tr><td>上传</td><td><strong>自研 useChunkedUploader</strong></td><td>antd Upload action、uppy</td><td>分块+续传+MD5 必须自控；AntD 只当拖拽壳</td></tr>
+        <tr><td>JSON/代码</td><td><strong>M1：pre + copyable</strong>；P2：<code>@uiw/react-json-view</code></td><td>Monaco</td><td>Monaco 太重；只读查看不需要编辑器</td></tr>
+        <tr><td>工作流图渲染</td><td><strong>P2：<code>@xyflow/react</code></strong></td><td>嵌入 ComfyUI 前端 iframe</td><td>图快照只读渲染用 reactflow + elkjs 自动布局</td></tr>
+        <tr><td>图标 / 日期</td><td><strong>@ant-design/icons / dayjs</strong></td><td>—</td><td>与 AntD 同源；dayjs 做 relativeTime</td></tr>
+        <tr><td>通知</td><td><strong>antd message / notification</strong></td><td>react-hot-toast</td><td>不额外引入；任务完成与预算告警用 notification</td></tr>
+        <tr><td>测试</td><td><strong>Playwright（主）+ Vitest（辅，P2）</strong></td><td>Jest</td><td>单人项目 e2e 保障为主，组件测试仅覆盖 stores/hooks</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 2 ============ -->
+<section id="x2">
+  <h2>2 关键决策</h2>
+
+  <div class="card">
+    <h3>2.1 UI 库：Ant Design 5（并明确不用 Tailwind）</h3>
+    <ul class="tight">
+      <li><strong>场景匹配</strong>：本项目是"密集表格 + 多抽屉 + 分区表单"的控制台，AntD 的 Table/Form/Drawer/Steps/Tabs 是精确命中；shadcn/ui 这类 headless 方案需要逐个自己拼装，工作量约 3 倍，单人项目不划算。</li>
+      <li><strong>为什么不用 Tailwind</strong>：AntD 组件 + design token 覆盖几乎全部样式需求；Tailwind 与 AntD 的预设类混用易冲突，剩余的布局缝隙用 CSS Modules 补齐即可。</li>
+      <li><strong>代价与接受度</strong>：包体积比轻量库大（按需加载后首屏约 +300KB 级），本地工具不在意；主题定制走 <code>ConfigProvider theme.token</code>（主色 <code>#4f5be8</code>、<code>zh_CN</code>、紧凑密度），不做深度视觉定制。</li>
+      <li><strong>版本</strong>：React 18 + antd 5.x（React 19 虽有兼容层，保守选稳定组合）。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>2.2 状态分层：Query 管服务端，zustand 管实时与 UI</h3>
+    <table>
+      <thead><tr><th style="width:22%">层</th><th style="width:44%">内容</th><th>实现</th></tr></thead>
+      <tbody>
+        <tr><td>服务端状态</td><td>列表/详情/健康/成本等一切 GET 数据</td><td>TanStack Query：queryKey 按资源域（requests/nodes/jobs/cost）；SSE 事件到达 → <code>invalidateQueries</code> 对应域</td></tr>
+        <tr><td>实时状态</td><td>SSE 连接态、运行中任务表、上传队列、后端健康快照</td><td>zustand 三个 store：<code>sseStore</code>、<code>runtimeStore</code>、<code>uploadStore</code>；SSE 事件只带 ID+摘要，详情按需 GET</td></tr>
+        <tr><td>UI 偏好</td><td>侧栏折叠、实时开关默认值、表格列宽</td><td>zustand persist → localStorage</td></tr>
+      </tbody>
+    </table>
+    <p class="note">明确不引入 Redux：本应用没有复杂派生状态链，Redux 的样板代码只为"规范"买单，对单人项目是负资产。</p>
+  </div>
+
+  <div class="card">
+    <h3>2.3 数据请求：原生 fetch 薄封装 + EventSource</h3>
+    <ul class="tight">
+      <li><code>api/client.ts</code> 约 60 行：统一前缀（<code>VITE_API_BASE</code>）、非 2xx 抛 <code>ApiError</code>（携带后端 error body）、JSON 编解码、超时 AbortSignal；multipart（模型上传）与流式（SSE）由各 hook 自行处理。</li>
+      <li><strong>不选 axios</strong>：拦截器/转换器能力用不上；fetch 原生支持流与 AbortController；少 30KB。</li>
+      <li><strong>SSE 用原生 EventSource</strong>：浏览器自带断线自动重连；<code>onerror</code> 时把 sseStore 标灰并显示重连中，页面列表不依赖 SSE 也能手动刷新。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>2.4 表格与表单</h3>
+    <ul class="tight">
+      <li><strong>日志列表</strong>：AntD Table 受控分页（默认 50 行/页）+ 筛选栏 + 实时开关；若切换"无限滚动"模式用 AntD 5.9+ 的 <code>virtual</code> 属性，不引入 TanStack Table。</li>
+      <li><strong>差异矩阵（DiffMatrix）</strong>：AntD Table + 自定义单元格（两端 ✓/✗ 图标、构建中 Badge），分组行用 <code>rowSpan</code> 或树形 children。</li>
+      <li><strong>条件构建器（RuleBuilder）</strong>：AntD Form + <code>Form.List</code> 动态行；node/model 选择器的选项来自差异缓存与卷清单接口，不引入树形级联组件（Select mode="multiple" 够用）。</li>
+      <li><strong>校验策略</strong>：前端只做 UX 级校验（必填/格式），业务校验真相在后端 pydantic——避免两套规则漂移。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>2.5 可视化：ECharts + 自绘甘特</h3>
+    <ul class="tight">
+      <li>成本趋势：echarts-for-react 按需引入（LineChart + Grid/Tooltip/Legend/DataZoom 模块），本地/云端双色堆叠。</li>
+      <li>时间线甘特（六阶段）：纯 CSS——每阶段一个 div，宽度 = 时长占比，悬停 Tooltip 显毫秒；不为一个静态条形图引入 gantt 库。</li>
+      <li>节点矩阵统计视图（M2，可选）：ECharts heatmap 或直接表格着色，实现时二选一。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>2.6 上传：自研 useChunkedUploader</h3>
+    <ul class="tight">
+      <li>模型上传要求<strong>分块 + 断点续传 + MD5 校验</strong>，antd Upload 的 action 模式无法满足——只用它的 <code>Upload.Dragger</code> 做拖拽/选择壳，上传逻辑全部自研：</li>
+      <li>流程：File → spark-md5 分块抽样算 hash → <code>POST /api/models/upload</code> 逐块（带 offset/total/hash）→ 失败从记录的 offset 续传 → 完成后失效 models 查询。</li>
+      <li>AbortController 支持取消/暂停；zustand uploadStore 保存队列与 offset（页面切换不丢进度）。</li>
+      <li>依赖：<code>spark-md5</code>（增量哈希）+ <code>@types/spark-md5</code>。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>2.7 只读查看：JSON / YAML / 工作流图</h3>
+    <ul class="tight">
+      <li><strong>M1</strong>：图快照与 YAML 预览用 <code>&lt;pre&gt;</code> + AntD <code>Typography.Paragraph copyable</code>——只读场景不需要编辑器。</li>
+      <li><strong>P2</strong>：JSON 树换 <code>@uiw/react-json-view</code>；YAML 高亮可选 shiki（构建时渲染，无运行时开销）。</li>
+      <li><strong>工作流图渲染（P2）</strong>：<code>@xyflow/react</code>（React Flow）+ elkjs 自动布局，把图快照画成节点图；<strong>不采用</strong> iframe 嵌入 ComfyUI 前端（依赖其内部全局状态，跨版本脆弱）。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 3 ============ -->
+<section id="x3">
+  <h2>3 AntD 组件 → 页面映射</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:30%">页面/场景</th><th>组件组合</th></tr></thead>
+      <tbody>
+        <tr><td>全局布局</td><td><code>Layout.Sider + Menu</code>（折叠）、<code>Layout.Header</code>、<code>Badge</code>（未处理数/SSE 态）、<code>Tooltip</code></td></tr>
+        <tr><td>仪表盘</td><td><code>Statistic + Card</code>（统计卡）、<code>Progress</code>（预算）、<code>Table</code>（运行中/最近）、<code>Button + Popconfirm</code>（预热/中断）</td></tr>
+        <tr><td>路由规则</td><td><code>Table</code>（拖拽排序用 dnd-kit 或上/下移按钮，P1 用按钮）、<code>Switch</code>（启用）、<code>Form/Form.List/Select/InputNumber</code>（条件构建器）、<code>Segmented</code>（条件类型）、<code>Steps</code>（干跑结果链）</td></tr>
+        <tr><td>节点管理</td><td><code>Alert</code>（版本横幅）、<code>Table</code>（虚拟滚动+rowSelection）、<code>Tag</code>（两端状态）、<code>Radio.Group</code>（视图切换/同步模式）、<code>Drawer + Steps</code>（JobDrawer）</td></tr>
+        <tr><td>工作流</td><td><code>Table</code>（状态 badge 列）、<code>Modal</code>（冲突对比：左右 <code>Descriptions</code>）、<code>Space.Compact</code>（同步按钮组）</td></tr>
+        <tr><td>模型卷</td><td><code>Tabs</code>（27 分类横向）、<code>Upload.Dragger + Progress</code>（上传壳）、<code>Form</code>（HF 导入）、<code>Popconfirm + Modal</code>（删除保护）、<code>Alert</code>（软删除可撤销条，<code>closable</code>）</td></tr>
+        <tr><td>日志</td><td><code>Table</code>（筛选 + 实时开关 <code>Switch</code>）、<code>Drawer width="60%"</code>（详情）、<code>Timeline</code>（决策链路）、<code>Image.PreviewGroup</code>（输出画廊——AntD 自带 Lightbox，不引第三库）、<code>Collapse</code>（错误堆栈）</td></tr>
+        <tr><td>设置</td><td><code>Tabs + Form</code>（分区表单）、<code>Slider</code>（scaledown，附费用提示 <code>Form.Item extra</code>）、<code>Table</code>（映射表/设置 diff）、<code>Typography.Paragraph copyable</code>（YAML 预览）</td></tr>
+        <tr><td>全局反馈</td><td><code>message</code>（轻提示）、<code>notification</code>（任务完成/预算告警）、<code>Empty</code>（EmptyGuide）、<code>Skeleton/Spin</code>（加载态）、<code>Result</code>（404/错误页）</td></tr>
+      </tbody>
+    </table>
+    <p class="note">唯一引入的第三方拖拽依赖候选：<code>@dnd-kit/core</code>（规则拖拽排序）。M1 可先用上/下移按钮，M2 视体验再引入——降级路径已留好。</p>
+  </div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section id="x4">
+  <h2>4 明确不引入清单</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:28%">不引入</th><th>理由（及未来重启条件）</th></tr></thead>
+      <tbody>
+        <tr><td>Redux / RTK</td><td>无复杂派生状态；zustand 三个 store 足够。若出现跨页强一致的派生链再评估</td></tr>
+        <tr><td>axios</td><td>fetch 薄封装覆盖；axios 无增量价值</td></tr>
+        <tr><td>Tailwind CSS</td><td>与 AntD 双体系冲突；token + CSS Modules 足够</td></tr>
+        <tr><td>react-hook-form + zod</td><td>AntD Form 够用；校验真相在后端，避免双份规则</td></tr>
+        <tr><td>Monaco Editor</td><td>只读查看 JSON/YAML，5MB 级编辑器无必要</td></tr>
+        <tr><td>gantt / 日历库</td><td>六阶段甘特纯 CSS 实现</td></tr>
+        <tr><td>Storybook</td><td>单人项目 ROI 低；以 Playwright e2e + 页面内 demo 状态代替</td></tr>
+        <tr><td>moment</td><td>AntD 5 已内置 dayjs</td></tr>
+        <tr><td>socket.io / 原生 WS（前端）</td><td>实时通道统一 SSE（WS 中继在后端内部，浏览器不接触）</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 5 ============ -->
+<section id="x5">
+  <h2>5 依赖基线与质量工具链</h2>
+  <div class="card">
+    <h3>5.1 依赖基线（已同步至 frontend/package.json）</h3>
+    <table>
+      <thead><tr><th style="width:22%">分组</th><th>包</th></tr></thead>
+      <tbody>
+        <tr><td>运行时（M1 前）</td><td><code>react@18</code> <code>react-dom@18</code> <code>antd@5</code> <code>@ant-design/icons</code> <code>@tanstack/react-query@5</code> <code>zustand</code> <code>react-router-dom@6</code> <code>dayjs</code> <code>echarts</code> <code>echarts-for-react</code></td></tr>
+        <tr><td>运行时（M3）</td><td><code>spark-md5</code>（+ <code>@types/spark-md5</code>）</td></tr>
+        <tr><td>运行时（P2）</td><td><code>@uiw/react-json-view</code> <code>@xyflow/react</code> <code>elkjs</code> <code>@dnd-kit/core</code></td></tr>
+        <tr><td>开发期</td><td><code>vite@5</code> <code>@vitejs/plugin-react</code> <code>typescript@5</code> <code>@types/react</code> <code>@types/react-dom</code> <code>@types/node</code>（vite.config.ts 的 node:path 类型）</td></tr>
+        <tr><td>质量（P1）</td><td><code>eslint@9</code>（flat config）+ <code>typescript-eslint</code> + <code>eslint-plugin-react-hooks</code>；prettier 可选</td></tr>
+        <tr><td>测试</td><td><code>@playwright/test</code>（e2e/，主保障）；<code>vitest + @testing-library/react</code>（P2，仅 stores/hooks）</td></tr>
+      </tbody>
+    </table>
+    <h3>5.2 按需加载与体积守则</h3>
+    <ul class="tight">
+      <li>ECharts 走按需注册（<code>echarts/core</code> + 用到的 chart/component 模块），不 <code>import * as echarts</code>。</li>
+      <li>AntD 依赖 Vite 自动 tree-shaking，禁止 <code>import * as antd</code>；构建产物预算：首屏 JS ≤ 600KB gzip，超出用 <code>rollup-plugin-visualizer</code> 排查。</li>
+      <li>ECharts/React Flow 等重组件用 <code>React.lazy</code> 拆 chunk（仪表盘图表、日志图查看器）。</li>
+    </ul>
+    <h3>5.3 版本升级策略</h3>
+    <ul class="tight">
+      <li>锁主版本（^ 范围内升级）；antd/ECharts 大版本升级当作独立小任务（跑 e2e + 视觉走查），不随手升。</li>
+      <li>React 保持 18，待 antd 官方宣告 19 一线支持且 e2e 全绿后再评估。</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  ComfyBridge 前端组件选型 v0.1 · 2026-09-25 · 选型变更需在此文档记录决策与理由
+</footer>
+
+</body>
+</html>

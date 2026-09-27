@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyUI 启动命令与启动参数参考</title>
+<style>
+  :root {
+    --bg: #f6f7fb;
+    --card: #ffffff;
+    --ink: #1f2430;
+    --ink-soft: #5a6272;
+    --line: #e4e7ef;
+    --accent: #5b6ef5;
+    --accent-soft: #eef0fe;
+    --code-bg: #14161f;
+    --code-ink: #e6e9f2;
+    --badge-bg: #eef0fe;
+    --badge-ink: #4353d8;
+    --badge-warn-bg: #fdf1e2;
+    --badge-warn-ink: #b06a10;
+    --ok: #1a9e6c;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+  body {
+    margin: 0;
+    font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.65;
+    font-size: 15px;
+  }
+  code, pre, .mono {
+    font-family: "JetBrains Mono", Consolas, "Cascadia Code", "Courier New", monospace;
+  }
+  header.hero {
+    background: linear-gradient(135deg, #3b2f8f 0%, #5b6ef5 55%, #8a7bff 100%);
+    color: #fff;
+    padding: 40px 24px 30px;
+    text-align: center;
+  }
+  header.hero h1 { margin: 0 0 10px; font-size: 26px; letter-spacing: 1px; }
+  header.hero p { margin: 4px 0; opacity: .92; font-size: 14px; }
+  header.hero .meta { font-size: 12.5px; opacity: .8; margin-top: 10px; }
+  nav.toc {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(255,255,255,.94);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--line);
+    padding: 10px 16px;
+    display: flex; flex-wrap: wrap; gap: 6px 14px; justify-content: center;
+    font-size: 13.5px;
+  }
+  nav.toc a { color: var(--ink-soft); text-decoration: none; padding: 3px 8px; border-radius: 6px; }
+  nav.toc a:hover { color: var(--accent); background: var(--accent-soft); }
+  main { max-width: 1080px; margin: 0 auto; padding: 26px 20px 60px; }
+  section { margin-bottom: 44px; }
+  h2 {
+    font-size: 20px; margin: 0 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--accent);
+  }
+  h3 { font-size: 16px; margin: 22px 0 8px; color: var(--ink); }
+  p.lead { color: var(--ink-soft); margin-top: 0; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 16px 18px; margin: 14px 0;
+  }
+  .card h3 { margin-top: 0; }
+  .card .note { color: var(--ink-soft); font-size: 13.5px; }
+
+  pre.cmd {
+    position: relative;
+    background: var(--code-bg); color: var(--code-ink);
+    border-radius: 10px; padding: 13px 44px 13px 16px;
+    overflow-x: auto; font-size: 13.5px; line-height: 1.6;
+    margin: 10px 0;
+  }
+  pre.cmd .cm { color: #7c86a8; }
+  pre.cmd .k { color: #8fd3ff; }
+  pre.cmd .v { color: #ffd28f; }
+  .copy-btn {
+    position: absolute; top: 8px; right: 8px;
+    background: #262b3d; color: #b9c1d9; border: 1px solid #3a415a;
+    border-radius: 6px; font-size: 12px; padding: 3px 9px; cursor: pointer;
+  }
+  .copy-btn:hover { color: #fff; border-color: #5b6ef5; }
+  .copy-btn.done { color: #6fe3ae; border-color: #2f7d5b; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--card); font-size: 13.5px; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  thead th { background: var(--accent-soft); color: var(--badge-ink); font-weight: 600; white-space: nowrap; }
+  tbody tr:nth-child(even) { background: #fafbfe; }
+  td code {
+    background: #f0f2fa; color: #33398f; padding: 1.5px 6px; border-radius: 5px;
+    font-size: 12.5px; white-space: nowrap;
+  }
+  td.def { color: var(--ink-soft); white-space: nowrap; font-size: 12.5px; }
+  .badge {
+    display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px;
+    background: var(--badge-bg); color: var(--badge-ink); margin-left: 6px; white-space: nowrap;
+  }
+  .badge.warn { background: var(--badge-warn-bg); color: var(--badge-warn-ink); }
+  .badge.green { background: #e5f6ef; color: var(--ok); }
+
+  .search-box {
+    display: flex; align-items: center; gap: 10px; margin: 0 0 14px;
+  }
+  .search-box input {
+    flex: 1; max-width: 420px; padding: 9px 14px; font-size: 14px;
+    border: 1px solid var(--line); border-radius: 9px; outline: none; background: #fff;
+  }
+  .search-box input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .search-count { font-size: 13px; color: var(--ink-soft); }
+  .arg-group { margin-bottom: 18px; }
+  .arg-group h3 {
+    margin: 14px 0 8px; font-size: 15px; color: var(--badge-ink);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .arg-group h3::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--accent); display: inline-block; }
+  .hidden-group { display: none; }
+  .hidden-row { display: none; }
+
+  ul.tight li { margin: 5px 0; }
+  .footer {
+    text-align: center; color: var(--ink-soft); font-size: 12.5px;
+    padding: 20px; border-top: 1px solid var(--line);
+  }
+  a { color: var(--accent); }
+  .kvs { display: grid; grid-template-columns: 130px 1fr; gap: 6px 14px; font-size: 14px; }
+  .kvs dt { color: var(--ink-soft); }
+  .kvs dd { margin: 0; }
+  @media (max-width: 640px) {
+    .kvs { grid-template-columns: 1fr; }
+    td.def { white-space: normal; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>ComfyUI 启动命令与启动参数参考</h1>
+  <p>启动方式 · 常用示例 · 全部命令行参数明细（源自官方源码 <code style="color:#dbe2ff">comfy/cli_args.py</code>）</p>
+  <div class="meta">整理日期：2026-09-25 · 依据：ComfyUI master 分支源码与 docs.comfy.org 官方文档</div>
+</header>
+
+<nav class="toc">
+  <a href="#start">① 安装与启动方式</a>
+  <a href="#syntax">② 基本语法与帮助</a>
+  <a href="#examples">③ 常用启动示例</a>
+  <a href="#args">④ 全部参数明细</a>
+  <a href="#yaml">⑤ 额外模型路径配置</a>
+  <a href="#tips">⑥ 使用提示</a>
+  <a href="#refs">⑦ 参考来源</a>
+</nav>
+
+<main>
+
+<!-- ===================== 1 启动方式 ===================== -->
+<section id="start">
+  <h2>① 安装与启动方式</h2>
+  <p class="lead">ComfyUI 是基于 Python 的 Stable Diffusion 节点式图形界面/WebUI。无论哪种安装方式，最终都是执行 <code>python main.py [参数…]</code> 启动，启动参数在各方式间通用。</p>
+
+  <div class="card">
+    <h3>方式一：源码安装（官方推荐，通用 Windows / Linux / macOS）</h3>
+    <pre class="cmd"><span class="cm"># 1. 创建虚拟环境（conda 示例，venv 亦可）</span>
+conda create -n comfyenv
+conda activate comfyenv
+
+<span class="cm"># 2. 克隆仓库</span>
+git clone https://github.com/Comfy-Org/ComfyUI.git
+cd ComfyUI
+
+<span class="cm"># 3. 安装 PyTorch（按显卡选其一）</span>
+<span class="cm"># NVIDIA (CUDA 13.0)：</span>
+pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu130
+<span class="cm"># AMD (Linux, ROCm)：</span>
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm7.2
+<span class="cm"># Apple Silicon (Mac)：</span>
+conda install pytorch-nightly::pytorch torchvision torchaudio -c pytorch-nightly
+
+<span class="cm"># 4. 安装 ComfyUI 依赖</span>
+pip install -r requirements.txt
+
+<span class="cm"># 5. 启动（默认监听 http://127.0.0.1:8188）</span>
+python main.py</pre>
+    <p class="note">Windows 下 AMD 显卡需 Windows 11 + 最新驱动 + 64 位 Python 3.13，PyTorch 使用 AMD 官方 ROCm 源；也可用 <code>--directml</code> 参数走 torch-directml。</p>
+  </div>
+
+  <div class="card">
+    <h3>方式二：Windows 便携整合包（ComfyUI Portable）</h3>
+    <p>从 GitHub Releases 下载 <code>ComfyUI_windows_portable_nvidia.7z</code>（NVIDIA）或 <code>..._amd.7z</code>（AMD），解压后双击 <code>run_nvidia_gpu.bat</code> / <code>run_cpu.bat</code> 启动。本质是调用内置 Python：</p>
+    <pre class="cmd"><span class="cm"># bat 文件内部命令（可在命令行手动执行并追加任意参数）</span>
+.\python_embeded\python.exe -s ComfyUI\main.py --listen 0.0.0.0 --port 8188</pre>
+    <p class="note">更新：运行 <code>update\update_comfyui.bat</code>，或进入 ComfyUI 目录执行 <code>git pull</code>。</p>
+  </div>
+
+  <div class="card">
+    <h3>方式三：comfy-cli 命令行工具</h3>
+    <pre class="cmd">pip install comfy-cli
+comfy install                <span class="cm"># 交互式安装（选择 GPU 类型、安装路径）</span>
+comfy launch                 <span class="cm"># 前台启动</span>
+comfy launch -- --listen 0.0.0.0 --port 8188   <span class="cm"># 传参给 ComfyUI（注意双横线 -- 分隔）</span>
+comfy launch --background -- --cpu             <span class="cm"># 后台启动</span>
+comfy update                 <span class="cm"># 更新</span></pre>
+  </div>
+
+  <div class="card">
+    <h3>方式四：Comfy Desktop 桌面应用</h3>
+    <p>官方桌面端（Windows 10+ / macOS 13+ / Linux .deb 或 AppImage），自动管理 Python 环境与多个实例，适合不熟悉命令行的用户。源码仓库：<a href="https://github.com/Comfy-Org/Comfy-Desktop" target="_blank">Comfy-Org/Comfy-Desktop</a>。</p>
+  </div>
+</section>
+
+<!-- ===================== 2 基本语法 ===================== -->
+<section id="syntax">
+  <h2>② 启动命令基本语法与帮助</h2>
+  <div class="card">
+    <dl class="kvs">
+      <dt>基本语法</dt><dd><code>python main.py [参数1] [参数2] …</code></dd>
+      <dt>查看帮助</dt><dd><code>python main.py -h</code> 或 <code>python main.py --help</code>（列出当前版本全部参数，最权威）</dd>
+      <dt>默认地址</dt><dd><code>http://127.0.0.1:8188</code>（默认仅本机可访问，端口 8188）</dd>
+      <dt>停止服务</dt><dd>在终端按 <code>Ctrl + C</code>，或直接关闭终端窗口</dd>
+      <dt>更新 ComfyUI</dt><dd><code>git pull && pip install -r requirements.txt</code>（在安装目录内）</dd>
+      <dt>参数风格</dt><dd>长参数形如 <code>--lowvram</code>，短参数 <code>-h</code>；带值参数写法 <code>--port 8188</code></dd>
+    </dl>
+  </div>
+</section>
+
+<!-- ===================== 3 常用示例 ===================== -->
+<section id="examples">
+  <h2>③ 常用启动示例</h2>
+
+  <div class="card">
+    <h3>网络 / 远程访问</h3>
+    <pre class="cmd">python main.py                                  <span class="cm"># 默认：仅本机 127.0.0.1:8188</span>
+python main.py --listen 0.0.0.0                 <span class="cm"># 允许局域网访问（监听所有网卡）</span>
+python main.py --listen 0.0.0.0 --port 8189     <span class="cm"># 自定义端口</span>
+python main.py --enable-cors-header "*"         <span class="cm"># 允许跨域请求（前端开发/联调）</span>
+python main.py --tls-certfile cert.pem --tls-keyfile key.pem   <span class="cm"># 启用 HTTPS</span>
+python main.py --auto-launch                    <span class="cm"># 启动后自动打开浏览器</span></pre>
+    <p class="note">安全提醒：<code>--listen 0.0.0.0</code> 会将未加密的 Web 服务暴露给局域网，公网环境请配合 HTTPS、反向代理或防火墙使用。</p>
+  </div>
+
+  <div class="card">
+    <h3>显存 / 性能</h3>
+    <pre class="cmd">python main.py --cpu                            <span class="cm"># 纯 CPU 运行（无显卡/测试用）</span>
+python main.py --lowvram                        <span class="cm"># 低显存优化（4GB 级显卡）</span>
+python main.py --novram                         <span class="cm"># 几乎不占用显存</span>
+python main.py --highvram                       <span class="cm"># 模型常驻显存，减少加载等待（大显存显卡）</span>
+python main.py --gpu-only                       <span class="cm"># 所有内容全部保留在 GPU</span>
+python main.py --reserve-vram 2                 <span class="cm"># 为系统/浏览器预留 2GB 显存，缓解爆显存</span>
+python main.py --fast                           <span class="cm"># 启用全部实验性提速优化（可能影响画质）</span>
+python main.py --fast fp8_matrix_mult fp16_accumulation   <span class="cm"># 仅启用指定优化</span></pre>
+  </div>
+
+  <div class="card">
+    <h3>精度控制</h3>
+    <pre class="cmd">python main.py --force-fp16                     <span class="cm"># 强制 fp16（老卡提速）</span>
+python main.py --force-fp32                     <span class="cm"># 强制 fp32（画质排障）</span>
+python main.py --fp8_e4m3fn-unet --fp8_e4m3fn-text-enc   <span class="cm"># 模型与文本编码器用 fp8（省显存）</span></pre>
+  </div>
+
+  <div class="card">
+    <h3>目录与模型路径</h3>
+    <pre class="cmd">python main.py --output-directory D:\ComfyOut --input-directory D:\ComfyIn
+python main.py --extra-model-paths-config extra_model_paths.yaml   <span class="cm"># 复用 WebUI 等已有模型</span>
+python main.py --base-directory D:\ComfyData                      <span class="cm"># 整体迁移数据目录</span></pre>
+  </div>
+
+  <div class="card">
+    <h3>预览 / 缓存 / 调试</h3>
+    <pre class="cmd">python main.py --preview-method auto            <span class="cm"># 采样过程实时预览（latent2rgb 或 taesd）</span>
+python main.py --preview-method taesd --preview-size 768
+python main.py --cache-none                     <span class="cm"># 最小化缓存，排查节点缓存问题</span>
+python main.py --disable-all-custom-nodes       <span class="cm"># 跳过全部自定义节点，排查启动报错</span>
+python main.py --disable-metadata               <span class="cm"># 生成图片不写入提示词等元数据</span>
+python main.py --verbose DEBUG                  <span class="cm"># 调试日志级别</span></pre>
+  </div>
+</section>
+
+<!-- ===================== 4 参数明细 ===================== -->
+<section id="args">
+  <h2>④ 全部启动参数明细（可直接搜索）</h2>
+  <p class="lead">以下参数整理自官方源码 <a href="https://github.com/comfyanonymous/ComfyUI/blob/master/comfy/cli_args.py" target="_blank">comfy/cli_args.py</a>（master 分支）。ComfyUI 迭代较快，请以 <code>python main.py -h</code> 输出为你所用版本的最准确列表。</p>
+
+  <div class="search-box">
+    <input type="text" id="argSearch" placeholder="🔍 输入关键字过滤参数，如 vram、fp16、port…">
+    <span class="search-count" id="argCount"></span>
+  </div>
+
+  <!-- 服务与网络 -->
+  <div class="arg-group">
+    <h3>服务与网络 <span class="badge green">Server</span></h3>
+    <table>
+      <thead><tr><th style="width:34%">参数</th><th style="width:14%">默认值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>--listen [IP]</code></td><td class="def">127.0.0.1</td><td>监听 IP，默认仅本机。不带值使用时监听 <code>0.0.0.0,::</code>（所有 IPv4/IPv6 网卡，即允许局域网访问）；支持逗号分隔多个地址，如 <code>127.2.2.2,127.3.3.3</code></td></tr>
+        <tr><td><code>--port</code></td><td class="def">8188</td><td>监听端口</td></tr>
+        <tr><td><code>--tls-keyfile &lt;路径&gt;</code></td><td class="def">无</td><td>TLS 私钥文件路径，启用 HTTPS；必须与 <code>--tls-certfile</code> 同时设置</td></tr>
+        <tr><td><code>--tls-certfile &lt;路径&gt;</code></td><td class="def">无</td><td>TLS 证书文件路径，启用 HTTPS；必须与 <code>--tls-keyfile</code> 同时设置</td></tr>
+        <tr><td><code>--enable-cors-header [来源]</code></td><td class="def">无</td><td>允许指定来源的跨域请求；不带值时默认 <code>*</code>（允许所有来源）</td></tr>
+        <tr><td><code>--max-upload-size &lt;MB&gt;</code></td><td class="def">100</td><td>最大上传文件大小（MB）</td></tr>
+        <tr><td><code>--auto-launch</code></td><td class="def">关闭</td><td>启动后在默认浏览器自动打开界面</td></tr>
+        <tr><td><code>--disable-auto-launch</code></td><td class="def">关闭</td><td>禁用浏览器自动打开（优先级高于 <code>--auto-launch</code> 与 Windows 整合包默认行为）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 目录与路径 -->
+  <div class="arg-group">
+    <h3>目录与路径 <span class="badge green">Directory</span></h3>
+    <table>
+      <thead><tr><th style="width:34%">参数</th><th style="width:14%">默认值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>--base-directory &lt;路径&gt;</code></td><td class="def">无</td><td>设置基础目录，models、custom_nodes、input、output、temp、user 均以此为根</td></tr>
+        <tr><td><code>--extra-model-paths-config &lt;yaml&gt;</code></td><td class="def">无</td><td>加载一个或多个 <code>extra_model_paths.yaml</code>，挂载其他目录/其他软件的模型；可重复传参</td></tr>
+        <tr><td><code>--output-directory &lt;路径&gt;</code></td><td class="def">无</td><td>输出（生成图片/视频）目录</td></tr>
+        <tr><td><code>--temp-directory &lt;路径&gt;</code></td><td class="def">无</td><td>临时文件目录</td></tr>
+        <tr><td><code>--input-directory &lt;路径&gt;</code></td><td class="def">无</td><td>输入文件目录</td></tr>
+        <tr><td><code>--user-directory &lt;路径&gt;</code></td><td class="def">无</td><td>用户数据目录（配置、工作流等）</td></tr>
+        <tr><td><code>--models-directory &lt;路径&gt;</code></td><td class="def">无</td><td>模型目录（覆盖默认 models 文件夹）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 设备 -->
+  <div class="arg-group">
+    <h3>设备选择 <span class="badge green">Device</span></h3>
+    <table>
+      <thead><tr><th style="width:34%">参数</th><th style="width:14%">默认值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>--cuda-device &lt;ID&gt;</code></td><td class="def">无</td><td>本实例使用的 CUDA 设备，逗号分隔如 <code>0</code> 或 <code>0,1</code>；<code>all</code> 表示使用全部可见设备，其余设备将被隐藏（多卡分实例常用）</td></tr>
+        <tr><td><code>--default-device &lt;ID&gt;</code></td><td class="def">无</td><td>仅设置默认设备，其他设备保持可见</td></tr>
+        <tr><td><code>--cuda-malloc</code></td><td class="def">启用</td><td>使用 cudaMallocAsync（现行默认行为）</td></tr>
+        <tr><td><code>--disable-cuda-malloc</code></td><td class="def">关闭</td><td>禁用 cudaMallocAsync（某些驱动/卡型崩溃时可尝试）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 精度 -->
+  <div class="arg-group">
+    <h3>模型精度 <span class="badge green">Precision</span><span class="badge">同组参数互斥</span></h3>
+    <table>
+      <thead><tr><th style="width:34%">参数</th><th style="width:14%">默认值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>--force-fp32</code></td><td class="def">关闭</td><td>强制以 fp32 运行（若效果更好请反馈官方）</td></tr>
+        <tr><td><code>--force-fp16</code></td><td class="def">关闭</td><td>强制以 fp16 运行；会同时把 UNet 权重设为 fp16</td></tr>
+        <tr><td><code>--fp32-unet</code> / <code>--fp64-unet</code> / <code>--bf16-unet</code> / <code>--fp16-unet</code></td><td class="def">自动</td><td>指定扩散模型（UNet）权重精度</td></tr>
+        <tr><td><code>--fp8_e4m3fn-unet</code> / <code>--fp8_e5m2-unet</code> / <code>--fp8_e8m0fnu-unet</code></td><td class="def">自动</td><td>以 fp8 存储/运行扩散模型权重（省显存，e4m3fn 最常用）</td></tr>
+        <tr><td><code>--fp16-vae</code> / <code>--fp32-vae</code> / <code>--bf16-vae</code></td><td class="def">自动</td><td>指定 VAE 精度；<code>fp16</code> 在部分 VAE 上可能输出黑图</td></tr>
+        <tr><td><code>--cpu-vae</code></td><td class="def">关闭</td><td>VAE 在 CPU 上解码（显存不足导致解码爆显存时常用）</td></tr>
+        <tr><td><code>--fp8_e4m3fn-text-enc</code> / <code>--fp8_e5m2-text-enc</code> / <code>--fp16-text-enc</code> / <code>--fp32-text-enc</code> / <code>--bf16-text-enc</code></td><td class="def">自动</td><td>指定文本编码器（CLIP/T5 等）权重精度</td></tr>
+        <tr><td><code>--fp16-intermediates</code></td><td class="def">关闭</td><td>节点间传递的中间结果使用 fp16<span class="badge warn">实验性</span></td></tr>
+        <tr><td><code>--force-channels-last</code></td><td class="def">关闭</td><td>强制 channels-last 内存格式<span class="badge warn">实验性</span>，部分显卡（如 4090）可能更快</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Intel/DirectML -->
+  <div class="arg-group">
+    <h3>Intel / AMD(DirectML) <span class="badge green">Intel</span></h3>
+    <table>
+      <thead><tr><th style="width:34%">参数</th><th style="width:14%">默认值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>--directml [设备号]</code></td><td class="def">无</td><td>使用 torch-directml 后端（Windows 下 AMD/Intel 显卡的常用方案）</td></tr>
+        <tr><td><code>--oneapi-device-selector &lt;选择器&gt;</code></td><td class="def">无</td><td>设置实例运行的 oneAPI 设备（Intel 显卡）</td></tr>
+        <tr><td><code>--supports-fp8-compute</code></td><td class="def">关闭</td><td>让 ComfyUI 认为设备支持 fp8 计算，文本编码器改用 fp8 算子</td></tr>
+        <tr><td><code>--enable-triton-backend</code> / <code>--disable-triton-backend</code></td><td class="def">关闭</td><td>启用/禁用 comfy-kitchen Triton 编译后端</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 注意力 -->
+  <div class="arg-group">
+    <h3>注意力机制 <span class="badge green">Attention</span><span class="badge">前 6 项互斥</span></h3>
+    <table>
+      <thead><tr><th style="width:34%">参数</th><th style="width:14%">默认值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>--use-split-cross-attention</code></td><td class="def">关闭</td><td>分片交叉注意力（部分老卡更省显存）</td></tr>
+        <tr><td><code>--use-quad-cross-attention</code></td><td class="def">关闭</td><td>quad 交叉注意力实现</td></tr>
+        <tr><td><code>--use-pytorch-cross-attention</code></td><td class="def">关闭</td><td>使用 PyTorch 原生 scaled_dot_product_attention（新卡默认首选）</td></tr>
+        <tr><td><code>--use-sage-attention</code></td><td class="def">关闭</td><td>使用 SageAttention（需额外安装 sageattention 库，提速明显）</td></tr>
+        <tr><td><code>--use-flash-attention</code></td><td class="def">关闭</td><td>使用 FlashAttention</td></tr>
+        <tr><td><code>--use-ck-attention</code></td><td class="def">关闭</td><td>使用 comfy-kitchen 注意力实现</td></tr>
+        <tr><td><code>--disable-xformers</code></td><td class="def">关闭</td><td>禁用 xformers（未安装或排障时）</td></tr>
+        <tr><td><code>--force-upcast-attention</code> / <code>--dont-upcast-attention</code></td><td class="def">自动</td><td>强制/禁止注意力上浮精度（黑图、花图排障用）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 预览 -->
+  <div class="arg-group">
+    <h3>采样预览 <span class="badge green">Preview</span></h3>
+    <table>
+      <thead><tr><th style="width:34%">参数</th><th style="width:14%">默认值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>--preview-method [方法]</code></td><td class="def">none</td><td>采样节点进度预览方法，可选 <code>none</code>（不预览）/ <code>auto</code>（自动，装了 TAESD 用 TAESD）/ <code>latent2rgb</code>（速度快、偏色）/ <code>taesd</code>（质量好，需下载 TAESD 模型）</td></tr>
+        <tr><td><code>--preview-size &lt;px&gt;</code></td><td class="def">512</td><td>预览图最大边长（像素）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 缓存 -->
+  <div class="arg-group">
+    <h3>节点缓存 <span class="badge green">Cache</span></h3>
+    <table>
+      <thead><tr><th style="width:34%">参数</th><th style="width:14%">默认值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>--cache-ram [GB [GB]]</code></td><td class="def">按内存自动</td><td>RAM 压力缓存（当前默认缓存模式）：第 1 个值为"活动缓存"阈值，第 2 个值为"非活动缓存/固定"阈值；不传值时默认活动阈值=内存的 10%（2–10GB），非活动阈值=内存的 100%（上限 128GB）</td></tr>
+        <tr><td><code>--cache-classic</code></td><td class="def">关闭</td><td>使用旧版激进缓存策略</td></tr>
+        <tr><td><code>--cache-lru N</code></td><td class="def">0</td><td>LRU 缓存最近 N 个节点结果（更吃内存/显存）</td></tr>
+        <tr><td><code>--cache-none</code></td><td class="def">关闭</td><td>最小化缓存，节点每次都重新执行（排障用）</td></tr>
+        <tr><td><code>--high-ram</code></td><td class="def">关闭</td><td>针对大内存机器的优化，等价于启用旧版激进缓存</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 显存与内存 -->
+  <div class="arg-group">
+    <h3>显存与内存管理 <span class="badge green">VRAM</span><span class="badge">前 6 项互斥</span></h3>
+    <table>
+      <thead><tr><th style="width:34%">参数</th><th style="width:14%">默认值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>--gpu-only</code></td><td class="def">关闭</td><td>所有内容（含文本编码器/CLIP）全部保留在 GPU</td></tr>
+        <tr><td><code>--highvram</code></td><td class="def">自动检测</td><td>模型用完不卸载、常驻显存，省去反复加载时间（大显存推荐）</td></tr>
+        <tr><td><code>--normalvram</code></td><td class="def">自动检测</td><td>强制正常显存策略（当系统自动进入 lowvram 但实际显存够用时使用）</td></tr>
+        <tr><td><code>--lowvram</code></td><td class="def">自动检测</td><td>低显存优化：UNet 分块加载，速度换可用性（4–6GB 显卡）</td></tr>
+        <tr><td><code>--novram</code></td><td class="def">自动检测</td><td>几乎不把模型加载进显存（极低显存）</td></tr>
+        <tr><td><code>--cpu</code></td><td class="def">关闭</td><td>全部（含文本编码器/VAE/扩散模型）用 CPU 运行</td></tr>
+        <tr><td><code>--reserve-vram &lt;GB&gt;</code></td><td class="def">按系统自动</td><td>为操作系统/其他软件预留指定 GB 显存</td></tr>
+        <tr><td><code>--vram-headroom &lt;GB&gt;</code></td><td class="def">0</td><td>DynamicVRAM 额外保留的空闲显存（连其他程序占用也一并计入）</td></tr>
+        <tr><td><code>--disable-nvml-pressure</code></td><td class="def">关闭</td><td>用 CUDA 而非 NVML 检测显存压力（NVML 读数异常时）</td></tr>
+        <tr><td><code>--async-offload [流数]</code></td><td class="def">关闭</td><td>权重异步卸载，可指定 CUDA 流数量</td></tr>
+        <tr><td><code>--disable-async-offload</code></td><td class="def">关闭</td><td>禁用异步卸载</td></tr>
+        <tr><td><code>--enable-dynamic-vram</code> / <code>--disable-dynamic-vram</code></td><td class="def">自动</td><td>开/关 DynamicVRAM 动态显存调度</td></tr>
+        <tr><td><code>--fast-disk</code> / <code>--disable-fast-disk</code></td><td class="def">自动</td><td>允许/禁止用磁盘作为动态加载缓存（SSD 才建议开启）</td></tr>
+        <tr><td><code>--disable-smart-memory</code></td><td class="def">关闭</td><td>更激进地把模型卸载回内存释放显存</td></tr>
+        <tr><td><code>--disable-pinned-memory</code></td><td class="def">关闭</td><td>禁用锁页内存（内存不足时）</td></tr>
+        <tr><td><code>--mmap-torch-files</code></td><td class="def">关闭</td><td>加载 .ckpt/.pt 文件时使用内存映射</td></tr>
+        <tr><td><code>--disable-mmap</code></td><td class="def">关闭</td><td>加载 safetensors 时不使用 mmap（Windows 内存占用异常时可尝试）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 性能 -->
+  <div class="arg-group">
+    <h3>性能优化与编译 <span class="badge green">Performance</span></h3>
+    <table>
+      <thead><tr><th style="width:34%">参数</th><th style="width:14%">默认值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>--fast [特性…]</code></td><td class="def">关闭</td><td>启用实验性优化，可选值：<code>fp16_accumulation</code>、<code>fp8_matrix_mult</code>、<code>cublas_ops</code>、<code>autotune</code>；不带值=全部启用；可能轻微影响画质甚至崩溃<span class="badge warn">实验性</span></td></tr>
+        <tr><td><code>--disable-cuda-graphs</code></td><td class="def">关闭</td><td>禁用 CUDA Graphs（部分驱动/卡型不兼容时）</td></tr>
+        <tr><td><code>--disable-comfy-compiler</code></td><td class="def">关闭</td><td>禁用模型编译器（同时禁用 CUDA Graphs）</td></tr>
+        <tr><td><code>--assert-graph-breaks</code></td><td class="def">关闭</td><td>编译器遇到图断点时报错中断（开发调试）</td></tr>
+        <tr><td><code>--force-non-blocking</code></td><td class="def">关闭</td><td>强制张量操作使用非阻塞模式</td></tr>
+        <tr><td><code>--default-hashing-function &lt;算法&gt;</code></td><td class="def">sha256</td><td>模型去重比对哈希算法，可选 md5 / sha1 / sha256 / sha512</td></tr>
+        <tr><td><code>--deterministic</code></td><td class="def">关闭</td><td>启用确定性 PyTorch 算法（结果可复现，速度变慢）</td></tr>
+        <tr><td><code>--debug-hang</code></td><td class="def">关闭</td><td>程序卡死时按 Ctrl-C 输出全部堆栈</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Manager -->
+  <div class="arg-group">
+    <h3>ComfyUI-Manager <span class="badge green">Manager</span></h3>
+    <table>
+      <thead><tr><th style="width:34%">参数</th><th style="width:14%">默认值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>--enable-manager</code></td><td class="def">关闭</td><td>启用内置 ComfyUI-Manager（安装/管理自定义节点）</td></tr>
+        <tr><td><code>--disable-manager-ui</code> / <code>--enable-manager-legacy-ui</code></td><td class="def">关闭</td><td>禁用 Manager 界面 / 启用旧版界面（后者会隐含启用 Manager）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 自定义节点 -->
+  <div class="arg-group">
+    <h3>自定义节点 <span class="badge green">Custom Nodes</span></h3>
+    <table>
+      <thead><tr><th style="width:34%">参数</th><th style="width:14%">默认值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>--disable-all-custom-nodes</code></td><td class="def">关闭</td><td>启动时不加载任何自定义节点（排障利器）</td></tr>
+        <tr><td><code>--whitelist-custom-nodes &lt;目录…&gt;</code></td><td class="def">空</td><td>即使禁用了自定义节点，也仍然加载指定目录</td></tr>
+        <tr><td><code>--disable-api-nodes</code></td><td class="def">关闭</td><td>禁用 API 节点及前端的外网访问（离线环境）</td></tr>
+        <tr><td><code>--multi-user</code></td><td class="def">关闭</td><td>启用多用户模式（按用户隔离存储）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 日志杂项 -->
+  <div class="arg-group">
+    <h3>日志与杂项 <span class="badge green">Logging / Misc</span></h3>
+    <table>
+      <thead><tr><th style="width:34%">参数</th><th style="width:14%">默认值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>--dont-print-server</code></td><td class="def">关闭</td><td>不在控制台打印请求日志</td></tr>
+        <tr><td><code>--verbose [级别 [文件]]</code></td><td class="def">空</td><td>设置控制台日志级别（如 <code>DEBUG</code>），或以 <code>级别 文件名</code> 同时输出到文件；可重复传参</td></tr>
+        <tr><td><code>--log-stdout</code></td><td class="def">关闭</td><td>日志输出到 stdout 而非默认的 stderr</td></tr>
+        <tr><td><code>--quick-test-for-ci</code></td><td class="def">关闭</td><td>CI 快速自检模式（起服务即退出验证）</td></tr>
+        <tr><td><code>--windows-standalone-build</code></td><td class="def">关闭</td><td>标记为 Windows 独立整合包（隐含启用自动打开浏览器）</td></tr>
+        <tr><td><code>--disable-metadata</code></td><td class="def">关闭</td><td>生成的图片不写入提示词等元数据（保护隐私）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 前端 -->
+  <div class="arg-group">
+    <h3>前端版本 <span class="badge green">Frontend</span></h3>
+    <table>
+      <thead><tr><th style="width:34%">参数</th><th style="width:14%">默认值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>--front-end-version &lt;版本&gt;</code></td><td class="def">comfyanonymous/ComfyUI@latest</td><td>指定前端版本，格式 <code>[仓库所有者]/[仓库名]@[版本]</code>，可回退旧版界面</td></tr>
+        <tr><td><code>--front-end-root &lt;目录&gt;</code></td><td class="def">无</td><td>使用本地前端目录（优先于版本号，前端开发用）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- API -->
+  <div class="arg-group">
+    <h3>API / 数据库 / 其他 <span class="badge green">ComfyOrg</span></h3>
+    <table>
+      <thead><tr><th style="width:34%">参数</th><th style="width:14%">默认值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>--comfy-api-base &lt;URL&gt;</code></td><td class="def">https://api.comfy.org</td><td>ComfyUI API 基础地址</td></tr>
+        <tr><td><code>--enable-compress-response-body</code></td><td class="def">关闭</td><td>启用响应体压缩</td></tr>
+        <tr><td><code>--database-url &lt;URL&gt;</code></td><td class="def">用户目录下 comfyui.db</td><td>数据库地址，如 <code>sqlite:///:memory:</code></td></tr>
+        <tr><td><code>--enable-assets</code></td><td class="def">关闭</td><td>启用资产（assets）系统：路由、数据库同步与扫描</td></tr>
+        <tr><td><code>--enable-asset-hashing</code></td><td class="def">关闭</td><td>资产扫描时进行 Blake3 内容哈希</td></tr>
+        <tr><td><code>--feature-flag &lt;KEY[=值]&gt;</code></td><td class="def">空</td><td>设置服务端特性开关，可重复传参</td></tr>
+        <tr><td><code>--list-feature-flags</code></td><td class="def">关闭</td><td>以 JSON 打印全部可用特性开关后退出</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===================== 5 yaml ===================== -->
+<section id="yaml">
+  <h2>⑤ 额外模型路径配置 extra_model_paths.yaml</h2>
+  <p class="lead">把仓库自带的 <code>extra_model_paths.yaml.example</code> 复制为 <code>extra_model_paths.yaml</code> 放到 <code>main.py</code> 旁（或用 <code>--extra-model-paths-config</code> 指定路径），即可复用其他目录（如 WebUI 整合包）的模型，避免重复下载：</p>
+  <pre class="cmd">comfyui:
+    base_path: /path/to/comfyui/          <span class="cm"># 基础路径</span>
+    is_default: true
+    checkpoints: models/checkpoints/
+    loras: models/loras/
+
+a111:                                     <span class="cm"># 复用 Stable Diffusion WebUI (A1111) 的模型</span>
+    base_path: /path/to/stable-diffusion-webui/
+    checkpoints: models/Stable-diffusion
+    configs: models/Stable-diffusion
+    vae: models/VAE
+    loras: models/Lora
+    upscale_models: models/ESRGAN
+    embeddings: embeddings
+    hypernetworks: models/hypernetworks
+    controlnet: models/ControlNet</pre>
+</section>
+
+<!-- ===================== 6 提示 ===================== -->
+<section id="tips">
+  <h2>⑥ 使用提示</h2>
+  <ul class="tight">
+    <li><strong>参数互斥</strong>：显存模式（<code>--gpu-only / --highvram / --normalvram / --lowvram / --novram / --cpu</code>）、注意力实现、各精度组均为互斥组，同组只生效最后一个或直接报错，不要同时传。</li>
+    <li><strong>显存策略</strong>：现代显卡一般交给 ComfyUI 自动检测即可；爆显存先试 <code>--reserve-vram 1~2</code>，再考虑 <code>--lowvram</code>；VAE 解码爆显存可加 <code>--cpu-vae</code>。</li>
+    <li><strong>排查问题三板斧</strong>：<code>--disable-all-custom-nodes</code>（排除节点冲突）→ <code>--cache-none</code>（排除缓存）→ <code>--verbose DEBUG</code>（看详细日志）。</li>
+    <li><strong>远程访问安全</strong>：<code>--listen 0.0.0.0</code> 后任何人都能访问该服务，建议加上 <code>--tls-*</code>、置于反向代理之后，或仅在内网使用。</li>
+    <li><strong>comfy-cli 传参</strong>：必须用双横线 <code>--</code> 分隔，如 <code>comfy launch -- --listen 0.0.0.0</code>。</li>
+    <li><strong>版本差异</strong>：参数随版本快速演进（如缓存模式、DynamicVRAM 等为较新特性），本文以 master 分支为准；旧版本请以 <code>python main.py -h</code> 输出为准。</li>
+  </ul>
+</section>
+
+<!-- ===================== 7 参考 ===================== -->
+<section id="refs">
+  <h2>⑦ 参考来源</h2>
+  <ul class="tight">
+    <li>ComfyUI 官方仓库：<a href="https://github.com/comfyanonymous/ComfyUI" target="_blank">github.com/comfyanonymous/ComfyUI</a></li>
+    <li>参数定义源码：<a href="https://github.com/comfyanonymous/ComfyUI/blob/master/comfy/cli_args.py" target="_blank">comfy/cli_args.py</a></li>
+    <li>官方手动安装文档：<a href="https://docs.comfy.org/installation/manual_install" target="_blank">docs.comfy.org/installation/manual_install</a></li>
+    <li>Windows 便携包文档：<a href="https://docs.comfy.org/installation/comfyui_portable_windows" target="_blank">docs.comfy.org/installation/comfyui_portable_windows</a></li>
+    <li>服务器启动参数官方参考：<a href="https://docs.comfy.org/development/comfyui-server/startup-flags" target="_blank">docs.comfy.org/development/comfyui-server/startup-flags</a></li>
+  </ul>
+</section>
+
+</main>
+
+<footer class="footer">
+  ComfyUI 启动命令与启动参数参考 · 生成于 2026-09-25 · 参数以 <code>python main.py -h</code> 实际输出为准
+</footer>
+
+<script>
+  // 参数搜索过滤
+  const input = document.getElementById('argSearch');
+  const count = document.getElementById('argCount');
+  const groups = Array.from(document.querySelectorAll('.arg-group'));
+  const totalRows = document.querySelectorAll('.arg-group tbody tr').length;
+
+  function applyFilter() {
+    const q = input.value.trim().toLowerCase();
+    let visible = 0;
+    groups.forEach(g => {
+      let groupVisible = 0;
+      g.querySelectorAll('tbody tr').forEach(row => {
+        const hit = !q || row.textContent.toLowerCase().includes(q);
+        row.classList.toggle('hidden-row', !hit);
+        if (hit) { groupVisible++; visible++; }
+      });
+      g.classList.toggle('hidden-group', groupVisible === 0);
+    });
+    count.textContent = q ? `匹配 ${visible} / ${totalRows} 个参数` : `共 ${totalRows} 个参数`;
+  }
+  input.addEventListener('input', applyFilter);
+  applyFilter();
+
+  // 代码块复制按钮
+  document.querySelectorAll('pre.cmd').forEach(pre => {
+    const btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.textContent = '复制';
+    btn.addEventListener('click', () => {
+      const text = Array.from(pre.cloneNode(true).childNodes)
+        .filter(n => !(n.nodeType === 1 && n.classList.contains('copy-btn')))
+        .map(n => n.textContent)
+        .join('').replace(/\s+/g, ' ').trim();
+      const done = ok => {
+        btn.textContent = ok ? '已复制' : '复制失败';
+        btn.classList.toggle('done', ok);
+        setTimeout(() => { btn.textContent = '复制'; btn.classList.remove('done'); }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => done(true), () => done(false));
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        try { done(document.execCommand('copy')); } catch (e) { done(false); }
+        document.body.removeChild(ta);
+      }
+    });
+    pre.appendChild(btn);
+  });
+</script>
+</body>
+</html>

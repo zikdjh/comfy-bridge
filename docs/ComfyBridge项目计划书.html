@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyBridge 项目计划书</title>
+<style>
+  :root {
+    --bg: #f6f7fb; --card: #ffffff; --ink: #1f2430; --ink-soft: #5a6272;
+    --line: #e4e7ef; --accent: #4f5be8; --accent-soft: #eef0fe;
+    --code-bg: #14161f; --code-ink: #e6e9f2;
+    --badge-bg: #eef0fe; --badge-ink: #4353d8;
+    --badge-warn-bg: #fdf1e2; --badge-warn-ink: #b06a10; --ok: #1a9e6c;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+  body {
+    margin: 0; font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.7; font-size: 15px;
+  }
+  code, pre, .mono { font-family: "JetBrains Mono", Consolas, "Cascadia Code", monospace; }
+  header.hero { background: linear-gradient(135deg, #232a63 0%, #4f5be8 55%, #8a7bff 100%); color: #fff; padding: 40px 24px 30px; text-align: center; }
+  header.hero h1 { margin: 0 0 10px; font-size: 26px; letter-spacing: 1px; }
+  header.hero p { margin: 4px 0; opacity: .92; font-size: 14px; }
+  header.hero .meta { font-size: 12.5px; opacity: .8; margin-top: 10px; }
+  nav.toc {
+    position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,.94); backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--line); padding: 10px 16px;
+    display: flex; flex-wrap: wrap; gap: 6px 12px; justify-content: center; font-size: 13.5px;
+  }
+  nav.toc a { color: var(--ink-soft); text-decoration: none; padding: 3px 8px; border-radius: 6px; }
+  nav.toc a:hover { color: var(--accent); background: var(--accent-soft); }
+  main { max-width: 1080px; margin: 0 auto; padding: 26px 20px 60px; }
+  section { margin-bottom: 46px; }
+  h2 { font-size: 20px; margin: 0 0 14px; padding-left: 12px; border-left: 4px solid var(--accent); }
+  h3 { font-size: 16px; margin: 22px 0 8px; }
+  h4 { font-size: 14.5px; margin: 16px 0 6px; color: var(--badge-ink); }
+  p.lead { color: var(--ink-soft); margin-top: 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin: 14px 0; }
+  .card h3 { margin-top: 0; }
+  .card .note { color: var(--ink-soft); font-size: 13.5px; }
+  pre.cmd { background: var(--code-bg); color: var(--code-ink); border-radius: 10px; padding: 13px 16px; overflow-x: auto; font-size: 13px; line-height: 1.6; margin: 10px 0; }
+  table { width: 100%; border-collapse: collapse; background: var(--card); font-size: 13.5px; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  thead th { background: var(--accent-soft); color: var(--badge-ink); font-weight: 600; white-space: nowrap; }
+  tbody tr:nth-child(even) { background: #fafbfe; }
+  td code { background: #f0f2fa; color: #33398f; padding: 1.5px 6px; border-radius: 5px; font-size: 12.5px; }
+  .badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--badge-bg); color: var(--badge-ink); margin-left: 6px; white-space: nowrap; }
+  .badge.warn { background: var(--badge-warn-bg); color: var(--badge-warn-ink); }
+  .badge.red { background: #fdeaea; color: #c0392b; }
+  .badge.green { background: #e5f6ef; color: var(--ok); }
+  .kvs { display: grid; grid-template-columns: 150px 1fr; gap: 6px 14px; font-size: 14px; }
+  .kvs dt { color: var(--ink-soft); }
+  .kvs dd { margin: 0; }
+  ul.tight li { margin: 5px 0; }
+  .footer { text-align: center; color: var(--ink-soft); font-size: 12.5px; padding: 20px; border-top: 1px solid var(--line); }
+  a { color: var(--accent); }
+  .in-scope { color: var(--ok); font-weight: 600; }
+  .out-scope { color: #c0392b; font-weight: 600; }
+  /* 甘特 */
+  .gantt td { text-align: center; padding: 6px 4px; }
+  .gantt .bar { background: var(--accent); border-radius: 4px; height: 14px; min-width: 12px; margin: 0 auto; }
+  .gantt .bar.half { background: linear-gradient(90deg, var(--accent) 0 50%, #dfe3f7 50% 100%); }
+  .gantt .empty { background: #f2f4fa; }
+  .gantt .phase { text-align: left; font-weight: 600; white-space: nowrap; }
+  @media (max-width: 640px) { .kvs { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>ComfyBridge 项目计划书</h1>
+  <p>本地 ComfyUI × Modal 云端 GPU 桥接器 · 立项与执行计划</p>
+  <div class="meta">版本 v1.0 · 编写日期 2026-09-25 · 状态：待评审</div>
+</header>
+
+<nav class="toc">
+  <a href="#c1">1 项目概述</a>
+  <a href="#c2">2 目标与成功标准</a>
+  <a href="#c3">3 项目范围</a>
+  <a href="#c4">4 现状盘点</a>
+  <a href="#c5">5 组织与角色</a>
+  <a href="#c6">6 进度计划（WBS）</a>
+  <a href="#c7">7 里程碑与验收</a>
+  <a href="#c8">8 资源与预算</a>
+  <a href="#c9">9 质量管理</a>
+  <a href="#c10">10 风险登记册</a>
+  <a href="#c11">11 变更与沟通</a>
+  <a href="#c12">12 附录</a>
+</nav>
+
+<main>
+
+<!-- ============ 1 ============ -->
+<section id="c1">
+  <h2>1 项目概述</h2>
+  <div class="card">
+    <dl class="kvs">
+      <dt>项目名称</dt><dd>ComfyBridge —— 本地 ComfyUI 与 Modal 云端 GPU 之间的桥接器</dd>
+      <dt>一句话定义</dt><dd>本地常驻服务：把本地 ComfyUI 的生成请求按策略转发到 Modal 云端 GPU 执行，并对两端节点/配置/工作流做同步管理、统一记录日志与成本</dd>
+      <dt>技术栈</dt><dd>FastAPI（含 ASGI 反代 + WebSocket 中继）+ React（管理控制台）+ Modal Python SDK（云端 Runner 与数据卷）</dd>
+      <dt>项目性质</dt><dd>个人工具型项目，单人开发，服务自己的日常出图工作流</dd>
+      <dt>总体周期</dt><dd><strong>8 个工作周 + 1 周缓冲</strong>，建议 2026-09-28 启动，2026-11-27 前完成（缓冲至 12-04）</dd>
+      <dt>总工作量</dt><dd>约 40 人日</dd>
+      <dt>配套文档</dt><dd>技术设计见《<a href="ComfyUI-Modal桥接器项目规划.html">ComfyUI-Modal桥接器项目规划</a>》；参考资料见《<a href="ComfyUI启动命令与参数参考.html">ComfyUI 启动参数参考</a>》《<a href="Modal云平台与SDK参考.html">Modal 云平台与 SDK 参考</a>》</dd>
+    </dl>
+    <h3>立项背景</h3>
+    <ul class="tight">
+      <li>本地显卡无法胜任大模型/高分辨率/批量出图；Modal 提供按秒计费的 L40S～B200 GPU，无闲置成本。</li>
+      <li>直接把 ComfyUI 搬上 Modal 后，本地前端习惯、工作流与素材被割裂；两端环境（节点、版本、路径）会持续漂移。</li>
+      <li>已有一份可用的 Modal 部署脚本（<code>comfyui_app.py</code>），Runner 与数据卷基础已具备，缺的是中间的桥接层。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 2 ============ -->
+<section id="c2">
+  <h2>2 目标与成功标准</h2>
+  <div class="card">
+    <h3>2.1 项目目标</h3>
+    <ul class="tight">
+      <li><strong>G1 无感切换</strong>：用户仍用熟悉的 ComfyUI 界面出图，单次生成可留在本地或送上云端，切换零学习成本。</li>
+      <li><strong>G2 环境一致</strong>：两端节点、ComfyUI 版本、设置、工作流可一键对齐，漂移可发现、可修复。</li>
+      <li><strong>G3 可控上云</strong>：云端每次执行可追溯（决策链路、时间线、输出、成本），费用有预算护栏。</li>
+      <li><strong>G4 模型不自动同步</strong>：模型仅存于本地与 Modal 数据卷两处，由用户通过管理界面对卷按需供给。</li>
+    </ul>
+    <h3>2.2 量化成功标准（KPI）</h3>
+    <table>
+      <thead><tr><th style="width:56%">指标</th><th>目标值</th></tr></thead>
+      <tbody>
+        <tr><td>混合后端连续使用一个工作日，生成请求失败率（桥接层自身原因）</td><td>0</td></tr>
+        <tr><td>本地新装 3 个自定义节点 → 云端可用（同步 + 镜像重建完成）</td><td>≤ 10 分钟</td></tr>
+        <tr><td>请求日志可还原率（决策 + 时间线 + 输出 + 成本估算）</td><td>100%</td></tr>
+        <tr><td>月度预算护栏生效（超限自动回落本地并通知）</td><td>有效触发 ≥ 1 次验证</td></tr>
+        <tr><td>全新机器从安装桥接器到云端首图</td><td>≤ 30 分钟</td></tr>
+        <tr><td>核心链路 e2e 通过率</td><td>100%（冒烟集全绿）</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 3 ============ -->
+<section id="c3">
+  <h2>3 项目范围</h2>
+  <div class="card">
+    <dl class="kvs">
+      <dt class="in-scope">✓ 范围内</dt>
+      <dd>① 透明反代拦截与策略路由（manual / tag / 节点可用性 / 模型可用性 / 默认）② WebSocket 事件中继与历史合并 ③ 输入预上传、输出回传 ④ 节点差异对比与同步（镜像固化 + 卷试装双模式）⑤ 设置与工作流双向同步 ⑥ Modal 模型数据卷管理（浏览/上传/HF 导入/删除/用量）⑦ 请求日志、成本估算与预算护栏 ⑧ React 管理控制台 ⑨ 打包分发与文档</dd>
+      <dt class="out-scope">✗ 范围外</dt>
+      <dd>模型文件自动双向同步；ComfyUI 前端/服务端源码改造；多租户与团队配额；训练托管；与 Modal 账单系统的对账结算；v1 期多远端后端（RunPod 等，列入 v2）</dd>
+    </dl>
+    <h3>交付物清单</h3>
+    <table>
+      <thead><tr><th style="width:30%">交付物</th><th>形式</th></tr></thead>
+      <tbody>
+        <tr><td>桥接器后端</td><td><code>comfy-bridge/backend</code>（FastAPI，pip 可安装包，内嵌前端静态资源）</td></tr>
+        <tr><td>管理控制台</td><td><code>frontend</code>（Vite + React + TS + AntD，构建产物内嵌）</td></tr>
+        <tr><td>Modal Runner App</td><td><code>modal-runner</code>（在现有 comfyui_app.py 基础上演进：版本锁定、节点锁文件、鉴权）</td></tr>
+        <tr><td>文档</td><td>README、安装与使用手册、故障排查、兼容性矩阵</td></tr>
+        <tr><td>测试</td><td>pytest 单元/集成、live 联调冒烟集、Playwright e2e</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section id="c4">
+  <h2>4 现状盘点（2026-09-25）</h2>
+  <div class="card">
+    <h3>4.1 已有资产</h3>
+    <table>
+      <thead><tr><th style="width:26%">资产</th><th>状态与可复用性</th></tr></thead>
+      <tbody>
+        <tr><td><code>comfyui_app.py</code>（Modal Runner）</td><td><span class="badge green">可复用</span> 已实现：L40S + 4C/32G 容器、数据卷 <code>comfyui-data</code> 全目录持久化（<code>--base-directory /data</code>）、27 类模型分类子目录、设置种子合并、extra_model_paths 模板、<code>download_model</code> 云端直下（HF/直链 + volume.commit）</td></tr>
+        <tr><td>本地 ComfyUI（Desktop standalone）</td><td><span class="badge green">运行环境就绪</span> v0.37.2（内嵌 Python 3.13.12 / torch 2.12.1+cu130 / Manager 4.2.2 pip 包）；节点、模型、工作流均为空，是干净的联调基线</td></tr>
+        <tr><td>文档</td><td>技术规划 1 份 + 参数/平台参考 2 份（docs/ 目录）</td></tr>
+        <tr><td><code>brige/back / front</code> 空目录</td><td>仅骨架命名，无代码，M1 起按规划目录结构重建</td></tr>
+      </tbody>
+    </table>
+    <h3>4.2 差距清单（进入计划的工作项）</h3>
+    <table>
+      <thead><tr><th style="width:34%">差距</th><th>归属</th></tr></thead>
+      <tbody>
+        <tr><td>Runner 镜像拉 master 最新，本地 v0.37.2 → <strong>版本漂移</strong>；且 Desktop 会自动更新本地版本，漂移会持续发生</td><td>M0（锁定）+ M2（版本对齐作业）</td></tr>
+        <tr><td>Runner 端点无鉴权（Modal 代理 Token 未启用）</td><td>M0</td></tr>
+        <tr><td>客户端指定 <code>prompt_id</code> 的兼容性未验证（中继设计的前提假设）</td><td>M0</td></tr>
+        <tr><td>自定义节点无锁定/重建机制（当前仅"卷上节点 + 冷启动装依赖"）</td><td>M2</td></tr>
+        <tr><td>桥接器本体（反代/路由/中继/合并/日志）与控制台：<strong>零代码</strong></td><td>M1–M4</td></tr>
+        <tr><td>两端模型与工作流均为空，同步引擎缺少真实差异场景</td><td>M1 前手工构造测试夹具</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 5 ============ -->
+<section id="c5">
+  <h2>5 组织与角色</h2>
+  <div class="card">
+    <p>单人项目，一人分饰多角；引入一名评审人（同事/朋友）做里程碑验收，日常用 AI 结对加速。</p>
+    <table>
+      <thead><tr><th style="width:20%">角色</th><th style="width:50%">职责</th><th>承担人</th></tr></thead>
+      <tbody>
+        <tr><td>项目负责人 / PM</td><td>计划维护、范围与变更决策、里程碑评审组织</td><td>本人</td></tr>
+        <tr><td>开发（后端/前端/云）</td><td>WBS 任务实现、代码自审、单元测试</td><td>本人（AI 结对）</td></tr>
+        <tr><td>测试</td><td>冒烟集执行、兼容矩阵、e2e</td><td>本人 + 评审人抽查</td></tr>
+        <tr><td>评审人 / 首位用户</td><td>里程碑验收、真实工作流试用反馈</td><td>待定（1 名）</td></tr>
+        <tr><td>外部依赖方</td><td>Modal 平台（SDK/计费/配额）、ComfyUI 上游（API 演进）、HuggingFace（模型分发）</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 6 ============ -->
+<section id="c6">
+  <h2>6 进度计划（WBS）</h2>
+  <div class="card">
+    <h3>6.1 甘特总览（工作周，建议日期见 6.3）</h3>
+    <table class="gantt">
+      <thead><tr><th class="phase" style="width:150px">阶段</th><th>W1</th><th>W2</th><th>W3</th><th>W4</th><th>W5</th><th>W6</th><th>W7</th><th>W8</th><th>缓冲</th></tr></thead>
+      <tbody>
+        <tr><td class="phase">M0 技术验证收尾</td><td><div class="bar"></div></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td></tr>
+        <tr><td class="phase">M1 MVP 桥接</td><td class="empty"></td><td><div class="bar"></div></td><td><div class="bar"></div></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td></tr>
+        <tr><td class="phase">M2 同步引擎</td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td><div class="bar"></div></td><td><div class="bar"></div></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td></tr>
+        <tr><td class="phase">M3 模型卷管理</td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td><div class="bar"></div></td><td><div class="bar half"></div></td><td class="empty"></td><td class="empty"></td></tr>
+        <tr><td class="phase">M4 打磨发布</td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td><div class="bar half"></div></td><td><div class="bar"></div></td><td class="empty"></td></tr>
+        <tr><td class="phase">缓冲 / 收尾评审</td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td><div class="bar" style="background:#9aa3d8"></div></td></tr>
+      </tbody>
+    </table>
+    <p class="note">M0 因 <code>comfyui_app.py</code> 已具备 Runner/卷/模型下载能力，由原 1 周压缩为 3 个工作日；释放的 2 天并入 M1 与缓冲。</p>
+  </div>
+
+  <div class="card">
+    <h3>6.2 WBS 任务分解（约 40 人日）</h3>
+    <h4>M0 技术验证收尾（3 天）</h4>
+    <table>
+      <thead><tr><th style="width:14%">编号</th><th style="width:52%">任务</th><th style="width:20%">产出</th><th>估时</th></tr></thead>
+      <tbody>
+        <tr><td>M0-1</td><td>Runner 版本锁定：镜像改为克隆 <code>v0.37.2</code>（与本地一致），版本写入部署参数</td><td>锁版本镜像</td><td>0.5d</td></tr>
+        <tr><td>M0-2</td><td>Runner 端点安全加固：Modal 代理 Token（Modal-Key/Secret）接入，桥接器持 Token 转发</td><td>非公开端点</td><td>0.5d</td></tr>
+        <tr><td>M0-3</td><td>兼容性验证：客户端指定 <code>prompt_id</code>、WS 事件结构、history 格式（对照 v0.37.2 server.py）</td><td>兼容性矩阵初版</td><td>1d</td></tr>
+        <tr><td>M0-4</td><td>桥接器骨架 PoC：FastAPI 反代透传 + WS 双向泵，浏览器经 8189 跑通一次本地生成</td><td>PoC 代码</td><td>1d</td></tr>
+      </tbody>
+    </table>
+    <h4>M1 MVP 桥接（12 天）</h4>
+    <table>
+      <thead><tr><th style="width:14%">编号</th><th style="width:52%">任务</th><th style="width:20%">产出</th><th>估时</th></tr></thead>
+      <tbody>
+        <tr><td>M1-1</td><td>反代拦截层：端点接管（/prompt /history /queue /view /upload /interrupt /object_info /ws），其余流式透传</td><td>proxy 模块</td><td>3d</td></tr>
+        <tr><td>M1-2</td><td>路由引擎 v1：manual / tag / default 规则 + 决策链路记录 + 干跑接口</td><td>routing 模块</td><td>2d</td></tr>
+        <tr><td>M1-3</td><td>Modal 执行通道：预检（节点缓存）、输入预上传去重、代提交、WS 中继（含二进制帧归属）、输出回传落盘</td><td>runner 模块</td><td>3d</td></tr>
+        <tr><td>M1-4</td><td>视图合并：/history、/queue 本地+远端合成，/view 回源 modal/ 前缀文件</td><td>合并逻辑</td><td>1.5d</td></tr>
+        <tr><td>M1-5</td><td>SQLite schema v1、日志落库、SSE 推送；back/front 骨架与请求列表页</td><td>MVP 全链路</td><td>2.5d</td></tr>
+      </tbody>
+    </table>
+    <h4>M2 同步引擎（10 天）</h4>
+    <table>
+      <thead><tr><th style="width:14%">编号</th><th style="width:52%">任务</th><th style="width:20%">产出</th><th>估时</th></tr></thead>
+      <tbody>
+        <tr><td>M2-1</td><td>节点清单采集（本地 custom_nodes 扫描 + Manager API 兜底）与 object_info diff 缓存</td><td>节点矩阵数据</td><td>2d</td></tr>
+        <tr><td>M2-2</td><td><code>nodes.lock.yaml</code> 生成、镜像重建（<code>modal deploy</code>）与失败回滚</td><td>镜像固化模式</td><td>1.5d</td></tr>
+        <tr><td>M2-3</td><td>节点卷模式试装（clone 进卷 + 冷启动装依赖）</td><td>快速试装</td><td>1d</td></tr>
+        <tr><td>M2-4</td><td>工作流双向同步（mtime+hash 状态机）与冲突双副本处理</td><td>工作流同步</td><td>2d</td></tr>
+        <tr><td>M2-5</td><td>settings 键级推拉；extra_model_paths 自动生成；<strong>版本对齐作业</strong>（检测 Desktop 自动更新导致的本地漂移并提示对齐远端）</td><td>配置同步</td><td>2d</td></tr>
+        <tr><td>M2-6</td><td>节点矩阵 / 同步任务 / 冲突处理 UI</td><td>同步控制台</td><td>1.5d</td></tr>
+      </tbody>
+    </table>
+    <h4>M3 模型卷管理（8 天）</h4>
+    <table>
+      <thead><tr><th style="width:14%">编号</th><th style="width:52%">任务</th><th style="width:20%">产出</th><th>估时</th></tr></thead>
+      <tbody>
+        <tr><td>M3-1</td><td>卷浏览、分类统计与用量视图</td><td>清单服务</td><td>1.5d</td></tr>
+        <tr><td>M3-2</td><td>本地上传：分块 + 断点续传 + MD5 校验</td><td>上传通道</td><td>1.5d</td></tr>
+        <tr><td>M3-3</td><td>HF 云端直下（复用 <code>download_model</code>，接入同步任务队列）</td><td>导入通道</td><td>1d</td></tr>
+        <tr><td>M3-4</td><td>删除保护（引用检查）与软删除</td><td>安全删除</td><td>0.5d</td></tr>
+        <tr><td>M3-5</td><td>node_presence / model_presence 路由接入；提交前预校验框架（strict / ask / auto 供给策略）</td><td>路由联动</td><td>2d</td></tr>
+        <tr><td>M3-6</td><td>模型卷 UI（浏览/上传/导入/删除/用量）</td><td>模型页</td><td>1.5d</td></tr>
+      </tbody>
+    </table>
+    <h4>M4 打磨发布（7 天）</h4>
+    <table>
+      <thead><tr><th style="width:14%">编号</th><th style="width:52%">任务</th><th style="width:20%">产出</th><th>估时</th></tr></thead>
+      <tbody>
+        <tr><td>M4-1</td><td>成本聚合（次/日/月）、预算护栏、超限自动回落本地 + 通知</td><td>预算护栏</td><td>2d</td></tr>
+        <tr><td>M4-2</td><td>预热按钮、Runner 状态/容器数面板</td><td>运维面板</td><td>0.5d</td></tr>
+        <tr><td>M4-3</td><td>打包分发（pip 安装包内嵌前端）+ 首次配置向导</td><td>可安装产物</td><td>1.5d</td></tr>
+        <tr><td>M4-4</td><td>Playwright e2e + 兼容矩阵（远端对 2 个 ComfyUI 版本跑核心链路）</td><td>测试基线</td><td>2d</td></tr>
+        <tr><td>M4-5</td><td>文档：README、安装手册、故障排查、兼容性矩阵发布</td><td>文档集</td><td>1d</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>6.3 建议日历（跳过国庆长假）</h3>
+    <table>
+      <thead><tr><th style="width:24%">阶段</th><th style="width:26%">建议日期</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>M0（3d）</td><td>09-28 ～ 09-30</td><td>国庆前收尾；10-01～10-07 假期不计入</td></tr>
+        <tr><td>M1（12d）</td><td>10-08 ～ 10-23</td><td>两个完整工作周</td></tr>
+        <tr><td>M2（10d）</td><td>10-26 ～ 11-06</td><td></td></tr>
+        <tr><td>M3（8d）</td><td>11-09 ～ 11-18</td><td></td></tr>
+        <tr><td>M4（7d）</td><td>11-19 ～ 11-27</td><td>11-27 项目验收</td></tr>
+        <tr><td>缓冲（5d）</td><td>11-30 ～ 12-04</td><td>吸收延期或提前发布；12-04 复盘归档</td></tr>
+      </tbody>
+    </table>
+    <p class="note">法定节假日与调休以国务院当年安排为准，整体顺延不调整工作量。</p>
+  </div>
+</section>
+
+<!-- ============ 7 ============ -->
+<section id="c7">
+  <h2>7 里程碑与验收标准（DoD）</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:16%">里程碑</th><th>验收标准（全部满足才算通过）</th></tr></thead>
+      <tbody>
+        <tr><td><strong>M0</strong><br>09-30</td><td>① 浏览器经桥接器 PoC 在本地后端成功出图 ② WS 事件透传可见进度 ③ 云端 Runner 锁定 v0.37.2 且带 Token 鉴权 ④ 客户端 prompt_id 兼容性结论落档（通过 / 有替代方案）</td></tr>
+        <tr><td><strong>M1</strong><br>10-23</td><td>① 同一浏览器会话内本地/云端各跑通文生图与图生图（含输入预上传）② 进度条与预览在中继下正常 ③ 输出回传并出现在历史画廊 ④ 混合使用一整天零桥接故障 ⑤ 每次请求日志可还原时间线与输出</td></tr>
+        <tr><td><strong>M2</strong><br>11-06</td><td>① 本地新装 3 个节点 → 一键同步 → 云端跑通含该节点工作流（≤10 分钟）② 镜像重建失败自动回滚演练通过 ③ 工作流双向同步与冲突用例通过 ④ 两端版本不一致时有对齐提示（模拟 Desktop 自动更新场景）</td></tr>
+        <tr><td><strong>M3</strong><br>11-18</td><td>① 本地上传 1 个模型、HF 直下 1 个模型进卷成功 ② 删除保护与软删除生效 ③ 含"卷独有模型"的工作流被路由到云端且本地 UI 无爆红（object_info 并集生效）④ 预校验拦截缺模型提交并给出可操作选项</td></tr>
+        <tr><td><strong>M4</strong><br>11-27</td><td>① 全新机器 30 分钟内完成安装到云端首图 ② 预算护栏触发验证 ≥ 1 次 ③ e2e 全绿 + 兼容矩阵通过 ④ 文档齐备 ⑤ KPI（§2.2）逐项复核</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 8 ============ -->
+<section id="c8">
+  <h2>8 资源与预算</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:24%">类别</th><th>明细</th></tr></thead>
+      <tbody>
+        <tr><td>开发环境</td><td>现有 Windows 工作机；本地 ComfyUI Desktop（已装）；代码仓库建议迁移到 <code>comfy-bridge/</code> 单仓（Git 私有仓库）</td></tr>
+        <tr><td>云端资源</td><td>Modal：L40S（$1.95/h）开发期日均 1–2h 调试 + 预热；数据卷 <code>comfyui-data</code>（存储每月免费 1 TiB 内）；Starter 计划每月 $30 免费额度</td></tr>
+        <tr><td>费用预估</td><td>开发期（2 个月）约 $40–80 总消耗，免费额度可覆盖大半，净支出预计 ≤ $40；生产期按实际用量（预算护栏上限由配置决定）</td></tr>
+        <tr><td>账号与密钥</td><td>Modal Token（<code>MODAL_TOKEN_ID/SECRET</code>）；HF Token（私有/门禁模型下载用，建议 <code>modal.Secret</code> 注入）；Runner 代理 Token</td></tr>
+        <tr><td>许可证决策</td><td>桥接器自研代码拟选 MIT/Apache-2.0；与 ComfyUI（GPL）仅经 HTTP/WS API 交互、不静态/动态链接，独立进程部署，计划书中记录该边界判断；如后续引入 ComfyUI 代码片段需单独评审</td></tr>
+        <tr><td>工具链</td><td>uv（Python 管理）、pnpm（前端）、ruff + mypy、GitHub Actions（lint + 单测，live 联调手动触发）</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 9 ============ -->
+<section id="c9">
+  <h2>9 质量管理</h2>
+  <div class="card">
+    <ul class="tight">
+      <li><strong>分层测试</strong>：单元（路由求值/锁文件/合并/成本）→ 集成（mock 两端 ComfyUI 的全端点行为矩阵 + 同步冲突用例）→ live 联调冒烟（文生图/图生图/独占节点/中断/断网重连）→ e2e（Playwright）→ 兼容矩阵（远端 2 个版本）。</li>
+      <li><strong>代码门禁</strong>：ruff + mypy 通过、单测通过方可合并；主干保持可运行。</li>
+      <li><strong>设计红线</strong>：所有对 ComfyUI 协议的假设集中封装在兼容层（proxy 模块），禁止散落；prompt_id、二进制预览帧、status 广播三类场景必须有专项用例。</li>
+      <li><strong>安全基线</strong>：桥接器仅绑 127.0.0.1；Runner 端点必须带 Token 鉴权；日志中的图快照仅本地存储；预算护栏默认开启。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 10 ============ -->
+<section id="c10">
+  <h2>10 风险登记册</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:24%">风险</th><th style="width:10%">等级</th><th style="width:44%">应对</th><th>触发/监控</th></tr></thead>
+      <tbody>
+        <tr><td>ComfyUI 上游 API/前端协议演进破坏桥接（Desktop 自动更新使漂移常态化）</td><td><span class="badge red">高</span></td><td>兼容层集中隔离；本地更新检测 + 版本对齐作业（M2-5）；兼容矩阵纳入 CI；必要时建议用户锁定本地更新</td><td>每周跑一次兼容冒烟</td></tr>
+        <tr><td>单人投入波动导致延期</td><td><span class="badge red">高</span></td><td>缓冲周兜底；裁剪顺序预设（见 §11）；里程碑允许可用即可、不求完美</td><td>周五自查实际/计划偏差 &gt; 3 天即启动裁剪</td></tr>
+        <tr><td>节点依赖冲突导致镜像重建失败</td><td><span class="badge warn">中</span></td><td>重建前 pip resolve 预检；失败自动回滚上一版镜像；卷模式先行试装</td><td>每次重建的构建日志评审</td></tr>
+        <tr><td>Modal 计费失控</td><td><span class="badge warn">中</span></td><td>月度预算 + 超限自动回落本地；默认 min_containers=0；每次运行成本入日志</td><td>控制台成本曲线周检</td></tr>
+        <tr><td>冷启动体验差导致弃用云端</td><td><span class="badge warn">中</span></td><td>预热按钮 + scaledown 调优 + 镜像层精简；路由规则允许"即时性优先"回落本地</td><td>M1 验收记录实际冷启动耗时基线</td></tr>
+        <tr><td>WS 中继边界问题（二进制帧归属、status 合成、断线）</td><td><span class="badge warn">中</span></td><td>M0-3 提前验证；专项用例（§9 红线）；/history 轮询兜底最终态</td><td>M1 冒烟集覆盖</td></tr>
+        <tr><td>大模型上传受家庭带宽限制</td><td><span class="badge warn">低</span></td><td>分块续传；主推 HF 云端直下；文档引导 <code>modal volume put</code> 批量导入</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 11 ============ -->
+<section id="c11">
+  <h2>11 变更与沟通机制</h2>
+  <div class="card">
+    <h3>11.1 变更管理</h3>
+    <ul class="tight">
+      <li>需求/方案变更 → 记录影响（工期/范围/风险）→ 更新计划与 ADR → 版本号 +1。技术决策沿用规划文档中的 ADR 表追加。</li>
+      <li><strong>范围裁剪顺序（延期时从后往前砍）</strong>：M4-3 打包 → M2-3 卷试装模式 → M3-2 分块续传（降级为整文件上传）→ M4-4 兼容矩阵（保留核心链路冒烟）。P0 红线：M0–M1 桥接主链路与日志永不裁剪。</li>
+    </ul>
+    <h3>11.2 沟通与评审</h3>
+    <table>
+      <thead><tr><th style="width:24%">机制</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td>周五自查（30min）</td><td>实际 vs 计划偏差、风险登记册更新、下周任务锁定，产出 5 行周记</td></tr>
+        <tr><td>里程碑评审</td><td>对照 §7 DoD 逐项打勾；评审人实际操作验收；不通过项列入下一里程碑或缓冲</td></tr>
+        <tr><td>演示存档</td><td>每个里程碑录 1 段操作演示（含翻车现场），归档 docs/demo/</td></tr>
+        <tr><td>文档同步</td><td>计划书与规划文档随里程碑滚动修订，版本号递增</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 12 ============ -->
+<section id="c12">
+  <h2>12 附录</h2>
+  <div class="card">
+    <h3>12.1 项目文档清单</h3>
+    <table>
+      <thead><tr><th style="width:40%">文档</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td><a href="ComfyBridge项目计划书.html">ComfyBridge 项目计划书（本文）</a></td><td>范围、排期、预算、风险、验收——管理线</td></tr>
+        <tr><td><a href="ComfyUI-Modal桥接器项目规划.html">ComfyUI-Modal桥接器项目规划</a></td><td>架构、核心设计、DB/API/前端设计——技术线</td></tr>
+        <tr><td><a href="ComfyUI启动命令与参数参考.html">ComfyUI 启动命令与参数参考</a></td><td>Runner 启动参数速查</td></tr>
+        <tr><td><a href="Modal云平台与SDK参考.html">Modal 云平台与 SDK / CLI 参考</a></td><td>Runner/Volume/计费速查</td></tr>
+      </tbody>
+    </table>
+    <h3>12.2 术语表</h3>
+    <table>
+      <thead><tr><th style="width:24%">术语</th><th>含义</th></tr></thead>
+      <tbody>
+        <tr><td>Runner</td><td>部署在 Modal 上的 ComfyUI 云函数（源自 comfyui_app.py 的 <code>comfyui-l40s</code> App）</td></tr>
+        <tr><td>桥接器 / Bridge</td><td>本地 :8189 常驻服务（FastAPI + React），本项目主体</td></tr>
+        <tr><td>中继</td><td>桥接器内按 prompt_id 解复用的双段 WebSocket 网关</td></tr>
+        <tr><td>数据卷</td><td>Modal Volume <code>comfyui-data</code>，持久化模型/节点/用户数据/输入输出</td></tr>
+        <tr><td>锁文件</td><td><code>nodes.lock.yaml</code>：远端自定义节点与版本（commit）的精确清单，镜像重建依据</td></tr>
+        <tr><td>预校验</td><td>提交前用目标端 object_info 缓存复刻 validate_prompt，提前拦截缺节点/缺模型</td></tr>
+        <tr><td>按需供给</td><td>用户确认后把本地模型上传到卷（或 HF 直下），区别于"自动同步模型"</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  ComfyBridge 项目计划书 v1.0 · 2026-09-25 · 批准后 09-28 启动 M0
+</footer>
+
+</body>
+</html>

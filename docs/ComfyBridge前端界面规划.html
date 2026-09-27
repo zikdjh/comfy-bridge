@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyBridge 前端界面规划</title>
+<style>
+  :root {
+    --bg: #f6f7fb; --card: #ffffff; --ink: #1f2430; --ink-soft: #5a6272;
+    --line: #e4e7ef; --accent: #4f5be8; --accent-soft: #eef0fe;
+    --code-bg: #14161f; --code-ink: #e6e9f2;
+    --badge-bg: #eef0fe; --badge-ink: #4353d8;
+    --badge-warn-bg: #fdf1e2; --badge-warn-ink: #b06a10; --ok: #1a9e6c;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+  body {
+    margin: 0; font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.7; font-size: 15px;
+  }
+  code, pre, .mono { font-family: "JetBrains Mono", Consolas, "Cascadia Code", monospace; }
+  header.hero { background: linear-gradient(135deg, #232a63 0%, #4f5be8 55%, #8a7bff 100%); color: #fff; padding: 40px 24px 30px; text-align: center; }
+  header.hero h1 { margin: 0 0 10px; font-size: 26px; letter-spacing: 1px; }
+  header.hero p { margin: 4px 0; opacity: .92; font-size: 14px; }
+  header.hero .meta { font-size: 12.5px; opacity: .8; margin-top: 10px; }
+  nav.toc {
+    position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,.94); backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--line); padding: 10px 16px;
+    display: flex; flex-wrap: wrap; gap: 6px 12px; justify-content: center; font-size: 13.5px;
+  }
+  nav.toc a { color: var(--ink-soft); text-decoration: none; padding: 3px 8px; border-radius: 6px; }
+  nav.toc a:hover { color: var(--accent); background: var(--accent-soft); }
+  main { max-width: 1080px; margin: 0 auto; padding: 26px 20px 60px; }
+  section { margin-bottom: 46px; }
+  h2 { font-size: 20px; margin: 0 0 14px; padding-left: 12px; border-left: 4px solid var(--accent); }
+  h3 { font-size: 16px; margin: 22px 0 8px; }
+  h4 { font-size: 14.5px; margin: 16px 0 6px; color: var(--badge-ink); }
+  p.lead { color: var(--ink-soft); margin-top: 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin: 14px 0; }
+  .card h3 { margin-top: 0; }
+  .card .note { color: var(--ink-soft); font-size: 13.5px; }
+  pre.wire, pre.cmd {
+    background: var(--code-bg); color: var(--code-ink); border-radius: 10px;
+    padding: 13px 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.55; margin: 10px 0;
+  }
+  table { width: 100%; border-collapse: collapse; background: var(--card); font-size: 13.5px; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  thead th { background: var(--accent-soft); color: var(--badge-ink); font-weight: 600; white-space: nowrap; }
+  tbody tr:nth-child(even) { background: #fafbfe; }
+  td code { background: #f0f2fa; color: #33398f; padding: 1.5px 6px; border-radius: 5px; font-size: 12.5px; }
+  .badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--badge-bg); color: var(--badge-ink); margin-left: 6px; white-space: nowrap; }
+  .badge.warn { background: var(--badge-warn-bg); color: var(--badge-warn-ink); }
+  .badge.green { background: #e5f6ef; color: var(--ok); }
+  .kvs { display: grid; grid-template-columns: 150px 1fr; gap: 6px 14px; font-size: 14px; }
+  .kvs dt { color: var(--ink-soft); }
+  .kvs dd { margin: 0; }
+  ul.tight li { margin: 5px 0; }
+  .footer { text-align: center; color: var(--ink-soft); font-size: 12.5px; padding: 20px; border-top: 1px solid var(--line); }
+  a { color: var(--accent); }
+  .tag-local { color: #1a9e6c; font-weight: 600; }
+  .tag-cloud { color: #4353d8; font-weight: 600; }
+  @media (max-width: 640px) { .kvs { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>ComfyBridge 前端界面规划</h1>
+  <p>管理控制台（React + AntD 5）· 全局布局 · 7 个页面逐页设计 · 组件清单 · 数据流</p>
+  <div class="meta">版本 v0.1 · 2026-09-25 · 对应规划文档 §6 的深化，页面文件结构见其 §7 目录树</div>
+</header>
+
+<nav class="toc">
+  <a href="#f1">1 规划原则</a>
+  <a href="#f2">2 全局布局与设计规范</a>
+  <a href="#f3">3 页面详细设计</a>
+  <a href="#f4">4 通用组件清单</a>
+  <a href="#f5">5 数据流与状态管理</a>
+  <a href="#f6">6 里程碑映射</a>
+</nav>
+
+<main>
+
+<!-- ============ 1 ============ -->
+<section id="f1">
+  <h2>1 规划原则</h2>
+  <div class="card">
+    <ul class="tight">
+      <li><strong>控制台只做"运维"，不做出图</strong>：生成仍用原版 ComfyUI 界面（经桥接器 :8189 代理）。本控制台是路由、同步、模型、日志的驾驶舱，两者通过顶栏"前往出图界面"互通——避免把控制台做成第二个 ComfyUI。</li>
+      <li><strong>表格优先、信息密度高</strong>：用户是开发者本人，AntD 5 密集表格 + 抽屉详情，不做营销式大卡片。</li>
+      <li><strong>一切异步操作任务化</strong>：同步/重建/上传/导入统一走 sync_jobs + SSE，前端用统一的 JobDrawer 展示进度与日志，不出现"无反馈等待"。</li>
+      <li><strong>后端标签贯穿全局</strong>：<span class="tag-local">本地</span> / <span class="tag-cloud">云端</span> 两种 Tag 色在所有页面保持一致（本地=绿、云端=蓝紫），扫一眼即知执行位置。</li>
+      <li><strong>实时但可降级</strong>：SSE 实时刷新是增强，不是依赖；断线时页面仍可手动刷新查询（列表页均直接 GET）。</li>
+      <li><strong>桌面优先</strong>：本机工具，≥1280px 设计基准；侧栏可折叠以兼容小屏，不做移动端适配。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 2 ============ -->
+<section id="f2">
+  <h2>2 全局布局与设计规范</h2>
+  <pre class="wire">┌────────────┬──────────────────────────────────────────────────────────────┐
+│ ComfyBridg │ ● 本地 ComfyUI v0.37.2 · 12ms   ● Modal Runner 空闲(0 容器)   │
+│            │                          [前往出图界面]  [预算 $12.4/50 ▓░░] │
+│  (侧栏)    ├──────────────────────────────────────────────────────────────┤
+│ ▣ 仪表盘   │                                                              │
+│ ⚙ 路由规则 │                                                              │
+│ ⇅ 节点管理 │                        内容区                                 │
+│ ≋ 工作流   │                                                              │
+│ ▤ 模型卷   │                                                              │
+│ ☰ 日志     │                                                              │
+│ ⚏ 设置     │                                                              │
+│            │                                                              │
+│ v0.1.0 ●SSE│                                                              │
+└────────────┴──────────────────────────────────────────────────────────────┘</pre>
+  <div class="card">
+    <h3>2.1 侧栏（可折叠）</h3>
+    <ul class="tight">
+      <li>导航 7 项与路由一一对应；当前项高亮；每项带未处理数徽标（如：节点管理=待同步节点数、工作流=冲突数）。</li>
+      <li>底部固定：版本号 + SSE 连接状态点（绿=已连接 / 灰=断线，悬停显示重连倒计时）。</li>
+    </ul>
+    <h3>2.2 顶栏</h3>
+    <ul class="tight">
+      <li><strong>后端状态胶囊</strong>（所有页面可见）：● 本地（版本 + 延迟）/ ● Modal Runner（状态：空闲/运行 N/冷启动中/离线）。数据源 <code>GET /api/health</code> + SSE <code>backend.status</code>，10s 轮询兜底。</li>
+      <li><strong>前往出图界面</strong>：新开标签页打开 <code>/</code>（即被代理的 ComfyUI 原版界面）。</li>
+      <li><strong>预算徽标</strong>：本月已用/上限，&gt;80% 变橙色、超限变红色。</li>
+    </ul>
+    <h3>2.3 设计规范</h3>
+    <table>
+      <thead><tr><th style="width:24%">项</th><th>约定</th></tr></thead>
+      <tbody>
+        <tr><td>主题</td><td>AntD 5 ConfigProvider：<code>zh_CN</code>、主色 <code>#4f5be8</code>、紧凑密度（<code>size="small"</code> 表格）；暗色主题列为 P2（ConfigProvider 切换即可）</td></tr>
+        <tr><td>语义色</td><td>本地=green / 云端=geekblue / 冲突=orange / 错误=red / 同步完成=green；成功标准："任何页面截一张图，不用看文字就能分清本地与云端"</td></tr>
+        <tr><td>时间显示</td><td>相对时间（3 分钟前）+ 悬停绝对时间；耗时用 <code>1.2s / 1m42s</code> 格式</td></tr>
+        <tr><td>金额</td><td>统一 <code>$0.0184</code> 四位小数；聚合页两位小数</td></tr>
+        <tr><td>空状态</td><td>每页必有 Empty 引导：说明 + 下一步动作按钮（如节点页"未发现差异"+ 重新扫描）</td></tr>
+        <tr><td>破坏性操作</td><td>删除模型 / 回滚镜像 / 停止应用 → Popconfirm 二次确认，危险按钮红色</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 3 ============ -->
+<section id="f3">
+  <h2>3 页面详细设计</h2>
+
+  <div class="card">
+    <h3>3.1 仪表盘 <span class="badge green">M1</span></h3>
+    <pre class="wire">┌ 今日生成 128 ────┬ 今日成本 $0.86 ──┬ 本月 $12.40 / $50 ─┬ 云端容器 ────────┐
+│ 本地 96·云端 32  │ 较昨日 +12%      │ ▓▓▓░░░░░ 25%      │ 0 运行 [预热]   │
+└─────────────────┴─────────────────┴───────────────────┴─────────────────┘
+┌ 成本趋势（30 天，ECharts line，按后端双色堆叠）┐ ┌ 后端健康 ────────────────┐
+│                                            │ │ 本地  ● v0.37.2  12ms    │
+│                                            │ │ Modal ● L40S 空闲        │
+│                                            │ │ 上次冷启动 42s · 今日 3 次│
+└────────────────────────────────────────────┘ └─────────────────────────┘
+┌ 运行中任务（SSE 实时，空态折叠为一行）──────────────────────────────────┐
+│ prompt_id 8f3…  cloud:flux出图  云端  ▓▓▓▓░░ 执行中 42s  [中断]      │
+└────────────────────────────────────────────────────────────────────────┘
+┌ 最近请求（10 条，点击 → 跳日志详情）────────────────────────────────────┐
+└────────────────────────────────────────────────────────────────────────┘</pre>
+    <ul class="tight">
+      <li>预热按钮：Popconfirm 显示预估费用（如"L40S 空转约 $1.95/小时，保活期间持续计费"），确认后调 <code>POST /api/modal/warmup</code>。</li>
+      <li>运行中任务行内可 <strong>中断</strong>（转发 <code>/interrupt</code>），云端任务同样支持。</li>
+      <li>数据依赖：<code>GET /api/requests?limit=10</code>、<code>GET /api/cost/summary</code>、<code>GET /api/health</code>、SSE。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>3.2 路由规则 <span class="badge green">M1</span></h3>
+    <pre class="wire">┌ 规则列表（上下拖拽=优先级）──────────────┐ ┌ 干跑预览器 ────────────────────┐
+│ 1  manual         手动选择      → 按所选 │ │ [选择工作流 ▼] [粘贴JSON] [干跑]│
+│ 2  tag            cloud:*       → 云端 ✓│ │ ① manual      跳过：未指定     │
+│ 3  node_presence  本地缺失节点  → 云端 ✓│ │ ② tag         命中 cloud:*     │
+│ 4  model_presence 卷内缺失模型  → 本地  │ │ ③ node_presence 跳过：规则未及  │
+│ 5  default        兜底          → 本地  │ │ ⇒ 最终决策：云端（tag 规则命中）│
+│                     [+ 新增规则]        │ │ [应用为规则建议]（P2）          │
+└─────────────────────────────────────────┘ └────────────────────────────────┘</pre>
+    <ul class="tight">
+      <li>规则行：序号、类型 badge、条件摘要（自动生成人话，如"包含本地缺失节点"）、目标后端 Tag、启用 Switch、编辑/删除。</li>
+      <li>编辑抽屉 = <strong>条件构建器</strong>：按类型切表单——tag（前缀输入）、node_presence（从差异缓存多选节点包/class_type）、model_presence（多选模型分类+文件）、size（分辨率阈值/视频节点开关）。</li>
+      <li>干跑结果逐条列出命中/跳过与原因（来自 <code>POST /api/routing/preview</code> 的 rule_trace）；支持从日志页"以该请求重新干跑"进入。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>3.3 节点管理 <span class="badge green">M2</span></h3>
+    <table>
+      <thead><tr><th style="width:24%">区块</th><th>设计</th></tr></thead>
+      <tbody>
+        <tr><td>版本横幅</td><td>顶部常驻：本地 <code>v0.37.2</code> / 云端 <code>vX</code>；不一致 → 黄色 Alert + [对齐云端版本]；检测到 Desktop 自动更新过本地 → 提示"本地已更新，建议同步远端"</td></tr>
+        <tr><td>差异矩阵</td><td>主表格：节点包名、版本/commit（短哈希）、<span class="tag-local">本地</span>状态、<span class="tag-cloud">云端</span>状态（✓ / ✗ / 构建 中）、依赖数、操作。筛选：仅本地有 / 仅云端有 / 全部；搜索框；视图切换：按节点包 ⇄ 按 class_type</td></tr>
+        <tr><td>批量同步</td><td>勾选多行 → [安装到云端] → 模式选择弹窗：<strong>镜像固化</strong>（默认，说明"需重建镜像，约几分钟"）/ <strong>卷试装</strong>（说明"免重建，冷启动变慢"）</td></tr>
+        <tr><td>JobDrawer</td><td>同步任务抽屉：步骤条（生成锁文件→构建脚本→镜像重建→健康检查）+ 实时日志滚动 + 失败时红色回滚提示与 [查看上一版]</td></tr>
+      </tbody>
+    </table>
+    <p class="note">数据依赖：<code>GET /api/nodes/diff</code>、<code>POST /api/nodes/sync</code>、<code>GET /api/jobs/{id}</code>（SSE 推送进度）。</p>
+  </div>
+
+  <div class="card">
+    <h3>3.4 工作流 <span class="badge green">M2</span></h3>
+    <table>
+      <thead><tr><th style="width:24%">区块</th><th>设计</th></tr></thead>
+      <tbody>
+        <tr><td>同步状态总表</td><td>名称、<span class="tag-local">本地</span>（mtime/hash）、<span class="tag-cloud">云端</span>（mtime/hash）、状态 badge：<code>已同步</code>绿 / <code>仅本地</code> / <code>仅云端</code> / <code>有差异</code>橙 / <code>冲突</code>红、最近运行（后端 + 时间 + 次数）。行操作：→云 / ←本地 同步、对比、冲突处理</td></tr>
+        <tr><td>冲突处理弹窗</td><td>左右双列：mtime / 大小 / hash / 内容摘要；三个动作：保留本地版本 / 保留云端版本 / 双副本保留（说明会生成 <code>name.conflict-时间戳.json</code>）。不提供自动合并（工作流 JSON 结构合并风险高）</td></tr>
+        <tr><td>运行统计 Tab</td><td>按工作流聚合：运行次数、平均/最大耗时、估算成本、常用后端；点击钻取到日志页预过滤</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>3.5 模型卷 <span class="badge warn">M3</span></h3>
+    <table>
+      <thead><tr><th style="width:24%">区块</th><th>设计</th></tr></thead>
+      <tbody>
+        <tr><td>顶部统计条</td><td>卷容量进度条（已用/总量）、分类数、本月新增/删除数</td></tr>
+        <tr><td>分类 Tab</td><td>checkpoints / loras / vae / controlnet / …（27 类，横向滚动 Tabs）：文件名、大小、mtime、<strong>引用次数</strong>（近 30 天日志统计，悬停列出工作流）、本地对照（✓ 本地也有 / 仅云端）、操作：删除</td></tr>
+        <tr><td>上传面板</td><td>拖拽区 + 队列列表：分块进度、断点续传标识（已传 x/y 块）、MD5 校验状态、失败重试；上传中可最小化为角标继续浏览</td></tr>
+        <tr><td>HF 导入弹窗</td><td>repo_id、文件通配（留空=整仓）、目标分类下拉、可选 HF Token → 提交为任务（云端直下），JobDrawer 跟踪</td></tr>
+        <tr><td>删除保护</td><td>删除 → 引用检查结果弹窗（"近 30 天被 3 个工作流使用"）→ 确认后软删除 30 天，页面顶部出现可撤销条</td></tr>
+      </tbody>
+    </table>
+    <p class="note">数据依赖：<code>GET /api/models?side=</code>、<code>POST /api/models/upload</code>（分块）、<code>POST /api/models/hf-import</code>、<code>DELETE /api/models/{id}</code>。</p>
+  </div>
+
+  <div class="card">
+    <h3>3.6 日志 <span class="badge green">M1</span>（核心页面）</h3>
+    <table>
+      <thead><tr><th style="width:24%">区块</th><th>设计</th></tr></thead>
+      <tbody>
+        <tr><td>请求列表</td><td>时间、工作流、后端 Tag、状态（排队/执行中/完成/失败/中断，执行中行呼吸灯）、总耗时、成本、决策摘要；筛选栏：后端 / 状态 / 时间范围 / 工作流名；右上 [实时] 开关（SSE，默认开）</td></tr>
+        <tr><td>详情抽屉（60% 宽）</td><td>① 头部：状态 + prompt_id（可复制）+ 决策链路 steps（manual跳过→tag命中→云端）② 时间线甘特：submit/upload/queue/load/exec/fetch 六阶段横条，悬停显毫秒 ③ 节点耗时表（executed 事件聚合，倒序）④ 输出画廊（网格，点击 Lightbox 放大/下载）⑤ 成本卡：GPU 单价 × 容器秒数 ⑥ 错误堆栈（折叠，红）⑦ 图快照：JSON 查看器（P2 引入工作流图渲染）</td></tr>
+        <tr><td>快捷动作</td><td>[重新提交]（按原图再跑一次）、[以此干跑路由]、[导出 JSON]</td></tr>
+      </tbody>
+    </table>
+    <pre class="wire">┌ 请求详情 ────────────────────────────────────────────┐
+│ ✅ cloud:flux人像   云端   prompt_id 8f3c…   [重新提交]│
+│ 决策：manual 跳过 → tag 命中 "cloud:*" → 云端         │
+│ ── 时间线 ─────────────────────────────────────────  │
+│ submit 12ms ┤ upload 1.2s ┤ queue 3.1s ┤ load 8.4s    │
+│ ┤ exec 21.3s ████ ┤ fetch 0.8s                       │
+│ 节点耗时：KSampler 18.2s / VAEDecode 1.1s / CLIP 0.9s │
+│ 输出：[img] [img] [img]      成本：L40S×34s ≈ $0.0184 │
+└──────────────────────────────────────────────────────┘</pre>
+  </div>
+
+  <div class="card">
+    <h3>3.7 设置 <span class="badge warn">M2/M4</span></h3>
+    <table>
+      <thead><tr><th style="width:24%">区块</th><th>设计</th></tr></thead>
+      <tbody>
+        <tr><td>分区表单</td><td>四个 Tabs：本地（comfy_url、output_dir、models_dirs <strong>映射表</strong>——可增删行）、桥接（listen、default_backend、confirm_remote）、Modal（workspace、gpu 下拉、scaledown_window 滑杆含费用提示、min_containers、卷名）、预算（monthly_usd、on_exceed、max_concurrent_remote、per_run_timeout）。保存即 <code>PUT /api/config</code>，改动需重载的项给出提示</td></tr>
+        <tr><td>设置同步抽屉</td><td>两端 settings 键级 diff 表：键名、本地值、云端值、方向勾选（→推 / ←拉）；[预览 diff] → [执行] 走 JobDrawer</td></tr>
+        <tr><td>paths 预览</td><td>extra_model_paths.yaml 生成结果代码块 + [复制]（内容来自 <code>paths_config</code> 服务）</td></tr>
+        <tr><td>诊断</td><td>版本、兼容性矩阵最近结果、日志导出（打包 data/ 下载）</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section id="f4">
+  <h2>4 通用组件清单（frontend/src/components）</h2>
+  <p class="lead">本节是"自研组件"清单；第三方库（AntD/图表/上传等）的选择、备选与理由见 <a href="ComfyBridge前端组件选型.html">ComfyBridge 前端组件选型</a>。</p>
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:24%">组件</th><th style="width:34%">职责</th><th>使用页面</th></tr></thead>
+      <tbody>
+        <tr><td><code>layout/Shell</code></td><td>侧栏 + 顶栏 + 内容区骨架、SSE 连接管理</td><td>全局</td></tr>
+        <tr><td><code>layout/StatusPill</code></td><td>两端健康胶囊（版本/延迟/容器数）</td><td>顶栏</td></tr>
+        <tr><td><code>common/BackendTag</code></td><td><span class="tag-local">本地</span>/<span class="tag-cloud">云端</span> 语义 Tag（全局唯一出处）</td><td>几乎所有页面</td></tr>
+        <tr><td><code>common/JobDrawer</code></td><td>任务抽屉：步骤条 + 实时日志 + 取消/重试</td><td>节点/工作流/模型/设置</td></tr>
+        <tr><td><code>common/TimelineGantt</code></td><td>六阶段耗时甘特（纯 CSS 条形，无需图表库）</td><td>日志、仪表盘</td></tr>
+        <tr><td><code>common/CostChart</code></td><td>ECharts 成本趋势（按后端双色堆叠）</td><td>仪表盘</td></tr>
+        <tr><td><code>common/GraphViewer</code></td><td>图快照 JSON 查看器（P2：工作流图渲染）</td><td>日志</td></tr>
+        <tr><td><code>common/OutputGallery</code></td><td>输出网格 + Lightbox</td><td>日志、仪表盘</td></tr>
+        <tr><td><code>common/UploadQueue</code></td><td>分块上传进度队列（续传标识、校验态）</td><td>模型卷</td></tr>
+        <tr><td><code>common/DiffMatrix</code></td><td>节点差异表（本地/云端状态单元格渲染）</td><td>节点管理</td></tr>
+        <tr><td><code>common/SettingsDiffTable</code></td><td>键级 diff + 方向勾选</td><td>设置</td></tr>
+        <tr><td><code>common/EmptyGuide</code></td><td>空状态引导（说明 + 动作按钮）</td><td>全部</td></tr>
+        <tr><td><code>common/ConfirmDanger</code></td><td>破坏性操作确认（引用检查结果内嵌）</td><td>模型卷/节点</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 5 ============ -->
+<section id="f5">
+  <h2>5 数据流与状态管理</h2>
+  <div class="card">
+    <h3>5.1 分层</h3>
+    <dl class="kvs">
+      <dt>服务端状态</dt><dd>TanStack Query：全部 GET（列表/详情/健康/成本），SSE 事件到达时按类型 <code>invalidateQueries</code>；写操作用 mutation + 成功后失效对应查询</dd>
+      <dt>实时状态</dt><dd>zustand：SSE 连接状态、运行中任务表、后端健康快照、上传队列——跨页面共享、低延迟更新</dd>
+      <dt>事件协议</dt><dd>SSE 事件四类：<code>request.updated</code>（请求状态/进度）、<code>job.updated</code>（同步任务）、<code>cost.updated</code>、<code>backend.status</code>；载荷只带 ID + 摘要，详情由前端按需 GET，避免重推送大对象</dd>
+      <dt>类型生成</dt><dd>P2：从 FastAPI <code>/openapi.json</code> 用 openapi-typescript 生成 <code>src/types/api.d.ts</code>，替代手写 DTO（M1 先手写、与后端 schemas 同名对齐）</dd>
+    </dl>
+    <h3>5.2 关键交互约定</h3>
+    <ul class="tight">
+      <li>列表页一律"先 GET 渲染，SSE 增量刷新"；SSE 断开显示灰点，不阻塞手动刷新。</li>
+      <li>长任务（镜像重建/HF 导入/大文件上传）提交后立即返回 job_id → 自动打开 JobDrawer → 用户可离开页面，顶栏出现全局任务角标。</li>
+      <li>所有"上云"类动作遵循预算护栏状态：<code>on_exceed=fallback_local</code> 生效时，云端相关按钮置灰并提示原因。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 6 ============ -->
+<section id="f6">
+  <h2>6 里程碑映射（与计划书对齐）</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:16%">里程碑</th><th style="width:44%">前端交付</th><th>验收</th></tr></thead>
+      <tbody>
+        <tr><td>M1</td><td>Shell 布局 + 路由骨架 + 仪表盘（简版：统计卡/健康/最近请求）+ 日志页（列表 + 详情抽屉）+ 路由规则页（列表 + 干跑）</td><td>纯控制台可完成路由决策查看与请求追溯</td></tr>
+        <tr><td>M2</td><td>节点管理（差异矩阵 + JobDrawer）+ 工作流（同步/冲突）+ 设置（配置表单 + settings 同步抽屉）</td><td>同步全流程不出控制台</td></tr>
+        <tr><td>M3</td><td>模型卷（浏览/上传/HF 导入/删除保护）+ 路由页 model_presence 条件构建器</td><td>模型供给闭环</td></tr>
+        <tr><td>M4</td><td>成本趋势图完善、预算状态联动置灰、空状态与错误态补全、构建嵌入验证（build.ps1 后无 /api 代理直开）</td><td>验收演示全走控制台</td></tr>
+      </tbody>
+    </table>
+    <p class="note">本文件是 §3 各页面的实现契约；页面开发时先对照本文件与后端 API 设计（规划文档 §5），字段不一致以 API 为准并回改本文件。</p>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  ComfyBridge 前端界面规划 v0.1 · 2026-09-25 · 随里程碑滚动修订
+</footer>
+
+</body>
+</html>

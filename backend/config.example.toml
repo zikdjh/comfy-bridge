@@ -1,0 +1,42 @@
+# ComfyBridge 配置样例
+# 复制到 ~/.comfybridge/config.toml 后按需修改；缺省项使用内置默认值。
+# 字段以 backend/app/core/config.py（LocalConfig/BridgeConfig/ModalConfig）为准，
+# 未列出的键会被忽略（白名单：local/bridge/modal 三节）。
+
+[local]
+comfy_url = "http://127.0.0.1:8188"
+# 本地 ComfyUI 仓库根（含 main.py/nodes.py/comfy/ 等；设置页可扫描/校验后填入）
+comfy_root = "D:/ComfyUI/ComfyUI"
+# 远端（Modal）执行结果回传落盘处；媒体库也读取该目录
+output_dir = "D:/ComfyUI/output"
+# 本地模型目录映射（分类 → 绝对路径）；未配置的分类回退 comfy_root/models/<分类>
+models_dirs = { checkpoints = "D:/ComfyUI/models/checkpoints", loras = "D:/ComfyUI/models/loras" }
+# 本地 ComfyUI 追加启动参数（设置 → 启动命令 写入；经「重启」按钮由桥接器重启本地进程生效）
+extra_launch_args = []
+# 桥接器接管启动的基础命令（argv）；留空 = 保存时自动从当前实例探测固化
+launch_command = []
+
+[bridge]
+listen = "127.0.0.1:8189"          # 桥接器监听地址（仅本机）
+default_backend = "local"          # 路由兜底后端：local | modal
+video_backend = "modal"            # 视频类输出节点请求的后端：local | modal
+large_side_pixels = 0              # 大分辨率上云阈值（图最大边 px；0 = 关闭）
+on_modal_unavailable = "fallback_local"  # 云端不可用时：fallback_local（回落本地）| reject（拒绝请求）
+
+[modal]
+# Modal 平台认证（modal token new 生成，或 modal.com 控制台；设置页可填写，secret 脱敏回显）。
+# 填写后桥接器以 MODAL_TOKEN_ID/MODAL_TOKEN_SECRET 环境变量注入 modal CLI；未填写时
+# CLI 回落读取 ~/.modal.toml。
+token_id = ""        # ak-...
+token_secret = ""    # as-...（仅落盘本文件，API 不回传明文）
+environment = ""     # Modal 环境，空 = 默认环境
+volume = "comfyui-data"  # 模型卷（modal-volume 同步与 Runner 共用；改后需同步重建 runner 部署）
+
+# —— Modal Runner 执行通道 ——
+runner_enabled = true
+app_name = "comfyui-l40s"  # modal-runner/runner.py 部署的应用名
+web_url = ""               # modal deploy 输出的固定端点，如 https://<workspace>--comfyui-l40s-comfyui.modal.run
+task_timeout = 3600        # 单个云端任务最长等待秒数（含冷启动约 2-4 分钟）
+# 云端 ComfyUI 追加启动参数：保存时经 modal volume put 写入数据卷
+# /config/launch_args.json，容器冷启动时由 runner.py 读取追加（list[str]）
+extra_launch_args = []

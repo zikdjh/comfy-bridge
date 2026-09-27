@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 运行数据与数据库
+*.db
+*.db-wal
+*.db-shm
+data/
+
+# 前端
+node_modules/
+dist/
+
+# 构建嵌入产物
+backend/app/static/
+
+# 环境与密钥
+.env
+*.local.toml
+
+# 运行杂物
+tmp/
