@@ -20,7 +20,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 import shutil
 import tempfile
@@ -396,8 +395,7 @@ async def create_download(body: DownloadBody) -> dict:
 
 async def _volume_exists(name: str) -> bool:
     out = await volume_cli.run("volume", "list", "--json")
-    start = out.find("[")
-    rows = json.loads(out[start:]) if start != -1 else []
+    rows = volume_cli.cli_json_list(out)
     return any(r.get("name") == name for r in rows)
 
 

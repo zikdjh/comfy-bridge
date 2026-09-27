@@ -123,8 +123,3 @@ export const LAUNCH_FLAGS: LaunchFlagDef[] = [
   { name: "--disable-metadata", valueMode: "none", category: "节点与元数据", targets: ["local", "modal"], desc: "输出文件不写入 prompt 元数据。" },
   { name: "--enable-manager", valueMode: "none", category: "节点与元数据", targets: ["local", "modal"], desc: "启用 ComfyUI-Manager 特性。" },
 ];
-
-/** 把参数名按官方 help 拆成易读形式：--fp8_e4m3fn-unet → fp8 e4m3fn unet */
-export function flagLabel(name: string): string {
-  return name.slice(2).replace(/[_-]/g, " ");
-}

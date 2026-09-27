@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import time
 
@@ -45,9 +44,7 @@ async def refresh_state() -> str | None:
             return _state["state"]
         try:
             out = await modal_cli.run("app", "list", "--json")
-            text = out.strip()
-            start = text.find("[")
-            apps = json.loads(text[start:]) if start != -1 else []
+            apps = modal_cli.cli_json_list(out)
             state = next((a.get("state") for a in apps if a.get("description") == app_name), None)
         except Exception as exc:  # noqa: BLE001 —— CLI 未装/凭证缺失/网络失败都视为未知
             logger.warning("modal app list 探测失败: %s", exc)

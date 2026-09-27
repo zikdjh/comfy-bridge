@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 
 from ..modal_volume import client as modal_cli
@@ -69,9 +68,7 @@ async def _compute() -> None:
     async with _LOCK:
         try:
             out = await modal_cli.run("volume", "list", "--json")
-            text = out.strip()
-            start = text.find("[")
-            rows = json.loads(text[start:]) if start != -1 else []
+            rows = modal_cli.cli_json_list(out)
             names = [str(r.get("name")) for r in rows if r.get("name")]
             results = await asyncio.gather(*(_volume_usage(n, r) for n, r in zip(names, rows)))
             volumes = sorted(results, key=lambda v: v["total_bytes"], reverse=True)

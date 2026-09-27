@@ -112,6 +112,15 @@ async def run(*args: str, timeout: float = 600.0) -> str:
     return out.decode("utf-8", errors="replace")
 
 
+def cli_json_list(text: str) -> list:
+    """从 CLI stdout 提取 JSON 数组：输出可能混有 banner/日志行，定位首个 '[' 截取；无则空列表。
+
+    JSON 本身不合法时照常抛 JSONDecodeError，由调用方的既有异常路径处理。
+    """
+    start = text.find("[")
+    return json.loads(text[start:]) if start != -1 else []
+
+
 async def list_dir(remote_path: str, volume: str | None = None) -> list[dict]:
     """列一层目录；filename 归一化为相对 remote_path 的名称。
 
@@ -123,11 +132,7 @@ async def list_dir(remote_path: str, volume: str | None = None) -> list[dict]:
         args.append(remote_path)
         prefix = remote_path.rstrip("/") + "/"
     out = await run(*args, "--json")
-    text = out.strip()
-    start = text.find("[")
-    if start == -1:
-        return []
-    items = json.loads(text[start:])
+    items = cli_json_list(out)
     entries: list[dict] = []
     for item in items:
         full = str(item.get("filename", ""))
