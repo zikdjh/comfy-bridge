@@ -6,49 +6,7 @@ import { message } from "antd";
 import { useConfig, useSaveConfig, validateComfyRoot } from "../../api/config";
 import { LaunchArgsPanel } from "./LaunchArgsPanel";
 import { ComfyScanModal } from "./ComfyScanModal";
-
-const yamlPreview = `# 由桥接器自动生成（路径映射表驱动）
-comfyui:
-  base_path: /data
-  checkpoints: models/checkpoints/
-  loras: models/loras/
-  vae: models/vae/
-  controlnet: models/controlnet/`;
-
-interface DiffRow {
-  key: string;
-  setting: string;
-  local: string;
-  cloud: string;
-}
-
-const diffRows: DiffRow[] = [
-  { key: "1", setting: "Comfy.UseNewMenu", local: "Disabled", cloud: "Top" },
-  { key: "2", setting: "Comfy.Workflow.Persist", local: "true", cloud: "true" },
-  { key: "3", setting: "Comfy.TutorialCompleted", local: "true", cloud: "false" },
-];
-
-const diffColumns: ColumnsType<DiffRow> = [
-  { title: "设置键", dataIndex: "setting" },
-  { title: "本地值", dataIndex: "local" },
-  { title: "云端值", dataIndex: "cloud" },
-  {
-    title: "方向",
-    width: 130,
-    render: () => (
-      <Select
-        size="small"
-        style={{ width: 110 }}
-        defaultValue="push"
-        options={[
-          { value: "push", label: "→ 推送到云端" },
-          { value: "pull", label: "← 从云端拉取" },
-          { value: "skip", label: "跳过" },
-        ]}
-      />
-    ),
-  },
-];
+import { SettingsSyncTab } from "./SettingsSyncTab";
 
 export default function SettingsPage() {
   const { data: config, isLoading } = useConfig();
@@ -483,29 +441,7 @@ export default function SettingsPage() {
           {
             key: "sync",
             label: "设置同步",
-            children: (
-              <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                <Card size="small" title="两端设置差异（键级）">
-                  <Table<DiffRow> columns={diffColumns} dataSource={diffRows} pagination={false} size="small" />
-                  <Space style={{ marginTop: 10 }}>
-                    <Button size="small" type="primary" onClick={() => message.info("静态占位：M2 接入设置推送")}>
-                      执行同步
-                    </Button>
-                    <span style={{ color: "#8a90a2", fontSize: 12 }}>设置同步尚未实现（规划中）；当前配置以 ~/.comfybridge/config.toml 为准</span>
-                  </Space>
-                </Card>
-                <Card size="small" title="extra_model_paths.yaml 结构示意（云端数据卷模板）">
-                  <Typography.Paragraph copyable={{ text: yamlPreview }}>
-                    <pre style={{ background: "#f6f7fb", padding: 12, borderRadius: 8, fontSize: 12, margin: 0 }}>
-                      {yamlPreview}
-                    </pre>
-                  </Typography.Paragraph>
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    实际文件位于数据卷 /config/extra_model_paths.yaml，由 runner 首次启动生成，可在「数据卷」页查看编辑。
-                  </Typography.Text>
-                </Card>
-              </Space>
-            ),
+            children: <SettingsSyncTab />,
           },
         ]}
       />
