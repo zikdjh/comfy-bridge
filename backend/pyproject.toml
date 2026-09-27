@@ -8,13 +8,8 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "httpx>=0.27",
     "websockets>=12",
-    "sqlalchemy>=2.0",
-    "alembic>=1.13",
     "pydantic>=2.7",
-    "pydantic-settings>=2.3",
-    "pyyaml>=6",
-    "apscheduler>=3.10",
-    "python-multipart>=0.0.9",
+    # modal 仅作 CLI 子进程调用（volume/app/container），不直接 import 其 SDK
     "modal>=0.70",
 ]
 
