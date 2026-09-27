@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   Alert,
   Button,
@@ -135,12 +135,17 @@ export default function ModelsPage() {
   const onlyLocal = useMemo(() => rows.filter((r) => r.status === "only_local").map((r) => r.name), [rows]);
   const onlyCloud = useMemo(() => rows.filter((r) => r.status === "only_cloud").map((r) => r.name), [rows]);
 
+  const syncingRef = useRef(false);
   const sync = async (direction: "push" | "pull", names: string[]) => {
+    if (syncingRef.current) return; // 防双击/连点：上一笔创建请求未返回前忽略再次触发
+    syncingRef.current = true;
     try {
       await startSync(direction, category, names);
       message.success(`已创建同步作业（${names.length} 个文件）`);
     } catch (err) {
       message.error(`创建作业失败：${err instanceof Error ? err.message : err}`);
+    } finally {
+      syncingRef.current = false;
     }
   };
 
