@@ -151,6 +151,8 @@
         <tr><td>存储</td><td>SQLite（WAL）单文件库</td><td>本地单机场景，零运维；日志大对象（工作流图 JSON）落文件目录、库内只存引用</td></tr>
         <tr><td>Modal 调用方式</td><td>桥接器进程内 <code>import modal</code> 使用 Python SDK（部署 Runner、操作 Volume）</td><td>比 shell 调 CLI 可控、可拿到结构化结果；CLI 仅作兜底</td></tr>
         <tr><td>版本对齐</td><td>同步节点时校验并<strong>锁定远端 ComfyUI 版本 = 本地版本</strong>，前端版本一致</td><td>避免 object_info / 前端协议不匹配导致渲染或提交失败</td></tr>
+        <tr><td>Modal 调用方式（实现修订 2026-09-27）</td><td>卷/文件/应用探测统一走 <strong>modal CLI 子进程</strong>（app/modal_volume/client：注入凭证 env、超时兜底、--json 结构化解析）；SDK 仅在 modal-runner 侧使用，桥接器进程不 import modal</td><td>凭证不进桥接器进程与代码库、CLI --json 输出已满足结构化需要；备选：进程内 SDK（原 ADR，暂未采用，Runner 部署需结构化结果时再引入）</td></tr>
+        <tr><td>设置键级推拉（M2-5 落地）</td><td>GET/POST <code>/api/v1/settings-sync(/apply)</code>：按键 directions 单请求批量执行；本地 comfy.settings.json 原子替换写入 + <code>modal volume get/put</code> 直读写数据卷，<strong>不要求云端容器在运行</strong>；凭证类键（token/key/secret/password）回显掩码、推拉用真实值</td><td>原设计 diff + push|pull 双接口；单端点批量避免两次调用间两端漂移，逐键方向已含 push/pull 语义。备选：按原设计拆双接口</td></tr>
       </tbody>
     </table>
   </div>
@@ -376,7 +378,7 @@ nodes:
 
 <!-- ============ 5 API ============ -->
 <section id="s5">
-  <h2>5 Bridge API 设计（管理面，挂在 :8189/api/ 下）</h2>
+  <h2>5 Bridge API 设计（管理面，挂在 :8189/api/v1/ 下；下表为设计稿路径，已实现端点以实际 /api/v1/ 路径为准）</h2>
   <table>
     <thead><tr><th style="width:38%">端点</th><th>说明</th></tr></thead>
     <tbody>
@@ -386,7 +388,7 @@ nodes:
       <tr><td><code>GET /api/nodes/diff</code> · <code>GET /api/nodes/list?side=</code></td><td>节点能力差异 / 两侧节点清单</td></tr>
       <tr><td><code>POST /api/nodes/sync</code></td><td><code>{nodes[], mode: "image"|"volume", action: "install"|"remove"}</code> → sync_job</td></tr>
       <tr><td><code>GET /api/workflows</code> · <code>POST /api/workflows/sync</code></td><td>工作流清单与同步状态；按 id/方向发起双向同步</td></tr>
-      <tr><td><code>GET /api/settings/diff</code> · <code>POST /api/settings/push|pull</code></td><td>设置差异预览与单向推送/拉取</td></tr>
+      <tr><td><code>GET /api/v1/settings-sync</code> · <code>POST /api/v1/settings-sync/apply</code> <strong>（已实现 2026-09-27）</strong></td><td>两端 comfy.settings.json 键级 diff（凭证键掩码）与按方向（push/pull/逐键）批量执行；本地原子写 + volume get/put 落卷</td></tr>
       <tr><td><code>GET /api/models?side=&category=</code></td><td>模型清单（本地 / Modal 卷）</td></tr>
       <tr><td><code>POST /api/models/upload</code></td><td>multipart 流式上传（支持分块续传头）</td></tr>
       <tr><td><code>POST /api/models/hf-import</code> · <code>DELETE /api/models/{id}</code></td><td>HF 直下 / 软删除</td></tr>
@@ -409,7 +411,7 @@ nodes:
     <dl class="kvs">
       <dt>构建</dt><dd>Vite + React 18 + TypeScript</dd>
       <dt>UI 组件</dt><dd>Ant Design 5（表格/表单密度高，适合控制台）</dd>
-      <dt>数据层</dt><dd>TanStack Query（服务端状态）+ Zustand（本地状态）+ SSE 原生 EventSource</dd>
+      <dt>数据层</dt><dd>TanStack Query（服务端状态）+ SSE 原生 EventSource（Zustand 于 2026-09-27 依赖清理中移除：全程未用）</dd>
       <dt>路由</dt><dd>React Router（/dashboard /routing /nodes /workflows /models /logs /settings）</dd>
       <dt>图表</dt><dd>ECharts（成本曲线、耗时分布、节点差异矩阵）</dd>
     </dl>
@@ -508,7 +510,7 @@ nodes:
 │  └─ src/
 │     ├─ main.tsx  App.tsx  router.tsx
 │     ├─ api/                        # fetch client + TanStack Query hooks + SSE 订阅
-│     ├─ stores/                     # zustand（实时事件流、UI 状态）
+│     ├─ stores/                     # （未采用：zustand 已移除，服务端状态全走 TanStack Query）
 │     ├─ types/                      # API DTO 类型（与后端 schemas 对齐）
 │     ├─ hooks/
 │     ├─ components/
