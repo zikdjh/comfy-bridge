@@ -286,8 +286,14 @@ function DiffMatrix() {
       title: "commit",
       dataIndex: "commit",
       width: 110,
-      render: (v: string | null, r) =>
-        r.kind === "single" ? "—" : v ?? "非 git 目录",
+      render: (v: string | null, r) => {
+        if (r.kind === "single") return "—";
+        if (!r.local) return r.cloud_commit ?? "云端未知";
+        if (!r.cloud) return v ?? "非 git 目录";
+        return v === r.cloud_commit
+          ? (v ?? "非 git 目录")
+          : `${v ?? "本地未知"} → ${r.cloud_commit ?? "云端未知"}`;
+      },
     },
     {
       title: "依赖声明",
@@ -303,6 +309,17 @@ function DiffMatrix() {
       render: (v: boolean, r) => statusCell(v, v ? (r.cloud_size ?? undefined) : undefined),
     },
     {
+      title: "一致性",
+      dataIndex: "state",
+      width: 100,
+      render: (v: NodeDiffRow["state"]) =>
+        v === "same" ? <Tag color="green">一致</Tag>
+          : v === "changed" ? <Tag color="orange">版本不同</Tag>
+            : v === "missing_cloud" ? <Tag color="blue">待同步</Tag>
+              : v === "missing_local" ? <Tag color="purple">云端独有</Tag>
+                : "—",
+    },
+    {
       title: "操作",
       width: 120,
       render: (_v, r) => {
@@ -312,8 +329,7 @@ function DiffMatrix() {
               size="small"
               type="link"
               icon={<CloudUploadOutlined />}
-              disabled={!r.enabled || operating}
-              title={r.enabled ? undefined : "已停用的节点包不会同步"}
+              disabled={operating}
               onClick={() => install([r.name])}
             >
               安装到云端

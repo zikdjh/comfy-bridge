@@ -62,7 +62,15 @@ powershell -File scripts/build.ps1   # 构建前端并拷入 backend/app/static
 
 M0 技术验证收尾 → M1 MVP 桥接 → M2 同步引擎 → M3 模型卷管理 → M4 打磨发布。
 
-当前进度（2026-09-27）：桥接主链路可用（反代拦截 / 路由干跑 / Modal 执行通道 / 日志与控制台 / 数据卷管理）；
-M2 进行中——**设置键级推拉已接入**（M2-5 部分：两端 comfy.settings.json 键级 diff 与按方向执行，
-见「设置 → 设置同步」）；节点清单与镜像固化（M2-1/2）、工作流双向同步（M2-4）、版本对齐作业（M2-5 余项）待做。
+当前进度（2026-09-28）：桥接主链路可用（反代拦截 / 路由干跑 / Modal 执行通道 / 日志与控制台 / 数据卷管理）；M2 进行中：
+
+- **节点清单与卷同步已接入**（M2-1 部分 + M2-3 卷模式）：本地 `custom_nodes/` 扫描（git remote/commit、依赖声明、
+  启停状态）与云端数据卷清单对比，差异矩阵给出 `same / changed / missing_cloud / missing_local`，含 commit 与启用状态
+  一致性判定；可选 `deep=1` 拉云端 `/object_info` 做 class_type 级对比（会冷启动容器，仅手动触发）。「安装到云端」
+  把节点目录/单文件写入数据卷并维护 `custom_nodes/.comfybridge-manifest.json`，云端清单经 `modal volume get`
+  免容器读取。「从云端移除」同步清理 manifest。云端依赖仍由容器冷启动按 `requirements.txt` 安装，已停用节点跳过。
+  镜像固化（M2-2：`nodes.lock.yaml` + `install_nodes.sh` + `modal deploy` + 失败回滚）与 Manager API 兜底采集待做。
+- **设置键级推拉已接入**（M2-5 部分：两端 comfy.settings.json 键级 diff 与按方向执行，见「设置 → 设置同步」）。
+- 工作流双向同步（M2-4）、版本对齐作业（M2-5 余项）待做。
+
 里程碑验收标准见计划书 §6–§7。

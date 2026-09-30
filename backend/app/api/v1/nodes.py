@@ -15,9 +15,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import shutil
 import subprocess
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Query
@@ -33,6 +35,7 @@ router = APIRouter()
 
 _DISABLED_SUFFIX = ".disabled"          # ComfyUI-Manager 停用约定：目录名追加 .disabled
 _SKIP_NAMES = {"__pycache__", "_incoming"}  # 卷上与同步都不应出现的杂项目录
+_MANIFEST_REMOTE = "custom_nodes/.comfybridge-manifest.json"
 
 
 def _git(dir_path, *args: str) -> str | None:
@@ -84,6 +87,80 @@ def scan_custom_nodes() -> dict:
         elif entry.suffix == ".py":
             single_files.append(entry.name)
     return {"path": str(root), "packages": packages, "single_files": single_files}
+
+
+def _manifest(scan: dict | None = None) -> dict:
+    """Build a portable inventory manifest with package source and enabled state."""
+    scan = scan or scan_custom_nodes()
+    return {
+        "schema": 1,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "packages": sorted(
+            [
+                {
+                    "name": p["name"],
+                    "kind": "pkg",
+                    "repo": p["repo"],
+                    "commit": p["commit"],
+                    "has_requirements": p["has_requirements"],
+                    "enabled": p["enabled"],
+                }
+                for p in scan["packages"]
+            ],
+            key=lambda p: p["name"],
+        ),
+        "single_files": sorted(
+            [
+                {
+                    "name": name,
+                    "kind": "single",
+                    "repo": None,
+                    "commit": None,
+                    "has_requirements": False,
+                    "enabled": True,
+                }
+                for name in scan["single_files"]
+            ],
+            key=lambda p: p["name"],
+        ),
+    }
+
+
+def _manifest_entries(manifest: dict | None) -> dict[str, dict]:
+    if not isinstance(manifest, dict):
+        return {}
+    return {
+        item["name"]: item
+        for item in [*manifest.get("packages", []), *manifest.get("single_files", [])]
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    }
+
+
+async def _read_cloud_manifest() -> dict | None:
+    """Read the inventory manifest without starting a Modal container."""
+    tmp_root = Path(tempfile.mkdtemp(prefix="cb-node-manifest-"))
+    dest = tmp_root / "manifest.json"
+    try:
+        await volume_cli.run(
+            "volume", "get", volume_cli.volume_name(), _MANIFEST_REMOTE, str(dest)
+        )
+        return json.loads(dest.read_text(encoding="utf-8"))
+    except (ModalCliError, OSError, json.JSONDecodeError):
+        return None
+    finally:
+        shutil.rmtree(tmp_root, ignore_errors=True)
+
+
+async def _write_cloud_manifest(manifest: dict) -> None:
+    tmp_root = Path(tempfile.mkdtemp(prefix="cb-node-manifest-write-"))
+    manifest_path = tmp_root / "manifest.json"
+    try:
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        await _volume_put(manifest_path, _MANIFEST_REMOTE)
+    finally:
+        shutil.rmtree(tmp_root, ignore_errors=True)
 
 
 async def _local_class_types() -> list[str] | None:
@@ -141,10 +218,12 @@ async def _cloud_listing() -> dict:
         "app_state": None,
         "packages": [],       # [{name, size}]
         "single_files": [],   # [{name, size}]
+        "manifest": None,
     }
     if not modal_configured():
         view["error"] = "未配置 Modal 凭证（设置 → Modal）"
         return view
+    view["manifest"] = await _read_cloud_manifest()
     view["app_state"] = await runner_client.ensure_state()
     try:
         entries = await volume_cli.list_dir("custom_nodes")
@@ -173,6 +252,7 @@ async def nodes_cloud() -> dict:
 @router.get("/nodes/diff")
 async def nodes_diff(deep: bool = Query(False, description="同时拉取云端 class_type（可能触发容器冷启动）")) -> dict:
     scan = await asyncio.to_thread(scan_custom_nodes)
+    local_manifest = _manifest(scan)
     local: dict[str, dict] = {}
     for p in scan["packages"]:
         local[p["name"]] = {**p, "kind": "pkg", "single": False}
@@ -183,12 +263,42 @@ async def nodes_diff(deep: bool = Query(False, description="同时拉取云端 c
         }
 
     cloud = await _cloud_listing()
+    cloud_manifest = cloud.get("manifest")
+    if cloud_manifest is None and cloud["ok"]:
+        cloud_manifest = {
+            "schema": 0,
+            "packages": [
+                {"name": p["name"], "kind": "pkg", "repo": None, "commit": None,
+                 "has_requirements": False, "enabled": True}
+                for p in cloud["packages"]
+            ],
+            "single_files": [
+                {"name": p["name"], "kind": "single", "repo": None, "commit": None,
+                 "has_requirements": False, "enabled": True}
+                for p in cloud["single_files"]
+            ],
+        }
+    cloud_entries = _manifest_entries(cloud_manifest)
     cloud_pkgs = {p["name"] for p in cloud["packages"]}
     cloud_files = {p["name"] for p in cloud["single_files"]}
 
     rows: list[dict] = []
     for name in sorted(set(local) | cloud_pkgs | cloud_files):
         lp = local.get(name)
+        cp = cloud_entries.get(name)
+        cloud_has = name in cloud_pkgs or name in cloud_files
+        if lp and not cloud_has:
+            state = "missing_cloud"
+        elif cloud_has and not lp:
+            state = "missing_local"
+        elif lp and cp and (
+            lp.get("commit") != cp.get("commit")
+            or lp.get("enabled") != cp.get("enabled")
+            or lp.get("kind") != cp.get("kind")
+        ):
+            state = "changed"
+        else:
+            state = "same" if lp and cloud_has else "unknown"
         rows.append({
             "name": name,
             "kind": lp["kind"] if lp else ("single" if name in cloud_files else "pkg"),
@@ -197,11 +307,14 @@ async def nodes_diff(deep: bool = Query(False, description="同时拉取云端 c
             "has_requirements": bool(lp and lp["has_requirements"]),
             "enabled": bool(lp and lp["enabled"]),
             "local": lp is not None,
-            "cloud": name in cloud_pkgs or name in cloud_files,
+            "cloud": cloud_has,
             "cloud_size": next(
                 (p["size"] for p in [*cloud["packages"], *cloud["single_files"]] if p["name"] == name),
                 None,
             ),
+            "cloud_commit": cp.get("commit") if cp else None,
+            "cloud_enabled": cp.get("enabled") if cp else None,
+            "state": state,
         })
 
     only_local = sum(1 for r in rows if r["local"] and not r["cloud"])
@@ -221,6 +334,7 @@ async def nodes_diff(deep: bool = Query(False, description="同时拉取云端 c
         "cloud_error": cloud["error"],
         "app_state": cloud["app_state"],
         "volume": cloud["volume"],
+        "manifest": {"local": local_manifest, "cloud": cloud_manifest},
         "rows": rows,
         "counts": {
             "synced": len(rows) - only_local - only_cloud,
@@ -259,14 +373,16 @@ async def nodes_sync(body: NamesBody) -> dict:
     root = custom_nodes_dir()
     results: list[dict] = []
     for name in body.names:
-        if not _safe_name(name) or name.endswith(_DISABLED_SUFFIX):
-            results.append({"name": name, "ok": False, "error": "非法或已停用的节点名"})
+        if not _safe_name(name):
+            results.append({"name": name, "ok": False, "error": "非法节点名"})
             continue
         src = root / name
         if not src.exists():
             results.append({"name": name, "ok": False, "error": "本地不存在"})
             continue
         try:
+            # 停用节点（ComfyUI-Manager 约定：目录名追加 .disabled）按实际目录名整包落卷，
+            # ComfyUI 核心加载 custom_nodes 时跳过 .disabled 目录，冷启动装依赖时同样跳过
             remote = f"custom_nodes/{name}"
             if src.is_dir():
                 staged = _stage_dir(src)
@@ -276,9 +392,37 @@ async def nodes_sync(body: NamesBody) -> dict:
                     shutil.rmtree(staged.parent, ignore_errors=True)
             else:
                 await _volume_put(src, remote)
-            results.append({"name": name, "ok": True, "remote": remote})
+            results.append({
+                "name": name, "ok": True, "remote": remote,
+                "enabled": not name.endswith(_DISABLED_SUFFIX),
+            })
         except ModalCliError as exc:
             results.append({"name": name, "ok": False, "error": str(exc)})
+    if any(r["ok"] for r in results):
+        current = _manifest(await asyncio.to_thread(scan_custom_nodes))
+        local_entries = _manifest_entries(current)
+        existing = await _read_cloud_manifest() or {
+            "schema": 0, "packages": [], "single_files": []
+        }
+        combined = _manifest_entries(existing)
+        for result in (r for r in results if r["ok"]):
+            if result["name"] in local_entries:
+                combined[result["name"]] = {
+                    **local_entries[result["name"]],
+                    "enabled": result.get("enabled", True),
+                }
+        await _write_cloud_manifest({
+            "schema": 1,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "packages": sorted(
+                (v for v in combined.values() if v["kind"] == "pkg"),
+                key=lambda p: p["name"],
+            ),
+            "single_files": sorted(
+                (v for v in combined.values() if v["kind"] == "single"),
+                key=lambda p: p["name"],
+            ),
+        })
     return {
         "ok": bool(results) and all(r["ok"] for r in results),
         "results": results,
@@ -295,12 +439,31 @@ async def nodes_cloud_remove(body: NamesBody) -> dict:
             continue
         remote = f"custom_nodes/{name}"
         try:
-            try:
-                await volume_cli.run("volume", "rm", volume_cli.volume_name(), remote)
-            except ModalCliError:
-                # 目录必须 -r；文件不带 -r 即可。重试覆盖两种情况。
-                await volume_cli.run("volume", "rm", volume_cli.volume_name(), remote, "-r")
+            await _remove_remote(remote)
+            if not name.endswith(_DISABLED_SUFFIX):
+                await _remove_remote(f"custom_nodes/{name}{_DISABLED_SUFFIX}")
             results.append({"name": name, "ok": True})
         except ModalCliError as exc:
             results.append({"name": name, "ok": False, "error": str(exc)})
+    # manifest 条目以实际名字（含 .disabled 后缀）记录，按名精确清理
+    successful = {r["name"] for r in results if r["ok"]}
+    if successful:
+        manifest = await _read_cloud_manifest()
+        if manifest is not None:
+            manifest["packages"] = [
+                p for p in manifest.get("packages", []) if p["name"] not in successful
+            ]
+            manifest["single_files"] = [
+                p for p in manifest.get("single_files", []) if p["name"] not in successful
+            ]
+            manifest["generated_at"] = datetime.now(timezone.utc).isoformat()
+            await _write_cloud_manifest(manifest)
     return {"ok": bool(results) and all(r["ok"] for r in results), "results": results}
+
+
+async def _remove_remote(remote: str) -> None:
+    try:
+        await volume_cli.run("volume", "rm", volume_cli.volume_name(), remote)
+    except ModalCliError:
+        # Directories require recursive removal; retry covers both files and dirs.
+        await volume_cli.run("volume", "rm", volume_cli.volume_name(), remote, "-r")

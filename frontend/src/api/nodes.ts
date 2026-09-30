@@ -68,6 +68,9 @@ export interface NodeDiffRow {
   local: boolean;
   cloud: boolean;
   cloud_size: string | null;
+  cloud_commit?: string | null;
+  cloud_enabled?: boolean | null;
+  state?: "missing_cloud" | "missing_local" | "same" | "changed" | "unknown";
 }
 
 export interface NodeDiff {

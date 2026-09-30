@@ -172,8 +172,17 @@ def install_custom_node_deps() -> None:
     单节点限时 300s 并把结果打到 stdout（经桥接器控制台可见）：
     依赖大/坏的节点不再静默吞错，也不会耗尽 600s 冷启动预算。
     """
-    for req in sorted((Path(DATA_ROOT) / "custom_nodes").glob("*/requirements.txt")):
+    node_root = Path(DATA_ROOT) / "custom_nodes"
+    disabled = {
+        p.name.removesuffix(".disabled")
+        for p in node_root.glob("*.disabled")
+        if p.is_dir()
+    }
+    for req in sorted(node_root.glob("*/requirements.txt")):
         name = req.parent.name
+        if name in disabled or name.endswith(".disabled"):
+            print(f"[comfybridge] {name}: 已停用，跳过依赖安装", flush=True)
+            continue
         try:
             r = subprocess.run(
                 [sys.executable, "-m", "pip", "install", "-q", "-r", str(req)],

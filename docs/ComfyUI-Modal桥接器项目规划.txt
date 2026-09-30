@@ -35,6 +35,7 @@ ComfyUI × Modal 桥接器 · 项目规划文档
          | 版本对齐 | 同步节点时校验并锁定远端 ComfyUI 版本 = 本地版本，前端版本一致 | 避免 object_info / 前端协议不匹配导致渲染或提交失败
          | Modal 调用方式（实现修订 2026-09-27） | 卷/文件/应用探测统一走 modal CLI 子进程（app/modal_volume/client：注入凭证 env、超时兜底、--json 结构化解析）；SDK 仅在 modal-runner 侧使用，桥接器进程不 import modal | 凭证不进桥接器进程与代码库、CLI --json 输出已满足结构化需要；备选：进程内 SDK（原 ADR，暂未采用，Runner 部署需结构化结果时再引入）
          | 设置键级推拉（M2-5 落地） | GET/POST /api/v1/settings-sync(/apply)：按键 directions 单请求批量执行；本地 comfy.settings.json 原子替换写入 + modal volume get/put 直读写数据卷，不要求云端容器在运行；凭证类键（token/key/secret/password）回显掩码、推拉用真实值 | 原设计 diff + push|pull 双接口；单端点批量避免两次调用间两端漂移，逐键方向已含 push/pull 语义。备选：按原设计拆双接口
+         | 节点清单与卷同步（M2-1/3 落地） | 本地扫描 custom_nodes/（git remote+commit、requirements.txt、启停状态、单文件节点）；云端以数据卷 custom_nodes/.comfybridge-manifest.json 为权威清单，同步/移除时维护，读取经 modal volume get，不要求容器运行；停用节点整目录按实际名落卷（目录名自带 .disabled 后缀，ComfyUI 加载与依赖安装均跳过） | 原设计 nodes.lock.yaml 服务于镜像固化，卷模式不依赖镜像重建即可即时试装；manifest 与节点文件同卷演进、schema 版本化，后续镜像固化可复用为锁文件来源。备选：仅靠 volume ls（拿不到 repo/commit/启用状态，已弃）
   2 总体架构
   ┌──────────────────────────────── 本地机器 ────────────────────────────────┐
 │                                                                          │
@@ -138,13 +139,13 @@ def comfyui():
       并发：@modal.concurrent 复用容器跑多次生成；scaledown_window 控制保活时长（计费敏感项）。
     3.3 节点同步引擎
        |  | 环节 | 设计
-         | 节点清单采集 | 本地：扫描 custom_nodes/ 目录，每个节点目录取 git remote URL + HEAD commit（无 git 则记录目录名 + 版本文件）；若装了 ComfyUI-Manager 优先用其 API 拿精确版本。远端：镜像由桥接器生成，锁文件即清单；卷模式则扫描节点卷
-         | 能力差异对比 | 定时/手动拉取两端 /object_info，按 class_type 求 diff，结合节点清单归因到「哪个 custom_node 缺失」；缓存结果供路由引擎使用
-         | 同步（本地 → Modal） | 生成/更新 nodes.lock.yaml（node: {repo, commit, pip_requires}）→ 生成 install_nodes.sh → modal deploy 重建镜像。镜像模式失败自动回滚上一版 Tag
-         | 快速试装（卷模式） | git clone 进节点卷 + 容器启动时安装依赖；免镜像重建，适合试新节点，稳定后固化进镜像
+         | 节点清单采集（已实现 2026-09-28） | 本地：扫描 custom_nodes/，目录型包取 git remote URL + HEAD commit、requirements.txt 与启停状态，单文件节点单独登记；云端以数据卷 custom_nodes/.comfybridge-manifest.json 为权威清单（同步/移除时维护），经 modal volume get 免容器读取。待做：ComfyUI-Manager API 兜底与镜像锁文件采集
+         | 能力差异对比（已实现 2026-09-28） | GET /api/v1/nodes/diff 按节点包/单文件求并集，逐行给出 same|changed|missing_cloud|missing_local（含 commit 与启用状态一致性）；deep=1 时额外拉云端 /object_info 做 class_type 级差异，由 UI 显式触发（会冷启动容器）。待做：结果持久化缓存供路由引擎直接读取
+         | 同步（本地 → Modal）（卷模式已实现 2026-09-28） | 卷模式：POST /api/v1/nodes/sync 把本地节点目录/单文件（排除 __pycache__/.git 等）写入数据卷 custom_nodes/，随后更新 manifest；停用节点整目录按实际名（.disabled 后缀）落卷，云端加载与装依赖均跳过。待做（M2-2）：生成/更新 nodes.lock.yaml → install_nodes.sh → modal deploy 重建镜像，失败自动回滚上一版 Tag
+         | 快速试装（卷模式）（已实现 2026-09-28） | 同步即写卷，免镜像重建；容器下次冷启动（或管理台「停止容器 + 预热」）安装启用节点依赖，已停用节点跳过安装。实现上采用本地目录整包上传（_stage_dir 过滤），非云端 git clone
          | 反向（Modal → 本地） | 仅提示本地缺失清单与安装命令（桥接器不直接改本地环境，避免污染用户 Python 环境）
-         | 卸载 / 版本对齐 | 从锁文件移除 → 重建；ComfyUI 版本不一致时在 UI 提示一键对齐（重锁远端版本 = 本地版本）
-    # modal-runner/lock/nodes.lock.yaml（示意）
+         | 卸载 / 版本对齐（卷卸载已实现 2026-09-28） | POST /api/v1/nodes/cloud/remove 删除卷上节点并同步清理 manifest 条目。待做：ComfyUI 版本不一致时在 UI 提示一键对齐（重锁远端版本 = 本地版本）
+    # modal-runner/lock/nodes.lock.yaml（M2-2 镜像固化设计示意，尚未实现；当前卷模式用数据卷 custom_nodes/.comfybridge-manifest.json）
 comfyui_version: v0.7.x-pinned
 nodes:
   - name: comfyui_controlnet_aux
@@ -190,8 +191,8 @@ nodes:
        | GET /api/health | 两端连通性、Runner 状态、版本、当前容器数
        | GET/POST/PATCH/DELETE /api/routing/rules | 路由规则 CRUD 与排序
        | POST /api/routing/preview | 传入工作流图干跑，返回逐规则匹配过程
-       | GET /api/nodes/diff · GET /api/nodes/list?side= | 节点能力差异 / 两侧节点清单
-       | POST /api/nodes/sync | {nodes[], mode: "image"|"volume", action: "install"|"remove"} → sync_job
+       | GET /api/v1/nodes/local · GET /api/v1/nodes/cloud · GET /api/v1/nodes/diff （已实现 2026-09-28） | 本地清单（object_info + custom_nodes 扫描）、云端卷清单（含 manifest）、差异矩阵（包级并集 + 可选 class_type 深度对比）
+       | POST /api/v1/nodes/sync · POST /api/v1/nodes/cloud/remove （已实现 2026-09-28，卷模式） | {names[]} → 同步本地节点到卷 / 从卷移除，并维护 manifest。镜像重建（mode: "image"）待做
        | GET /api/workflows · POST /api/workflows/sync | 工作流清单与同步状态；按 id/方向发起双向同步
        | GET /api/v1/settings-sync · POST /api/v1/settings-sync/apply （已实现 2026-09-27） | 两端 comfy.settings.json 键级 diff（凭证键掩码）与按方向（push/pull/逐键）批量执行；本地原子写 + volume get/put 落卷
        | GET /api/models?side=&category= | 模型清单（本地 / Modal 卷）
