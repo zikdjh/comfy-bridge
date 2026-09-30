@@ -14,7 +14,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ValidationError
 
 from ...core import comfy_scan
-from ...core.config import CONFIG_PATH, AppConfig, ModalConfig, get_settings
+from ...core.config import CONFIG_PATH, AppConfig, BridgeConfig, ModalConfig, get_settings
 
 router = APIRouter(prefix="/config", tags=["config"])
 
@@ -150,6 +150,30 @@ async def write_config(body: ConfigBody) -> dict:
             "local": clean.local.model_dump(),
             "bridge": clean.bridge.model_dump(),
             "modal": clean.modal.model_dump(),
+        }),
+        encoding="utf-8",
+    )
+    get_settings.cache_clear()
+    return _view()
+
+
+def update_bridge_section(updates: dict) -> dict:
+    """bridge 节增量更新并写回 config.toml（cost API 预算护栏设置复用同一落盘路径）。
+
+    返回合并后的配置视图；校验失败抛 422。进程内热生效（cache_clear）。
+    """
+    current = get_settings()
+    merged_bridge = {**current.bridge.model_dump(), **updates}
+    try:
+        bridge = BridgeConfig(**merged_bridge)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=f"配置校验失败: {exc.errors()[:3]}")
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(
+        _dump_toml({
+            "local": current.local.model_dump(),
+            "bridge": bridge.model_dump(),
+            "modal": current.modal.model_dump(),
         }),
         encoding="utf-8",
     )

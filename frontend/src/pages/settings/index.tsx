@@ -71,6 +71,9 @@ export default function SettingsPage() {
     guardForm.setFieldsValue({
       onModalUnavailable: config.bridge.on_modal_unavailable,
       taskTimeout: config.modal.task_timeout,
+      monthlyBudgetUsd: config.bridge.monthly_budget_usd,
+      onBudgetExceed: config.bridge.on_budget_exceed,
+      rateUsd: config.bridge.gpu_hourly_rate_usd,
     });
   }, [config, localForm, bridgeForm, modalForm, execForm, guardForm]);
 
@@ -144,13 +147,24 @@ export default function SettingsPage() {
     }
   };
 
-  const saveGuard = async (values: { onModalUnavailable: string; taskTimeout: number }) => {
+  const saveGuard = async (values: {
+    onModalUnavailable: string;
+    taskTimeout: number;
+    monthlyBudgetUsd: number | null;
+    onBudgetExceed: string;
+    rateUsd: number | null;
+  }) => {
     try {
       await saveConfig({
-        bridge: { on_modal_unavailable: values.onModalUnavailable },
+        bridge: {
+          on_modal_unavailable: values.onModalUnavailable,
+          monthly_budget_usd: values.monthlyBudgetUsd ?? 0,
+          on_budget_exceed: values.onBudgetExceed,
+          gpu_hourly_rate_usd: values.rateUsd ?? 1.95,
+        },
         modal: { task_timeout: values.taskTimeout ?? 3600 },
       });
-      message.success("护栏参数已保存并热生效");
+      message.success("护栏与预算已保存并热生效");
     } catch (err) {
       message.error(`保存失败：${err instanceof Error ? err.message : err}`);
     }
@@ -399,7 +413,7 @@ export default function SettingsPage() {
                   type="info"
                   showIcon
                   style={{ maxWidth: 640 }}
-                  message="「云端不可用动作」与「单次运行超时」为已生效配置；月度预算与并发护栏需费用统计/执行通道扩展后接入（规划中）。"
+                  message="「云端不可用动作」「单次运行超时」与「月度预算护栏」均已生效：预算按本月云端估算花费（单价 × 请求墙钟秒数）判定，超限请求自动回落本地或拒绝；使用曲线与快捷设置见仪表盘「额度与成本」卡片。云端最大并发护栏仍规划中。"
                 />
                 <Form
                   layout="vertical"
@@ -427,8 +441,27 @@ export default function SettingsPage() {
                   >
                     <InputNumber min={60} step={60} style={{ width: 200 }} />
                   </Form.Item>
-                  <Form.Item label="月度预算上限（USD）" name="monthlyUsd" initialValue={50} extra="规划中：费用统计接入后生效">
-                    <InputNumber min={0} prefix="$" style={{ width: 160 }} disabled />
+                  <Form.Item
+                    label="月度预算上限（USD）"
+                    name="monthlyBudgetUsd"
+                    extra="0 = 关闭护栏；本月云端估算花费达到上限时触发超限动作。Modal Starter 每月赠 $30 免费额度可作参考"
+                  >
+                    <InputNumber min={0} step={5} prefix="$" style={{ width: 160 }} />
+                  </Form.Item>
+                  <Form.Item label="超预算动作" name="onBudgetExceed" extra="回落本地 = 请求继续在本地执行；拒绝 = 直接拦截">
+                    <Select
+                      options={[
+                        { value: "fallback_local", label: "回落本地执行（fallback_local）" },
+                        { value: "reject", label: "拒绝请求（reject）" },
+                      ]}
+                    />
+                  </Form.Item>
+                  <Form.Item
+                    label="GPU 单价（USD/容器·小时）"
+                    name="rateUsd"
+                    extra="随 Modal 价格调整；仅用于估算，不参与计费"
+                  >
+                    <InputNumber min={0.01} step={0.05} prefix="$" style={{ width: 160 }} />
                   </Form.Item>
                   <Form.Item label="云端最大并发数" name="maxConcurrent" initialValue={2} extra="规划中：执行通道接入后生效">
                     <InputNumber min={1} max={10} disabled />

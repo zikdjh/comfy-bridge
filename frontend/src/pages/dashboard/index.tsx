@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { Badge, Button, Card, Col, Descriptions, Popconfirm, Row, Space, Statistic, Table, Tag, Tooltip, Typography, message } from "antd";
-import { CheckCircleOutlined, ClockCircleOutlined, FireOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { Alert, Badge, Button, Card, Col, Descriptions, Form, InputNumber, Modal, Popconfirm, Progress, Row, Select, Space, Statistic, Table, Tag, Tooltip, Typography, message } from "antd";
+import { CheckCircleOutlined, ClockCircleOutlined, DollarOutlined, FireOutlined, InfoCircleOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
 import { BackendTag, type Backend } from "../../components/common/BackendTag";
 import { TrendChart, type TrendPoint } from "../../components/common/TrendChart";
+import { CostChart, type CostPoint } from "../../components/common/CostChart";
 import { useHealth, warmupModal } from "../../api/health";
 import { useRequests, type BridgeRequest, type RequestStatus } from "../../api/requests";
+import { useCostSummary, useUpdateBudget } from "../../api/cost";
 import { statusMeta } from "../logs/RequestLogPanel";
 
 function backendOf(r: BridgeRequest): Backend {
@@ -108,6 +110,44 @@ export default function DashboardPage() {
     return [...buckets.values()];
   }, [items]);
 
+  // —— 额度与成本（M4-1）：近 14 天逐日估算成本（无用量日补零）+ 预算护栏 ——
+  const { data: cost } = useCostSummary();
+  const updateBudget = useUpdateBudget();
+  const [budgetOpen, setBudgetOpen] = useState(false);
+  const [budgetForm] = Form.useForm();
+  const costTrend: CostPoint[] = useMemo(() => {
+    const byDate = new Map((cost?.daily ?? []).map((d) => [d.date, d]));
+    return Array.from({ length: 14 }, (_, i) => {
+      const day = dayjs().subtract(13 - i, "day");
+      const key = day.format("YYYY-MM-DD");
+      const hit = byDate.get(key);
+      return { date: day.format("MM-DD"), est_cost_usd: hit?.est_cost_usd ?? 0, requests: hit?.requests ?? 0 };
+    });
+  }, [cost]);
+  const budget = cost?.budget;
+  const budgetPercent =
+    budget && budget.enabled && budget.monthly_usd > 0
+      ? Math.min(Math.round((budget.used_usd / budget.monthly_usd) * 100), 100)
+      : 0;
+
+  const saveBudget = async (values: {
+    monthlyUsd: number | null;
+    onExceed: string;
+    rateUsd: number | null;
+  }) => {
+    try {
+      await updateBudget({
+        monthly_budget_usd: values.monthlyUsd ?? 0,
+        on_budget_exceed: values.onExceed as "fallback_local" | "reject",
+        gpu_hourly_rate_usd: values.rateUsd ?? undefined,
+      });
+      message.success("预算护栏已保存并热生效");
+      setBudgetOpen(false);
+    } catch (err) {
+      message.error(`保存失败：${err instanceof Error ? err.message : err}`);
+    }
+  };
+
   const running = items.filter((r) => r.status === "queued" || r.status === "running");
 
   const local = health?.local;
@@ -184,6 +224,30 @@ export default function DashboardPage() {
 
   return (
     <Space direction="vertical" size={12} style={{ width: "100%" }}>
+      {budget?.enabled && budget.exceeded && (
+        <Alert
+          type="warning"
+          showIcon
+          message={
+            budget.on_exceed === "reject"
+              ? `本月云端估算 $${budget.used_usd.toFixed(2)} 已达预算上限 $${budget.monthly_usd.toFixed(2)}，新请求将按「超预算动作 = 拒绝执行」被拦截`
+              : `本月云端估算 $${budget.used_usd.toFixed(2)} 已达预算上限 $${budget.monthly_usd.toFixed(2)}，新云端请求将自动回落本地执行`
+          }
+          action={
+            <Button size="small" danger onClick={() => {
+              budgetForm.setFieldsValue({
+                monthlyUsd: budget.monthly_usd,
+                onExceed: budget.on_exceed,
+                rateUsd: cost?.gpu_hourly_rate_usd,
+              });
+              setBudgetOpen(true);
+            }}>
+              调整预算
+            </Button>
+          }
+        />
+      )}
+
       <Row gutter={[12, 12]}>
         <Col xs={24} sm={12} xl={6}>
           <Card size="small">
@@ -298,6 +362,81 @@ export default function DashboardPage() {
         </Col>
       </Row>
 
+      <Row gutter={[12, 12]}>
+        <Col xs={24} xl={16}>
+          <Card
+            size="small"
+            title={
+              <Space size={6}>
+                <span>额度与成本（云端估算，近 14 天）</span>
+                <Tooltip title={cost?.note}>
+                  <InfoCircleOutlined style={{ color: "#8a90a2" }} />
+                </Tooltip>
+              </Space>
+            }
+          >
+            <CostChart data={costTrend} />
+          </Card>
+        </Col>
+        <Col xs={24} xl={8}>
+          <Card
+            size="small"
+            title={
+              <span>
+                <DollarOutlined style={{ color: "#8a90a2", marginRight: 6 }} />
+                本月额度
+              </span>
+            }
+            extra={
+              <Button type="link" size="small" style={{ paddingInline: 0 }} onClick={() => {
+                budgetForm.setFieldsValue({
+                  monthlyUsd: budget?.monthly_usd ?? 0,
+                  onExceed: budget?.on_exceed ?? "fallback_local",
+                  rateUsd: cost?.gpu_hourly_rate_usd ?? 1.95,
+                });
+                setBudgetOpen(true);
+              }}>
+                设置
+              </Button>
+            }
+          >
+            <Statistic
+              title="本月云端估算花费"
+              valueRender={() => (
+                <span style={{ fontSize: 24, fontVariantNumeric: "tabular-nums" }}>
+                  ${(cost?.month.est_cost_usd ?? 0).toFixed(4)}
+                  <span style={{ fontSize: 13, color: "#8a90a2", marginLeft: 8 }}>
+                    今日 ${(cost?.today.est_cost_usd ?? 0).toFixed(4)}
+                  </span>
+                </span>
+              )}
+            />
+            <div style={{ color: "#8a90a2", fontSize: 12, margin: "4px 0 10px" }}>
+              本月云端 {(cost?.month.requests ?? 0)} 次 · GPU {(cost?.month.gpu_seconds ?? 0).toFixed(0)}s
+              {" · "}{cost?.gpu_type ?? "L40S"} 单价 ${cost?.gpu_hourly_rate_usd?.toFixed(2) ?? "1.95"}/h
+            </div>
+            {budget?.enabled ? (
+              <>
+                <Progress
+                  percent={budgetPercent}
+                  status={budget.exceeded ? "exception" : "normal"}
+                  format={() => `$${budget.used_usd.toFixed(2)} / $${budget.monthly_usd.toFixed(2)}`}
+                />
+                <div style={{ color: "#8a90a2", fontSize: 12 }}>
+                  {budget.exceeded
+                    ? "已超限：新云端请求将回落本地或拒绝（见顶部提示）"
+                    : `剩余 $${budget.remaining_usd?.toFixed(2)} · 超限动作：${budget.on_exceed === "reject" ? "拒绝执行" : "回落本地"}`}
+                </div>
+              </>
+            ) : (
+              <div style={{ color: "#8a90a2", fontSize: 12 }}>
+                未启用预算护栏 —— 点「设置」填写月度上限后，超限请求将自动回落本地或拒绝。
+              </div>
+            )}
+          </Card>
+        </Col>
+      </Row>
+
       <Card size="small" title={`运行中任务${runningCount > 0 ? `（${runningCount}）` : ""}`}>
         <Table<BridgeRequest>
           columns={runningColumns}
@@ -330,6 +469,46 @@ export default function DashboardPage() {
           onRow={(record) => ({ onClick: () => navigate("/logs"), style: { cursor: "pointer" } })}
         />
       </Card>
+
+      <Modal
+        title="预算护栏设置"
+        open={budgetOpen}
+        onCancel={() => setBudgetOpen(false)}
+        onOk={() => budgetForm.submit()}
+        okText="保存"
+        destroyOnClose
+      >
+        <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
+          估算 = GPU 单价 × 请求墙钟秒数（含冷启动等待）。月度上限设为 0 = 关闭护栏；
+          启用后本月云端估算花费达到上限时，路由到云端的请求将按「超限动作」回落本地或拒绝。
+        </Typography.Paragraph>
+        <Form form={budgetForm} layout="vertical" onFinish={saveBudget}>
+          <Form.Item
+            label="月度预算上限（USD）"
+            name="monthlyUsd"
+            rules={[{ required: true, message: "请填写月度预算（0 = 关闭护栏）" }]}
+            extra="Modal Starter 每月赠 $30 免费额度可作参考基线"
+          >
+            <InputNumber min={0} step={5} prefix="$" style={{ width: 180 }} />
+          </Form.Item>
+          <Form.Item label="超预算动作" name="onExceed" extra="回落本地 = 请求继续在本地执行；拒绝 = 直接拦截">
+            <Select
+              options={[
+                { value: "fallback_local", label: "回落本地执行（fallback_local）" },
+                { value: "reject", label: "拒绝请求（reject）" },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item
+            label="GPU 单价（USD/容器·小时）"
+            name="rateUsd"
+            rules={[{ required: true, message: "请填写单价" }]}
+            extra="随 Modal 价格调整；仅用于估算，不参与计费"
+          >
+            <InputNumber min={0.01} step={0.05} prefix="$" style={{ width: 180 }} />
+          </Form.Item>
+        </Form>
+      </Modal>
     </Space>
   );
 }

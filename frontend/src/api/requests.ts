@@ -29,6 +29,9 @@ export interface BridgeRequest {
   started_ms: number | null;
   finished_ms: number | null;
   duration_ms?: number;
+  /** 云端请求的成本记账（M4-1）：提交成功才入账；本地请求为 null */
+  gpu_seconds?: number | null;
+  est_cost_usd?: number | null;
 }
 
 export function useRequests(backend = "all", status = "all", realtime = true, limit = 200) {

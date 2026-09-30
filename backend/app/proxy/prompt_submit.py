@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 
@@ -13,12 +14,14 @@ import httpx
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
+from .. import cost as cost_svc
 from ..core.config import get_settings
 from ..logs import store
 from ..models_mgr import cloud_index, local_index
 from ..models_mgr.presence import classify_model_refs
 from ..routing.engine import classify_graph, decide
 from ..runner import client as runner_client
+from ..runner import console as runner_console
 from ..runner import executor
 from .passthrough import get_upstream_client
 
@@ -66,12 +69,17 @@ async def handle_prompt_submit(request: Request) -> Response:
     cloud_only, missing = classify_model_refs(
         facts.get("model_refs") or [], await local_index.local_names(), cloud_index.snapshot()
     )
+    budget = await cost_svc.abudget_state()  # 月度预算护栏现状（决策前采集，纯本地 SQL）
     decision = decide(
         facts,
         workflow_name=_extract_workflow_name(payload),
         manual_backend=request.headers.get("x-bridge-backend") or _extract_manual_backend(payload),
         models={"cloud_only": cloud_only, "missing": missing},
+        budget=budget,
     )
+    if decision.backend == "modal" and budget.get("exceeded"):
+        # 超限告警：护栏已把请求拉回本地/拒绝，控制台与 trace 双留痕（M4-1「并通知」）
+        runner_console.log(f"[预算护栏] {decision.fallback}", "warning")
 
     prompt_id = str(uuid.uuid4())
     payload["prompt_id"] = prompt_id

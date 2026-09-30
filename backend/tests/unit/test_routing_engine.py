@@ -11,6 +11,7 @@ class _Bridge:
         self.large_side_pixels = kw.get("large_side_pixels", 0)
         self.default_backend = kw.get("default_backend", "local")
         self.on_modal_unavailable = kw.get("on_modal_unavailable", "fallback_local")
+        self.on_budget_exceed = kw.get("on_budget_exceed", "fallback_local")
 
 
 class _Settings:
@@ -131,3 +132,47 @@ def test_no_fallback_when_local(patch_engine):
     d = engine.decide(engine.classify_graph({}))  # default local，不触发回退
     assert d.final_backend == "local"
     assert d.fallback is None
+
+
+# ---------------------------------------------------------------- 预算护栏（M4-1）
+def test_budget_exceeded_falls_back_local(patch_engine):
+    patch_engine(modal_ok=True)  # 通道健康也要回落：超限是策略决定
+    d = engine.decide(
+        engine.classify_graph({}), manual_backend="modal",
+        budget={"exceeded": True, "used_usd": 6.0, "monthly_usd": 5.0},
+    )
+    assert d.backend == "modal"
+    assert d.final_backend == "local"
+    assert "预算上限" in d.fallback
+    assert d.trace[-1]["rule"] == "budget_guardrail"
+
+
+def test_budget_exceeded_reject(patch_engine):
+    patch_engine(_Bridge(on_budget_exceed="reject"), modal_ok=True)
+    d = engine.decide(
+        engine.classify_graph({}), manual_backend="modal",
+        budget={"exceeded": True, "used_usd": 6.0, "monthly_usd": 5.0},
+    )
+    assert d.final_backend == ""
+    assert d.trace[-1]["rule"] == "budget_guardrail"
+
+
+def test_budget_guardrail_precedes_availability(patch_engine):
+    patch_engine(modal_ok=False)  # 双重不可用：先报预算，而非通道故障
+    d = engine.decide(
+        engine.classify_graph({}), manual_backend="modal",
+        budget={"exceeded": True, "used_usd": 6.0, "monthly_usd": 5.0},
+    )
+    assert d.trace[-1]["rule"] == "budget_guardrail"
+    assert d.final_backend == "local"
+
+
+def test_budget_not_exceeded_keeps_modal(patch_engine):
+    patch_engine(modal_ok=True)
+    d = engine.decide(
+        engine.classify_graph({}), manual_backend="modal",
+        budget={"exceeded": False, "used_usd": 1.0, "monthly_usd": 5.0},
+    )
+    assert d.final_backend == "modal"
+    assert d.fallback is None
+    assert all(t["rule"] != "budget_guardrail" for t in d.trace)

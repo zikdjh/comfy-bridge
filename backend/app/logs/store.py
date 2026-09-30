@@ -35,11 +35,19 @@ CREATE TABLE IF NOT EXISTS requests (
   rule_trace TEXT,
   error TEXT,
   started_ms INTEGER,
-  finished_ms INTEGER
+  finished_ms INTEGER,
+  gpu_seconds REAL,
+  est_cost_usd REAL
 );
 CREATE INDEX IF NOT EXISTS idx_requests_created ON requests(created_ms DESC);
 CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status);
 """
+
+# 老库迁移：逐列补齐（ALTER ADD COLUMN 不支持 IF NOT EXISTS，先查 table_info）
+_MIGRATE_COLUMNS = {
+    "gpu_seconds": "ALTER TABLE requests ADD COLUMN gpu_seconds REAL",
+    "est_cost_usd": "ALTER TABLE requests ADD COLUMN est_cost_usd REAL",
+}
 
 _lock = threading.Lock()
 _conn: sqlite3.Connection | None = None
@@ -53,6 +61,11 @@ def _get_conn() -> sqlite3.Connection:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.executescript(_SCHEMA)
+        existing = {r["name"] for r in conn.execute("PRAGMA table_info(requests)")}
+        for col, ddl in _MIGRATE_COLUMNS.items():
+            if col not in existing:
+                conn.execute(ddl)
+        conn.commit()
         _conn = conn
     return _conn
 
@@ -136,6 +149,63 @@ def update_status(prompt_id: str, status: str, error: str | None = None) -> None
         conn.commit()
 
 
+def record_cost(prompt_id: str, gpu_seconds: float, est_cost_usd: float) -> None:
+    """成本按次入账（执行器终态时调用；与状态机解耦，终态前后均可写）。"""
+    with _lock:
+        _get_conn().execute(
+            "UPDATE requests SET gpu_seconds = ?, est_cost_usd = ? WHERE prompt_id = ?",
+            (gpu_seconds, est_cost_usd, prompt_id),
+        )
+        _get_conn().commit()
+
+
+_MODAL_COST_WHERE = "final_backend = 'modal' AND est_cost_usd IS NOT NULL"
+
+
+def cost_totals(start_ms: int | None = None, end_ms: int | None = None) -> dict:
+    """区间内云端请求的成本聚合（当日/当月汇总共用；est_cost_usd 非空才算已入账）。"""
+    sql = (
+        "SELECT COUNT(*) AS requests, COALESCE(SUM(gpu_seconds), 0) AS gpu_seconds, "
+        f"COALESCE(SUM(est_cost_usd), 0) AS est_cost_usd FROM requests WHERE {_MODAL_COST_WHERE}"
+    )
+    params: list = []
+    if start_ms is not None:
+        sql += " AND created_ms >= ?"
+        params.append(start_ms)
+    if end_ms is not None:
+        sql += " AND created_ms < ?"
+        params.append(end_ms)
+    with _lock:
+        row = _get_conn().execute(sql, params).fetchone()
+    return {
+        "requests": int(row["requests"]),
+        "gpu_seconds": round(float(row["gpu_seconds"]), 1),
+        "est_cost_usd": round(float(row["est_cost_usd"]), 5),
+    }
+
+
+def cost_daily(days: int = 30) -> list[dict]:
+    """近 N 天逐日成本聚合（本地时区日界；无用量的日子不出现在结果里，由前端补零）。"""
+    cutoff_ms = int((time.time() - days * 86400) * 1000)
+    sql = (
+        "SELECT substr(created_at, 1, 10) AS date, COUNT(*) AS requests, "
+        "COALESCE(SUM(gpu_seconds), 0) AS gpu_seconds, COALESCE(SUM(est_cost_usd), 0) AS est_cost_usd "
+        f"FROM requests WHERE {_MODAL_COST_WHERE} AND created_ms >= ? "
+        "GROUP BY date ORDER BY date"
+    )
+    with _lock:
+        rows = _get_conn().execute(sql, (cutoff_ms,)).fetchall()
+    return [
+        {
+            "date": r["date"],
+            "requests": int(r["requests"]),
+            "gpu_seconds": round(float(r["gpu_seconds"]), 1),
+            "est_cost_usd": round(float(r["est_cost_usd"]), 5),
+        }
+        for r in rows
+    ]
+
+
 def list_requests(limit: int = 50, backend: str | None = None, status: str | None = None) -> list[dict]:
     sql = "SELECT * FROM requests"
     conds, params = [], []
@@ -216,6 +286,10 @@ async def ainsert_request(record: dict) -> int:
 
 async def aupdate_status(prompt_id: str, status: str, error: str | None = None) -> None:
     await asyncio.to_thread(update_status, prompt_id, status, error)
+
+
+async def arecord_cost(prompt_id: str, gpu_seconds: float, est_cost_usd: float) -> None:
+    await asyncio.to_thread(record_cost, prompt_id, gpu_seconds, est_cost_usd)
 
 
 async def asave_graph_snapshot(prompt_id: str, raw_body: bytes) -> tuple[str, str]:

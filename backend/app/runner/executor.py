@@ -22,6 +22,7 @@ from pathlib import Path
 import websockets
 
 from ..core import config
+from ..cost import arecord_cost
 from ..logs import store
 from ..modal_volume import client as modal_cli
 from . import client as runner_client
@@ -82,7 +83,9 @@ async def _run(prompt_id: str, payload: dict) -> None:
         console.log(f"[{prompt_id[:8]}] 已受理，路由 Modal 通道执行")
         await _upload_inputs(payload)
         # 提交本身可能等待容器冷启动（最长 600s），客户端读超时已放宽
+        # t0 同时挂到 state：终态成本记账的起点（含冷启动等待，即真实计费窗口）
         t0 = asyncio.get_running_loop().time()
+        state["t0"] = t0
         ack = await runner_client.post_prompt(payload)
         state["modal_pid"] = ack.get("prompt_id")
         if not state["modal_pid"]:
@@ -271,6 +274,11 @@ async def _ws_pump(client_id: str, modal_pid: str, bridge_pid: str,
 # ------------------------------------------------------------------ 收尾
 
 async def _finish(prompt_id: str, state: dict, kind: str, entry: dict | None, detail: str) -> None:
+    # 成本按次入账（成功/失败/中断都计——GPU 时间已消耗）；提交未达（无 t0/modal_pid）不计
+    if state.get("t0") is not None and state.get("modal_pid"):
+        gpu_seconds = max(asyncio.get_running_loop().time() - state["t0"], 0.0)
+        est = await arecord_cost(prompt_id, gpu_seconds)
+        console.log(f"[{prompt_id[:8]}] 成本估算 {gpu_seconds:.0f}s ≈ ${est:.4f}")
     client_id = state.get("client_id")
     if kind == "interrupted":
         console.log(f"[{prompt_id[:8]}] 云端执行已中断", "warning")

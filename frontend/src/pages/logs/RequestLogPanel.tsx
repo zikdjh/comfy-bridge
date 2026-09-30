@@ -11,6 +11,7 @@ import {
   Switch,
   Table,
   Tag,
+  Tooltip,
   Typography,
 } from "antd";
 import { RedoOutlined } from "@ant-design/icons";
@@ -69,6 +70,21 @@ const columns: ColumnsType<BridgeRequest> = [
     render: (s: RequestStatus) => <Tag color={statusMeta[s].color}>{statusMeta[s].text}</Tag>,
   },
   { title: "耗时", key: "duration", width: 80, render: (_, row) => formatDuration(row.duration_ms) },
+  {
+    title: "成本",
+    key: "est_cost",
+    width: 90,
+    render: (_, row) =>
+      row.est_cost_usd != null ? (
+        <Tooltip title={`云端耗时 ${row.gpu_seconds?.toFixed(0) ?? "?"}s（估算口径见仪表盘额度卡片）`}>
+          <Typography.Text style={{ fontVariantNumeric: "tabular-nums" }}>
+            ${row.est_cost_usd.toFixed(4)}
+          </Typography.Text>
+        </Tooltip>
+      ) : (
+        <Typography.Text type="secondary">—</Typography.Text>
+      ),
+  },
   {
     title: "prompt_id",
     dataIndex: "prompt_id",

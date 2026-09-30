@@ -15,6 +15,7 @@ import {
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import type { MenuProps } from "antd";
 import { useHealth } from "../../api/health";
+import { useCostSummary } from "../../api/cost";
 import { LOCAL_COMFY_URL } from "../../theme";
 
 const { Sider, Header, Content } = Layout;
@@ -64,6 +65,24 @@ export function Shell() {
   const modal = health?.modal;
   const modalState: PillState = isLoading ? "pending" : modal?.online ? "online" : "offline";
   const modalSub = isLoading ? "检测中…" : modal?.online ? "已接入" : "未接入";
+
+  // 顶栏预算角标（M4-1）：读额度汇总（30s 轮询），未启用护栏时置灰提示入口
+  const { data: cost } = useCostSummary();
+  const budget = cost?.budget;
+  const budgetTag = !budget ? (
+    <Tag color="default" style={{ cursor: "default" }}>预算 —</Tag>
+  ) : !budget.enabled ? (
+    <Tag color="default" style={{ cursor: "default" }}>预算 未启用</Tag>
+  ) : budget.exceeded ? (
+    <Tag color="error">预算超限 ${budget.used_usd.toFixed(2)}/${budget.monthly_usd.toFixed(2)}</Tag>
+  ) : (
+    <Tag color="processing">预算 ${budget.used_usd.toFixed(2)}/${budget.monthly_usd.toFixed(2)}</Tag>
+  );
+  const budgetTooltip = !budget?.enabled
+    ? "月度预算护栏未启用：在仪表盘「本月额度」卡片设置上限后，超限请求将自动回落本地或拒绝"
+    : budget.exceeded
+      ? `本月云端估算 $${budget.used_usd.toFixed(2)} 已达上限 $${budget.monthly_usd.toFixed(2)}：新云端请求将${budget.on_exceed === "reject" ? "被拒绝" : "回落本地"}`
+      : `本月云端估算 $${budget.used_usd.toFixed(2)} / 上限 $${budget.monthly_usd.toFixed(2)}（估算 = GPU 单价 × 请求墙钟秒数）`;
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
@@ -124,8 +143,8 @@ export function Shell() {
             />
           </Space>
           <Space size={12}>
-            <Tooltip title="月度预算护栏规划中：当前版本未计费，云端用量见 Modal 控制台">
-              <Tag color="default" style={{ cursor: "default" }}>预算 —</Tag>
+            <Tooltip title={budgetTooltip} placement="bottom">
+              {budgetTag}
             </Tooltip>
             <Tooltip title={`经桥接器 ${bridgeUrl}（生成请求将被拦截路由）`} placement="bottom">
               <Button type="primary" ghost icon={<PictureOutlined />} href={bridgeUrl} target="_blank">

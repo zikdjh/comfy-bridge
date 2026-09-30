@@ -40,6 +40,10 @@ class BridgeConfig(BaseModel):
     video_backend: str = "modal"
     large_side_pixels: int = 0
     on_modal_unavailable: str = "fallback_local"  # fallback_local | reject
+    # —— 成本估算与预算护栏（M4-1，规划文档 §3.6）——
+    gpu_hourly_rate_usd: float = 1.95  # GPU 单价（$/容器·小时，随 Modal 价格在设置页更新）
+    monthly_budget_usd: float = 0.0    # 月度预算上限（$），0 = 不启用护栏
+    on_budget_exceed: str = "fallback_local"  # fallback_local | reject
 
 
 class ModalConfig(BaseModel):

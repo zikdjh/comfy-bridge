@@ -91,3 +91,33 @@
 - M2-2 镜像固化：`nodes.lock.yaml` + `install_nodes.sh` + `modal deploy` + 失败回滚
 - 清单采集补全：ComfyUI-Manager API 兜底；差异结果持久化缓存供路由 `node_presence` 使用
 - ComfyUI 版本对齐作业（M2-5 余项）
+
+## 七、额度使用与监控（M4-1 部分 · 2026-09-30）
+
+### 变更范围
+
+- `backend/app/cost/__init__.py`（新）— 估算模型：GPU 单价（`[bridge] gpu_hourly_rate_usd`，默认 1.95）× 请求墙钟秒数（云端提交含冷启动等待 → 终态）；`budget_state`/`summary` 聚合与预算判定
+- `backend/app/logs/store.py` — requests 表增 `gpu_seconds`/`est_cost_usd` 列（老库 PRAGMA 探测 + ALTER 迁移）；`record_cost` 按次入账；`cost_totals`/`cost_daily` 读取时 SQL 现算（规划原设计为 cost_daily 表 + 夜间重算，实现偏差：无调度器、读取即准确）
+- `backend/app/runner/executor.py` — 计时起点挂 state（含冷启动等待，即真实计费窗口），`_finish` 终态入账（成功/失败/中断都计；提交未达不计），控制台打印单次估算
+- `backend/app/routing/engine.py` — `decide()` 新增 budget 参数；超限在可用性之前求值（策略优先于健康），`budget_guardrail` 留痕，按 `on_budget_exceed` 回落本地/拒绝
+- `backend/app/proxy/prompt_submit.py` — 决策前采集预算现状传入 decide；超限且决策目标为云端时 Modal 控制台告警（「并通知」）
+- `backend/app/api/v1/cost.py`（新）— `GET /api/v1/cost/summary` · `PUT /api/v1/cost/budget`（增量更新 [bridge] 预算/超限动作/单价，落盘热生效，返回刷新后 summary）
+- `backend/app/api/v1/config.py` — 抽出 `update_bridge_section` 供 cost API 复用同一落盘路径
+- `frontend` — 仪表盘「额度与成本」卡片（近 14 天成本柱图 + 本月额度面板含预算进度条 + 预算编辑弹窗）与超限 Alert 横幅；顶栏「预算」角标接真实状态（原「规划中」占位退役）；设置页「护栏与预算」表单接线（原禁用占位转正式字段）；日志页请求表新增「成本」列
+- `backend/tests/unit/test_cost.py`（新 8 用例）+ `test_routing_engine.py` 预算护栏 4 用例
+
+### 验证
+
+- [x] 后端单测 `pytest tests/unit -q` → **41 passed**（29 + 本轮 12）
+- [x] 前端 `npx tsc --noEmit` + `npm run build` → 0 错
+- [x] API 冒烟：GET summary 默认关闭 → PUT budget $0.01 落盘 config.toml 回读正确 → 注入 900s/$0.4875 模拟请求 → `POST routing/preview`（manual=modal）命中 `budget_guardrail` 回落本地 → summary today/month 汇总正确 → 清理模拟数据与预算归零
+- [x] 浏览器 E2E（Vite 5173 + 后端 8189；截图 `tmp/gui-test-screenshots/m4_1_*.png`）：仪表盘成本卡片与曲线 → 预算弹窗编辑保存 → 超限横幅 + 顶栏红标 + 红色进度条 → 设置页护栏表单真实值 → 日志页成本列，全部正常
+
+### 估算口径（有意从简，UI note 同步展示）
+
+- 单价 × 请求墙钟秒数（含冷启动等待）；@modal.concurrent 复用容器时多请求墙钟重叠按请求直加 = 保守上限；scaledown 保活窗口无请求归属不计入；与 Modal 账单对账属 v2（规划 §8.3）
+
+### 待做 / 后续
+
+- 成本按工作流/模型维度聚合、CSV 导出、Modal 账单对账（规划 §8.3 报表升级）
+- 云端最大并发护栏（设置页占位仍在）

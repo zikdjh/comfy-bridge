@@ -11,6 +11,8 @@ M1 内置规则（DB 化 CRUD 随「路由规则」页一并接入）：
 Modal 执行通道（app/runner）M1 已接入：可用性 = 凭证 + web_url + 应用已部署
 （runner/client 缓存探测，prompt_submit 决策前保鲜）。不可用时按
 bridge.on_modal_unavailable 策略回退本地（fallback_local）或拒绝（reject）。
+预算护栏（M4-1）在可用性之前求值：决策目标 modal 且月度估算达上限
+（cost.budget_state，调用方传入）时按 bridge.on_budget_exceed 回落本地或拒绝。
 """
 
 from __future__ import annotations
@@ -99,8 +101,11 @@ def decide(
     workflow_name: str | None = None,
     manual_backend: str | None = None,
     models: dict | None = None,
+    budget: dict | None = None,
 ) -> Decision:
-    """models: 模型引用归属 {"cloud_only": [...], "missing": [...]}（由调用方按本地/云端索引判定）。"""
+    """models: 模型引用归属 {"cloud_only": [...], "missing": [...]}（由调用方按本地/云端索引判定）。
+    budget: 预算护栏现状 {"exceeded": bool, "used_usd": float, "monthly_usd": float}
+    （cost.budget_state()，由调用方在决策前计算；None = 未启用/未采集）。"""
     settings = get_settings().bridge
     trace: list[dict] = []
 
@@ -163,7 +168,24 @@ def decide(
         step("default", True, f"无规则命中，取 default_backend={decision}", decision)
 
     final_backend, fallback = decision, None
-    if decision == "modal" and not modal_available():
+    if decision == "modal" and (budget or {}).get("exceeded"):
+        # 预算护栏先于可用性求值：超限是策略决定，无论通道健康与否都不再上云
+        used = float((budget or {}).get("used_usd") or 0)
+        limit = float((budget or {}).get("monthly_usd") or 0)
+        if settings.on_budget_exceed == "reject":
+            fallback = (
+                f"本月云端估算 ${used:.2f} 已达预算上限 ${limit:.2f}，"
+                "on_budget_exceed=reject 拒绝执行"
+            )
+            final_backend = ""  # 拒绝执行，不落地
+        else:
+            fallback = (
+                f"本月云端估算 ${used:.2f} 已达预算上限 ${limit:.2f}，"
+                "按 on_budget_exceed=fallback_local 回落本地"
+            )
+            final_backend = "local"
+        trace.append({"rule": "budget_guardrail", "matched": True, "detail": fallback, "target": final_backend or None})
+    elif decision == "modal" and not modal_available():
         if settings.on_modal_unavailable == "reject":
             fallback = "Modal 通道不可用且 on_modal_unavailable=reject"
             final_backend = ""  # 拒绝执行，不落地
