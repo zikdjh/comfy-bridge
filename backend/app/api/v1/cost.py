@@ -22,7 +22,7 @@ router = APIRouter(prefix="/cost", tags=["cost"])
 
 @router.get("/summary")
 async def cost_summary() -> dict:
-    return await asyncio.to_thread(cost_svc.summary)
+    return await cost_svc.afull_summary()
 
 
 class BudgetBody(BaseModel):
@@ -40,4 +40,4 @@ async def put_budget(body: BudgetBody) -> dict:
     if "gpu_hourly_rate_usd" in updates and updates["gpu_hourly_rate_usd"] <= 0:
         raise HTTPException(status_code=422, detail="GPU 单价必须大于 0")
     await asyncio.to_thread(update_bridge_section, updates)
-    return await asyncio.to_thread(cost_svc.summary)
+    return await cost_svc.afull_summary()

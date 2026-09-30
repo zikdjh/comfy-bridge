@@ -106,12 +106,29 @@
 - `frontend` — 仪表盘「额度与成本」卡片（近 14 天成本柱图 + 本月额度面板含预算进度条 + 预算编辑弹窗）与超限 Alert 横幅；顶栏「预算」角标接真实状态（原「规划中」占位退役）；设置页「护栏与预算」表单接线（原禁用占位转正式字段）；日志页请求表新增「成本」列
 - `backend/tests/unit/test_cost.py`（新 8 用例）+ `test_routing_engine.py` 预算护栏 4 用例
 
+### Modal 账单实时查询（同日追加：账户级真实消耗）
+
+- 背景：本地估算只有"自设预算 vs 估算值"，看不到 Modal 账户真实消耗。调研结论：api.modal.com 为纯 gRPC；
+  proto 含 `WorkspaceBillingSummary`（本月计量消耗/积分抵扣/实际计费/分项），**无公开的「剩余积分总额」接口**
+  （plan 总额仅仪表盘会话可见），dashboard 走的 GraphQL 不收 API token。
+- `backend/app/cost/modal_billing.py`（新）— 维持「后端主进程不 import modal SDK」边界：`sys.executable -c`
+  子进程内 `modal.Client.from_env()`（凭证经 `auth_env()` 注入，未注入回落 ~/.modal.toml）调
+  `WorkspaceBillingSummary(start=UTC 月初)`，stdout 单行 JSON；成功缓存 120s / 失败 20s（前端 30s 轮询不连续拉子进程），
+  超时 45s 强杀，任何异常转 `ok=false + error` 展示。pyproject 依赖注释同步更新
+- `cost/__init__.afull_summary` = summary() + modal 账单；`GET /api/v1/cost/summary` 与 `PUT /api/v1/cost/budget`
+  均切换到它（账单失败不影响本地汇总，仅 `modal.error`）
+- 前端 — 「本月额度」卡片新增 Modal 账单行（`Modal 账单（YYYY-MM-DD 起，UTC）$X` + 积分抵扣/实际计费，
+  计费 > 0 标「赠金/额度已耗尽」，悬停显示分项与缓存说明；获取失败显示原因）；顶栏「预算」角标 tooltip 追加 Modal 本期消耗
+- 展示口径：窗口 `[UTC 月初, +1 月)`（Modal 按 UTC 结算，与本地日界的估算聚合存在时区差异）；
+  metered = Modal 计量（含 Deployed/Ephemeral Apps、Volumes 等，不止 GPU 跑图）；无剩余总额字段，以实际计费 > 0 表达耗尽
+
 ### 验证
 
-- [x] 后端单测 `pytest tests/unit -q` → **41 passed**（29 + 本轮 12）
+- [x] 后端单测 `pytest tests/unit -q` → **47 passed**（41 + 本轮账单 6：parse 双向 / 脚本可编译 / 成功缓存 / 失败短缓存 / afull_summary 合并）
 - [x] 前端 `npx tsc --noEmit` + `npm run build` → 0 错
 - [x] API 冒烟：GET summary 默认关闭 → PUT budget $0.01 落盘 config.toml 回读正确 → 注入 900s/$0.4875 模拟请求 → `POST routing/preview`（manual=modal）命中 `budget_guardrail` 回落本地 → summary today/month 汇总正确 → 清理模拟数据与预算归零
-- [x] 浏览器 E2E（Vite 5173 + 后端 8189；截图 `tmp/gui-test-screenshots/m4_1_*.png`）：仪表盘成本卡片与曲线 → 预算弹窗编辑保存 → 超限横幅 + 顶栏红标 + 红色进度条 → 设置页护栏表单真实值 → 日志页成本列，全部正常
+- [x] Modal 账单真实验证：子进程直调与 `/api/v1/cost/summary` 均返回真实数据（2026-09 本期计量 $5.97 = Deployed 4.39 + Ephemeral 1.12 + Volumes 0.47，积分抵扣 $5.50，实际计费 $0），二次调用命中缓存
+- [x] 浏览器 E2E（Vite 5173 + 后端 8189；截图 `tmp/gui-test-screenshots/m4_1_*.png`）：仪表盘成本卡片与曲线 → 预算弹窗编辑保存 → 超限横幅 + 顶栏红标 + 红色进度条 → 设置页护栏表单真实值 → 日志页成本列，全部正常；追加本轮 Modal 账单行渲染验证（`m4_1_modal_billing_*.png`）
 
 ### 估算口径（有意从简，UI note 同步展示）
 
@@ -119,5 +136,6 @@
 
 ### 待做 / 后续
 
-- 成本按工作流/模型维度聚合、CSV 导出、Modal 账单对账（规划 §8.3 报表升级）
+- 成本按工作流/模型维度聚合、CSV 导出（规划 §8.3 报表升级）
+- 逐项账单对账（本地按次估算 vs Modal 账单明细，规划 §8.3 v2）；「剩余积分总额」待 Modal 公开接口后补
 - 云端最大并发护栏（设置页占位仍在）

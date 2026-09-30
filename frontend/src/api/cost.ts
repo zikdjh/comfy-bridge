@@ -21,6 +21,18 @@ export interface BudgetState {
   on_exceed: "fallback_local" | "reject";
 }
 
+export interface ModalBilling {
+  ok: boolean;
+  error?: string;
+  period_start?: string; // UTC 计费窗口起（YYYY-MM-DD）
+  period_end?: string;
+  metered_cost_usd?: number | null; // 本期计量消耗（容器/应用/卷等，Modal 账单口径）
+  billed_cost_usd?: number | null; // 积分抵扣后实际计费；> 0 即赠金/额度已耗尽
+  credits_applied_usd?: number | null; // 本期积分抵扣（正数）
+  plan_cost_usd?: number | null; // 套餐月费（付费计划）
+  breakdown?: Record<string, number>;
+}
+
 export interface CostSummary {
   gpu_type: string;
   gpu_hourly_rate_usd: number;
@@ -29,6 +41,7 @@ export interface CostSummary {
   daily: CostDailyPoint[];
   budget: BudgetState;
   note: string;
+  modal?: ModalBilling | null;
 }
 
 export function useCostSummary() {

@@ -7,7 +7,7 @@
 估算口径（有意从简）：
 - @modal.concurrent 复用容器时多个请求墙钟重叠，按请求直加 = 保守上限；
 - scaledown_window 保活窗口无请求归属，不计入；
-- 与 Modal 账单对账属 v2（规划文档 §8.3）。
+- 逐项对账属 v2（规划文档 §8.3）；账户级本期真实消耗已可实时查看（modal_billing 子进程查询）。
 
 预算护栏：monthly_budget_usd > 0 启用；本月已用 ≥ 上限视为超限，按
 on_budget_exceed 回落本地（并告警）或拒绝执行。决策留痕 rule_trace，
@@ -21,6 +21,7 @@ from datetime import datetime
 
 from ..core.config import get_settings
 from ..logs import store
+from . import modal_billing
 
 GPU_TYPE = "L40S"  # runner 固定部署类型（modal-runner/runner.py），换型需同步改这里
 
@@ -89,3 +90,10 @@ def summary() -> dict:
         "note": "估算 = GPU 单价 × 请求墙钟秒数（含冷启动等待）；不含 scaledown 保活窗口；"
                 "并发复用容器时按请求直加（保守上限）。",
     }
+
+
+async def afull_summary() -> dict:
+    """summary() + Modal 账单实时数据（子进程查询带缓存；失败仅转 modal.error）。"""
+    data = await asyncio.to_thread(summary)
+    data["modal"] = await modal_billing.fetch()
+    return data

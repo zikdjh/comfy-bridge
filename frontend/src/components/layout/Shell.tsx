@@ -83,6 +83,9 @@ export function Shell() {
     : budget.exceeded
       ? `本月云端估算 $${budget.used_usd.toFixed(2)} 已达上限 $${budget.monthly_usd.toFixed(2)}：新云端请求将${budget.on_exceed === "reject" ? "被拒绝" : "回落本地"}`
       : `本月云端估算 $${budget.used_usd.toFixed(2)} / 上限 $${budget.monthly_usd.toFixed(2)}（估算 = GPU 单价 × 请求墙钟秒数）`;
+  const modalLine = cost?.modal?.ok
+    ? `；Modal 账单本期消耗 $${(cost.modal.metered_cost_usd ?? 0).toFixed(2)}（UTC 月）`
+    : "";
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
@@ -143,7 +146,7 @@ export function Shell() {
             />
           </Space>
           <Space size={12}>
-            <Tooltip title={budgetTooltip} placement="bottom">
+            <Tooltip title={budgetTooltip + modalLine} placement="bottom">
               {budgetTag}
             </Tooltip>
             <Tooltip title={`经桥接器 ${bridgeUrl}（生成请求将被拦截路由）`} placement="bottom">

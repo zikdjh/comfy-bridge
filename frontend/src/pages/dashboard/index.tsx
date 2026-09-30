@@ -9,7 +9,7 @@ import { TrendChart, type TrendPoint } from "../../components/common/TrendChart"
 import { CostChart, type CostPoint } from "../../components/common/CostChart";
 import { useHealth, warmupModal } from "../../api/health";
 import { useRequests, type BridgeRequest, type RequestStatus } from "../../api/requests";
-import { useCostSummary, useUpdateBudget } from "../../api/cost";
+import { useCostSummary, useUpdateBudget, type ModalBilling } from "../../api/cost";
 import { statusMeta } from "../logs/RequestLogPanel";
 
 function backendOf(r: BridgeRequest): Backend {
@@ -19,6 +19,13 @@ function backendOf(r: BridgeRequest): Backend {
 function fmtSec(ms: number): string {
   if (ms >= 60_000) return `${Math.floor(ms / 60_000)}m${Math.round((ms % 60_000) / 1000)}s`;
   return `${(ms / 1000).toFixed(1)}s`;
+}
+
+/** Modal 账单分项提示（悬停「Modal 账单」标签）。 */
+function modalBreakdownTip(m: ModalBilling): string {
+  const items = Object.entries(m.breakdown ?? {}).map(([k, v]) => `${k} $${v.toFixed(2)}`);
+  const window = m.period_start ? `${m.period_start} 起的 UTC 计费月` : "UTC 计费月";
+  return `Modal 账户 ${window}（120s 缓存）${items.length ? "：" + items.join("；") : ""}`;
 }
 
 export default function DashboardPage() {
@@ -415,6 +422,31 @@ export default function DashboardPage() {
               本月云端 {(cost?.month.requests ?? 0)} 次 · GPU {(cost?.month.gpu_seconds ?? 0).toFixed(0)}s
               {" · "}{cost?.gpu_type ?? "L40S"} 单价 ${cost?.gpu_hourly_rate_usd?.toFixed(2) ?? "1.95"}/h
             </div>
+            {cost?.modal && (cost.modal.ok ? (
+              <div style={{ borderTop: "1px dashed #e4e7ef", margin: "0 0 10px", paddingTop: 8, fontSize: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <Tooltip title={modalBreakdownTip(cost.modal)}>
+                    <span style={{ color: "#8a90a2", borderBottom: "1px dotted #b9bfcf", cursor: "help" }}>
+                      Modal 账单（{cost.modal.period_start} 起，UTC）
+                    </span>
+                  </Tooltip>
+                  <b style={{ fontVariantNumeric: "tabular-nums", fontSize: 14 }}>
+                    ${(cost.modal.metered_cost_usd ?? 0).toFixed(2)}
+                  </b>
+                </div>
+                <div style={{ color: "#8a90a2", marginTop: 2 }}>
+                  积分抵扣 ${(cost.modal.credits_applied_usd ?? 0).toFixed(2)}
+                  {" · "}实际计费 ${(cost.modal.billed_cost_usd ?? 0).toFixed(2)}
+                  {(cost.modal.billed_cost_usd ?? 0) > 0 && (
+                    <span style={{ color: "#cf1322" }}> · 赠金/额度已耗尽</span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div style={{ color: "#8a90a2", fontSize: 12, margin: "0 0 10px" }}>
+                Modal 账单暂不可获取：{cost.modal.error}
+              </div>
+            ))}
             {budget?.enabled ? (
               <>
                 <Progress
