@@ -1,6 +1,5 @@
 """成本记账与预算护栏单元测试（临时库：monkeypatch store 路径，不碰真实 data/）。"""
 
-import json
 from types import SimpleNamespace
 
 import pytest
@@ -179,17 +178,26 @@ def test_summary_shape(tmp_db, monkeypatch):
     assert "note" in s
 
 
-# ---------------------------------------------------------------- Modal 账单子进程
+# ---------------------------------------------------------------- Modal 账单 CLI 子进程
+
+# modal billing summary --json 实测输出（1.5.5；Decimal 串 + snake_case 键）
+_CLI_JSON = b'''{
+  "metered_cost": "5.96977888",
+  "billed_cost": "0E-8",
+  "adjustments": {"plan_cost": "0E-8", "credits": "-5.50000000"},
+  "metered_cost_breakdown": {"llm_tokens": "0E-8", "deployed_apps": "4.38552567", "volumes": "0.46977888"}
+}'''
 
 
 class _FakeProc:
-    def __init__(self, payload: bytes):
+    def __init__(self, payload: bytes = b"", err: bytes = b"", returncode: int = 0):
         self._payload = payload
-        self.returncode = 0
+        self._err = err
+        self.returncode = returncode
         self.killed = False
 
     async def communicate(self):
-        return self._payload, b""
+        return self._payload, self._err
 
     def kill(self):
         self.killed = True
@@ -202,25 +210,21 @@ def fresh_billing_cache():
     modal_billing._cache.update(at=-1e9, data=None)
 
 
-def test_parse_output_ok():
-    raw = json.dumps({"ok": True, "metered_cost_usd": 5.97, "breakdown": {"Deployed Apps": 4.39}}).encode()
-    data = modal_billing.parse_output(raw)
+def test_parse_output_cli_shape():
+    data = modal_billing.parse_output(_CLI_JSON)
     assert data["ok"] is True
-    assert data["metered_cost_usd"] == 5.97
-    assert data["breakdown"]["Deployed Apps"] == 4.39
+    assert data["cycle"] == modal_billing.current_cycle()
+    assert data["period_start"].endswith("-01")
+    assert data["metered_cost_usd"] == pytest.approx(5.9698)
+    assert data["billed_cost_usd"] == 0.0
+    assert data["credits_applied_usd"] == pytest.approx(5.5)  # 负数调整取绝对值
+    assert data["breakdown"] == {"deployed_apps": 4.3855, "volumes": 0.4698}  # 0 值剔除、按额降序
 
 
-def test_parse_output_error_and_garbage():
-    err = modal_billing.parse_output(json.dumps({"ok": False, "error": "boom"}).encode())
-    assert err["ok"] is False and "boom" in err["error"]
+def test_parse_output_garbage():
     bad = modal_billing.parse_output(b"<html>not json")
     assert bad["ok"] is False and bad["error"]
     assert modal_billing.parse_output(b"")["ok"] is False
-
-
-def test_child_script_compiles():
-    # 子进程脚本必须始终可编译，防止字符串手误到运行时才爆
-    compile(modal_billing._CHILD_SCRIPT, "modal_billing_child", "exec")
 
 
 async def test_fetch_success_then_cache(monkeypatch, fresh_billing_cache):
@@ -228,27 +232,31 @@ async def test_fetch_success_then_cache(monkeypatch, fresh_billing_cache):
 
     async def fake_exec(*a, **kw):
         calls["n"] += 1
-        return _FakeProc(json.dumps({"ok": True, "metered_cost_usd": 1.5}).encode())
+        return _FakeProc(payload=_CLI_JSON)
 
     monkeypatch.setattr(modal_billing.asyncio, "create_subprocess_exec", fake_exec)
     first = await modal_billing.fetch()
-    assert first["ok"] is True and first["metered_cost_usd"] == 1.5
+    assert first["ok"] is True and first["metered_cost_usd"] == pytest.approx(5.9698)
     second = await modal_billing.fetch()
-    assert second is first and calls["n"] == 1  # 120s 内命中缓存，不重复拉子进程
+    assert second is first and calls["n"] == 1  # 120s 内命中缓存，不重复拉 CLI
 
 
-async def test_fetch_failure_short_cache(monkeypatch, fresh_billing_cache):
+async def test_fetch_cli_error_strips_noise_and_short_caches(monkeypatch, fresh_billing_cache):
     calls = {"n": 0}
 
     async def fake_exec(*a, **kw):
         calls["n"] += 1
-        return _FakeProc(b"garbage")
+        return _FakeProc(
+            err=b"DeprecationWarning: old policy\n  asyncio.set_event_loop_policy(...)\nToken validation failed",
+            returncode=1,
+        )
 
     monkeypatch.setattr(modal_billing.asyncio, "create_subprocess_exec", fake_exec)
     first = await modal_billing.fetch()
-    assert first["ok"] is False and first["error"]
+    assert first["ok"] is False
+    assert "Token validation failed" in first["error"] and "DeprecationWarning" not in first["error"]
     await modal_billing.fetch()
-    assert calls["n"] == 1  # 失败结果也短暂缓存（20s），前端 30s 轮询不会连续拉起子进程
+    assert calls["n"] == 1  # 失败结果也短暂缓存（20s），前端 30s 轮询不会连续拉 CLI
 
 
 async def test_afull_summary_includes_modal(monkeypatch, tmp_db):
