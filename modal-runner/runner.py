@@ -70,9 +70,22 @@ DATA_ROOT = "/data"                 # 数据卷挂载点，同时是 ComfyUI 的
 COMFY_DIR = "/root/ComfyUI"         # 镜像内 ComfyUI 安装目录（仓库根）
 PORT = 8188
 
-# 与本地 ComfyUI 版本保持一致（本地：v0.37.4 @ 8ff6dc38）。
-# 同步方法：本地升级后把这里改成对应 tag，重新 modal deploy 即可重建镜像。
-COMFYUI_VERSION = "v0.37.4"
+# 云端 ComfyUI 版本 pin：读 lock/comfyui_version.txt（桥接器「版本对齐」功能维护，
+# 本地版本为权威；本文件只是消费方），锁文件缺失/为空时回退默认值。
+# 改 pin 后需 modal deploy 重建镜像才生效（桥接器 POST /api/v1/nodes/version/align 会自动做）。
+DEFAULT_COMFYUI_VERSION = "v0.37.4"
+
+
+def _pinned_comfyui_version() -> str:
+    lock = Path(__file__).resolve().parent / "lock" / "comfyui_version.txt"
+    try:
+        text = lock.read_text(encoding="utf-8").strip()
+    except OSError:
+        return DEFAULT_COMFYUI_VERSION
+    return text or DEFAULT_COMFYUI_VERSION
+
+
+COMFYUI_VERSION = _pinned_comfyui_version()
 
 # ComfyUI 模型目录结构（与 folder_paths.py 注册的 models/ 子目录一致）。
 # 启动时在数据卷上按此结构建好分类目录，模型按类别对号入座存放。

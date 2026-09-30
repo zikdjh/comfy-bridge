@@ -110,3 +110,39 @@ export function syncCloudNodes(names: string[]) {
 export function removeCloudNodes(names: string[]) {
   return apiSend<NodeOpResult>("/api/v1/nodes/cloud/remove", "POST", { names });
 }
+
+/* ---------------- ComfyUI 版本对齐（本地为权威 → 云端镜像 pin） ---------------- */
+
+export interface VersionJob {
+  state: "idle" | "running" | "ok" | "error";
+  started_ms: number | null;
+  finished_ms: number | null;
+  tag: string | null;
+  pinned_before: string | null;
+  error: string | null;
+  log_tail: string[];
+}
+
+export interface NodeVersionStatus {
+  local_version: string | null;
+  local_commit: string | null;
+  pinned: string;
+  tag: string | null;
+  drift: boolean;
+  runner_file: string;
+  app_name: string;
+  job: VersionJob;
+}
+
+export function useNodeVersion() {
+  return useQuery({
+    queryKey: ["nodes", "version"],
+    queryFn: ({ signal }) => apiGet<NodeVersionStatus>("/api/v1/nodes/version", signal),
+    refetchInterval: (query) => (query.state.data?.job?.state === "running" ? 3000 : false),
+  });
+}
+
+/** 把云端镜像 pin 对齐到本地版本并 modal deploy 重建镜像（后台任务，失败自动回滚 pin）。 */
+export function alignNodeVersion() {
+  return apiSend<{ ok: boolean; job: VersionJob }>("/api/v1/nodes/version/align", "POST", {});
+}

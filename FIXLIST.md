@@ -142,3 +142,50 @@
 - 成本按工作流/模型维度聚合、CSV 导出（规划 §8.3 报表升级）
 - 逐项账单对账（本地按次估算 vs Modal 账单明细，规划 §8.3 v2）；「剩余积分总额」待 Modal 公开接口后补
 - 云端最大并发护栏（设置页占位仍在）
+
+## 八、ComfyUI 版本对齐（M2-5 第一片 · 2026-09-30）
+
+### 背景
+
+- 实测发现版本漂移已真实发生：本地 ComfyUI Desktop 自动升级到 **v0.38.0（6b747c04）**，
+  云端镜像 pin 仍是 runner.py 硬编码的 **v0.37.4**——正是规划 §1 要避免的 object_info/前端协议不匹配风险，
+  且原链路（diff/deep/本地清单）没有任何环节做版本比对，漂移不可见。
+- 方向确认：**本地为版本权威，云端追随本地**（与节点同步方向一致）。
+
+### 变更范围
+
+- `modal-runner/lock/comfyui_version.txt`（新）— 云端 ComfyUI 版本锁文件（当前 v0.37.4 起步，对齐后更新）
+- `modal-runner/runner.py` — `COMFYUI_VERSION` 改为读锁文件 `_pinned_comfyui_version()`（缺失/为空回退
+  `DEFAULT_COMFYUI_VERSION`）；原「本地升级后手改这里」注释退役
+- `backend/app/nodes_mgr/`（新包）`version_align.py` — 版本对齐核心：
+  `status()`（读本地 `comfyui_version.py` + git commit vs 锁文件 pin，纯文件读可轮询）、
+  `start_align()`（写 pin → 子进程 `modal deploy modal-runner/runner.py` 后台任务，与 volume/billing 同边界：
+  `shutil.which("modal")` + `auth_env()`，主进程不 import modal SDK）、
+  失败（非零退出/CLI 缺失）自动回滚 pin；超时（1800s）属不确定态保留新 pin 并在错误信息说明；
+  单任务互斥，状态存进程内存（重启即清空，与 comfy_scan 同口径）
+- `backend/app/api/v1/nodes.py` — `GET /nodes/version`（对照 + 任务状态）、
+  `POST /nodes/version/align`（409 任务进行中 / 400 未配置凭证或无本地版本）
+- `frontend/src/api/nodes.ts` — `NodeVersionStatus/VersionJob` + `useNodeVersion`（任务 running 时 3s 轮询）+ `alignNodeVersion`
+- `frontend/src/pages/nodes/index.tsx` — 页顶 `VersionBanner`（两 tab 共见）：漂移 → warning Alert
+  「本地 vX @ commit · 云端 pin vY」+「对齐云端 → vX」按钮（Modal.confirm 说明重建时长/容器重启/数据卷不受影响）；
+  running → info Alert；job 由 running 转 ok/error 时 message 提示并刷新
+- `backend/tests/unit/test_version_align.py`（新 12 用例）— tag 归一化 / drift 判定 / 无本地版本 /
+  pin 回退 / 对齐成功写 pin / pin 相同 noop / 并发 409 / deploy 失败回滚 / 成功保留 / 超时保留并标记不确定 / CLI 缺失回滚
+
+### 验证
+
+- [x] 单测 `pytest tests/unit -q` → **58 passed**（46 + 版本对齐 12）；ruff 新文件 0 错（nodes.py 4 处为基线原有，stash 对比确认未新增）
+- [x] 前端 `npx tsc --noEmit` + `npm run build` → 0 错
+- [x] API 冒烟：`GET /nodes/version` 真实检出漂移（local 0.38.0/6b747c04 vs pinned v0.37.4，drift=true）；
+  `POST /nodes/version/align` → pin 写入 v0.38.0、任务 running、`modal deploy` 后台执行
+- [x] **真实对齐闭环**：`modal deploy` 成功（82s，Modal 层缓存住 torch 等大头）；
+  云端 `/system_stats` 冷启动实测 `comfyui_version: "0.38.0"`；`GET /nodes/version` → drift=false / pinned=v0.38.0 / job=ok
+- [x] 浏览器 E2E：节点页正常渲染（对齐后 banner 正确隐藏）；临时把 pin 拨回 v0.37.4 验证
+  漂移警告横幅（本地/云端对照 + 风险说明 + 「对齐云端 → v0.38.0」按钮）后即恢复 v0.38.0；
+  截图 `tmp/gui-test-screenshots/m2_5_version_*.png`。期间发现 Vite dev server 随上一会话退出，已重启
+
+### 待做 / 后续
+
+- M2-2 镜像固化：`nodes.lock.yaml` + `install_nodes.sh`（节点依赖预装进镜像，消除每次冷启动 pip 安装）+ 失败回滚
+- 版本对齐余项：对齐历史留痕；「对齐」与「节点依赖」合并为一次重建（M2-2 后自然合并）
+- 节点同步其余遗留见 §六待做（changed 内容哈希检测、node_presence 路由、反向同步提示等）

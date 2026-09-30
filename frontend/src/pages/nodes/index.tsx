@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Key } from "react";
 import {
   Alert,
@@ -18,16 +18,18 @@ import {
   Typography,
   message,
 } from "antd";
-import { CheckCircleOutlined, CloseCircleOutlined, CloudUploadOutlined } from "@ant-design/icons";
+import { CheckCircleOutlined, CloseCircleOutlined, CloudUploadOutlined, SyncOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  alignNodeVersion,
   removeCloudNodes,
   syncCloudNodes,
   useLocalNodes,
   useNodeDiff,
+  useNodeVersion,
 } from "../../api/nodes";
-import type { NodeDiffRow } from "../../api/nodes";
+import type { NodeDiffRow, VersionJob } from "../../api/nodes";
 import { stopModalContainers } from "../../api/launch";
 import { warmupModal } from "../../api/health";
 import { EmptyGuide } from "../../components/common/EmptyGuide";
@@ -525,9 +527,98 @@ function DiffMatrix() {
   );
 }
 
+/* ---------------- ComfyUI 版本对齐（本地为权威 → 云端镜像 pin） ---------------- */
+
+function VersionBanner() {
+  const { data } = useNodeVersion();
+  const queryClient = useQueryClient();
+  const [aligning, setAligning] = useState(false);
+  const lastState = useRef<VersionJob["state"]>("idle");
+
+  const job = data?.job;
+  useEffect(() => {
+    if (!job) return;
+    if (lastState.current === "running" && job.state === "ok") {
+      message.success(`云端镜像已重建为 ${job.tag ?? "本地版本"}，下次容器启动即生效`);
+      queryClient.invalidateQueries({ queryKey: ["nodes", "version"] });
+    }
+    if (lastState.current === "running" && job.state === "error") {
+      message.error(`版本对齐失败：${job.error ?? "未知错误"}`, 6);
+    }
+    lastState.current = job.state;
+  }, [job, queryClient]);
+
+  if (!data || !data.local_version) return null;
+
+  const startAlign = () => {
+    Modal.confirm({
+      title: `把云端 ComfyUI 对齐到本地 v${data.local_version}？`,
+      content:
+        "将改写镜像版本 pin 并执行 modal deploy 重建镜像（约数分钟）。" +
+        "重建期间云端容器会以旧版本继续运行；部署完成后下一次容器启动即用新版本。数据卷不受影响。",
+      okText: "开始对齐",
+      cancelText: "取消",
+      onOk: async () => {
+        setAligning(true);
+        try {
+          const res = await alignNodeVersion();
+          if (res.ok) {
+            message.success("对齐任务已启动（镜像重建约需数分钟）");
+          } else {
+            message.error(res.job?.error ?? "对齐任务启动失败");
+          }
+        } catch (exc) {
+          message.error(`对齐请求失败：${exc instanceof Error ? exc.message : String(exc)}`);
+        } finally {
+          setAligning(false);
+        }
+        queryClient.invalidateQueries({ queryKey: ["nodes", "version"] });
+      },
+    });
+  };
+
+  if (job?.state === "running") {
+    return (
+      <Alert
+        type="info"
+        showIcon
+        message={`云端版本对齐进行中：镜像重建 → ${job.tag}（约数分钟）`}
+        description="完成后云端容器将以新版本启动；期间建议不要向云端提交任务。此页轮询任务状态，可离开稍后回来看结果。"
+      />
+    );
+  }
+  if (data.drift) {
+    return (
+      <Alert
+        type="warning"
+        showIcon
+        message={`ComfyUI 版本不一致：本地 v${data.local_version}${data.local_commit ? ` @ ${data.local_commit}` : ""} · 云端镜像 pin ${data.pinned}`}
+        description="云端按 pin 构建镜像，版本差异可能导致 object_info / 前端协议不匹配（提交云端任务时报错或前端异常）。建议把云端对齐到本地版本。"
+        action={
+          <Button size="small" type="primary" icon={<SyncOutlined />} loading={aligning} onClick={startAlign}>
+            对齐云端 → v{data.local_version}
+          </Button>
+        }
+      />
+    );
+  }
+  if (job?.state === "error") {
+    return (
+      <Alert
+        type="error"
+        showIcon
+        message="上次版本对齐失败"
+        description={job.error ?? undefined}
+      />
+    );
+  }
+  return null;
+}
+
 export default function NodesPage() {
   return (
     <Card size="small">
+      <VersionBanner />
       <Tabs
         defaultActiveKey="local"
         items={[

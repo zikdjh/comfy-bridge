@@ -6,10 +6,14 @@
                                 （容器未运行会触发冷启动计费，故仅由前端按钮显式触发）
 - POST /nodes/sync              安装本地节点包/单文件 → 云端数据卷（整目录 volume put）
 - POST /nodes/cloud/remove      从云端数据卷移除节点（volume rm）
+- GET  /nodes/version           本地 ComfyUI 版本 vs 云端镜像 pin 对照 + 对齐任务状态
+- POST /nodes/version/align     版本对齐（本地为权威）：写 pin 锁文件 → modal deploy 重建镜像
+                                （后台任务，失败自动回滚 pin；见 nodes_mgr/version_align）
 
 同步语义：节点文件落卷后立即可见于云端清单；Python 依赖由 runner 在 comfyui 容器
 冷启动时按 requirements.txt 自动安装（install_custom_node_deps），因此同步后需等下次
-冷启动（或手动「停止容器 + 预热」重启）才真正生效。
+冷启动（或手动「停止容器 + 预热」重启）才真正生效。ComfyUI 本体版本不走数据卷，
+只能经镜像重建对齐（version/align）。
 """
 
 from __future__ import annotations
@@ -22,13 +26,14 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from ...core import comfy_client
 from ...core.config import custom_nodes_dir, get_settings, modal_configured
 from ...modal_volume import client as volume_cli
 from ...modal_volume.client import ModalCliError
+from ...nodes_mgr import version_align
 from ...runner import client as runner_client
 
 router = APIRouter()
@@ -467,3 +472,30 @@ async def _remove_remote(remote: str) -> None:
     except ModalCliError:
         # Directories require recursive removal; retry covers both files and dirs.
         await volume_cli.run("volume", "rm", volume_cli.volume_name(), remote, "-r")
+
+
+# ---------------------------------------------------------------- 版本对齐（M2-5）
+
+@router.get("/nodes/version")
+async def nodes_version() -> dict:
+    """本地 ComfyUI 版本 vs 云端镜像 pin 对照 + 对齐任务状态（纯文件读，可轮询）。"""
+    return {
+        **version_align.status(get_settings().local.comfy_root),
+        "app_name": get_settings().modal.app_name,
+        "job": version_align.job_state(),
+    }
+
+
+@router.post("/nodes/version/align")
+async def nodes_version_align() -> dict:
+    """把云端镜像 pin 对齐到本地版本并 modal deploy 重建（后台任务，失败回滚 pin）。"""
+    if not modal_configured():
+        raise HTTPException(status_code=400, detail="未配置 Modal 凭证（设置 → Modal）")
+    comfy_root = get_settings().local.comfy_root
+    try:
+        job = await version_align.start_align(comfy_root)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"ok": job["state"] == "running" or job["state"] == "ok", "job": job}
