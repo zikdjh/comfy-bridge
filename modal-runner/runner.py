@@ -29,8 +29,9 @@
 1. `--disable-auto-launch`：启动时不自动拉起浏览器交互界面，服务以无界面方式运行；
 2. 启动时把 DEFAULT_SETTINGS 合并进 user/default/comfy.settings.json
    （只补缺、不覆盖你已改过的键）：默认不启用交互式菜单界面、开启工作流持久化；
-3. custom_nodes/*/requirements.txt 的依赖在启动时自动补齐
-   （节点文件在数据卷上，Python 依赖不在镜像里，冷启动时安装一次）；
+3. custom_nodes/*/requirements.txt 的依赖优先由镜像预装（桥接器「镜像固化」生成的
+   lock/install_nodes.sh，见构建层）；未固化/新卷模式同步的节点在冷启动时兜底安装
+   （install_custom_node_deps，幂等，已装时秒级跳过）；
 4. 若数据卷存在 /config/launch_args.json（管理台「设置 → 启动命令」下发），
    冷启动时把其中的参数追加到启动命令；文件缺失或不合法则忽略。
 
@@ -131,6 +132,8 @@ extra_paths:
 """
 
 # -------------------------------------------------------------------- 镜像
+_INSTALL_NODES_SCRIPT = Path(__file__).resolve().parent / "lock" / "install_nodes.sh"
+
 image = (
     modal.Image.debian_slim(python_version="3.12")
     # 常用系统库：git（克隆/更新节点）、ffmpeg（视频类节点）、libgl1/libglib2.0-0（OpenCV）
@@ -141,6 +144,16 @@ image = (
     # download_model 云端直下模型用
     .uv_pip_install("huggingface_hub[hf_transfer]")
 )
+# M2-2 镜像固化：桥接器按本地节点集生成的依赖预装脚本（存在才挂；放在最后，
+# 脚本变更只使其后无层失效，ComfyUI 基础层缓存不受影响）。脚本缺依赖的节点
+# 仍由冷启动 install_custom_node_deps 兜底（卷模式新装、未固化的节点）。
+if _INSTALL_NODES_SCRIPT.is_file():
+    image = (
+        image
+        # copy=True：烧进镜像层供 run_commands 使用（默认 False 是运行时挂载，构建期不可见）
+        .add_local_file(_INSTALL_NODES_SCRIPT, "/build/install_nodes.sh", copy=True)
+        .run_commands("bash /build/install_nodes.sh")
+    )
 
 app = modal.App(APP_NAME)
 data_volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)

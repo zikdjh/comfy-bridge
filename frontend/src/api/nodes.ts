@@ -117,8 +117,7 @@ export interface VersionJob {
   state: "idle" | "running" | "ok" | "error";
   started_ms: number | null;
   finished_ms: number | null;
-  tag: string | null;
-  pinned_before: string | null;
+  label: string | null;
   error: string | null;
   log_tail: string[];
 }
@@ -145,4 +144,9 @@ export function useNodeVersion() {
 /** 把云端镜像 pin 对齐到本地版本并 modal deploy 重建镜像（后台任务，失败自动回滚 pin）。 */
 export function alignNodeVersion() {
   return apiSend<{ ok: boolean; job: VersionJob }>("/api/v1/nodes/version/align", "POST", {});
+}
+
+/** 镜像固化（M2-2）：生成 nodes.lock.yaml + install_nodes.sh 并重建镜像预装节点依赖。 */
+export function rebuildNodeImage() {
+  return apiSend<{ ok: boolean; job: VersionJob }>("/api/v1/nodes/image/rebuild", "POST", {});
 }

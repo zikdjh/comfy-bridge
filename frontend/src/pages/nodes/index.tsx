@@ -18,12 +18,13 @@ import {
   Typography,
   message,
 } from "antd";
-import { CheckCircleOutlined, CloseCircleOutlined, CloudUploadOutlined, SyncOutlined } from "@ant-design/icons";
+import { CheckCircleOutlined, CloseCircleOutlined, CloudUploadOutlined, SyncOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   alignNodeVersion,
   removeCloudNodes,
+  rebuildNodeImage,
   syncCloudNodes,
   useLocalNodes,
   useNodeDiff,
@@ -264,6 +265,20 @@ function DiffMatrix() {
     }
   };
 
+  const rebuildImage = async () => {
+    try {
+      const res = await rebuildNodeImage();
+      if (res.ok) {
+        message.success("固化任务已启动：生成 nodes.lock.yaml 并重建镜像（约数分钟）");
+      } else {
+        message.error(res.job?.error ?? "固化任务启动失败");
+      }
+    } catch (exc) {
+      message.error(`固化请求失败：${exc instanceof Error ? exc.message : String(exc)}`);
+    }
+    queryClient.invalidateQueries({ queryKey: ["nodes", "version"] });
+  };
+
   const rows = useMemo(() => {
     const all = diff?.rows ?? [];
     if (filter === "only_local") return all.filter((r) => r.local && !r.cloud);
@@ -406,6 +421,19 @@ function DiffMatrix() {
                   <Button size="small">对比云端 class_type</Button>
                 </Popconfirm>
               )}
+              <Popconfirm
+                title="固化到镜像？"
+                description={
+                  "按当前本地启用的节点集生成 nodes.lock.yaml + install_nodes.sh，" +
+                  "重建镜像把依赖预装进镜像（约数分钟；失败自动回滚锁文件）。" +
+                  "固化后冷启动不再逐节点 pip 安装；之后新同步的节点仍走冷启动兜底，直到下次固化。"
+                }
+                onConfirm={rebuildImage}
+              >
+                <Button size="small" icon={<ThunderboltOutlined />}>
+                  固化到镜像
+                </Button>
+              </Popconfirm>
             </Space>
           }
         />
@@ -539,11 +567,11 @@ function VersionBanner() {
   useEffect(() => {
     if (!job) return;
     if (lastState.current === "running" && job.state === "ok") {
-      message.success(`云端镜像已重建为 ${job.tag ?? "本地版本"}，下次容器启动即生效`);
+      message.success(`镜像部署完成：${job.label ?? ""}，下次容器启动即生效`);
       queryClient.invalidateQueries({ queryKey: ["nodes", "version"] });
     }
     if (lastState.current === "running" && job.state === "error") {
-      message.error(`版本对齐失败：${job.error ?? "未知错误"}`, 6);
+      message.error(`镜像部署失败：${job.error ?? "未知错误"}`, 6);
     }
     lastState.current = job.state;
   }, [job, queryClient]);
@@ -582,8 +610,8 @@ function VersionBanner() {
       <Alert
         type="info"
         showIcon
-        message={`云端版本对齐进行中：镜像重建 → ${job.tag}（约数分钟）`}
-        description="完成后云端容器将以新版本启动；期间建议不要向云端提交任务。此页轮询任务状态，可离开稍后回来看结果。"
+        message={`镜像部署进行中：${job.label ?? ""}（约数分钟）`}
+        description="完成后云端容器将以新镜像启动；期间建议不要向云端提交任务。此页轮询任务状态，可离开稍后回来看结果。"
       />
     );
   }

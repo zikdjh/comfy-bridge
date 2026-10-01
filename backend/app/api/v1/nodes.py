@@ -6,9 +6,11 @@
                                 （容器未运行会触发冷启动计费，故仅由前端按钮显式触发）
 - POST /nodes/sync              安装本地节点包/单文件 → 云端数据卷（整目录 volume put）
 - POST /nodes/cloud/remove      从云端数据卷移除节点（volume rm）
-- GET  /nodes/version           本地 ComfyUI 版本 vs 云端镜像 pin 对照 + 对齐任务状态
+- GET  /nodes/version           本地 ComfyUI 版本 vs 云端镜像 pin 对照 + 部署任务状态
 - POST /nodes/version/align     版本对齐（本地为权威）：写 pin 锁文件 → modal deploy 重建镜像
-                                （后台任务，失败自动回滚 pin；见 nodes_mgr/version_align）
+- POST /nodes/image/rebuild     镜像固化（M2-2）：生成 nodes.lock.yaml + install_nodes.sh
+                                （启用节点依赖预装进镜像）→ modal deploy，失败自动回滚
+                                （部署任务体与互斥见 nodes_mgr.deploy，两者共用单飞通道）
 
 同步语义：节点文件落卷后立即可见于云端清单；Python 依赖由 runner 在 comfyui 容器
 冷启动时按 requirements.txt 自动安装（install_custom_node_deps），因此同步后需等下次
@@ -21,7 +23,6 @@ from __future__ import annotations
 import asyncio
 import json
 import shutil
-import subprocess
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,65 +34,14 @@ from ...core import comfy_client
 from ...core.config import custom_nodes_dir, get_settings, modal_configured
 from ...modal_volume import client as volume_cli
 from ...modal_volume.client import ModalCliError
-from ...nodes_mgr import version_align
+from ...nodes_mgr import deploy, image_rebuild, version_align
+from ...nodes_mgr.scan import DISABLED_SUFFIX, scan_custom_nodes
 from ...runner import client as runner_client
 
 router = APIRouter()
 
-_DISABLED_SUFFIX = ".disabled"          # ComfyUI-Manager 停用约定：目录名追加 .disabled
 _SKIP_NAMES = {"__pycache__", "_incoming"}  # 卷上与同步都不应出现的杂项目录
 _MANIFEST_REMOTE = "custom_nodes/.comfybridge-manifest.json"
-
-
-def _git(dir_path, *args: str) -> str | None:
-    try:
-        out = subprocess.run(
-            ["git", "-C", str(dir_path), *args],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=True,
-        )
-        return out.stdout.strip() or None
-    except (OSError, subprocess.SubprocessError):
-        return None
-
-
-def _pkg_git_info(entry: Path) -> tuple[str | None, str | None]:
-    """包目录自身的 git 信息；非独立仓库（会向上越界到 ComfyUI 主仓库）返回 (None, None)。"""
-    top = _git(entry, "rev-parse", "--show-toplevel")
-    if not top or Path(top).resolve() != entry.resolve():
-        return None, None
-    return _git(entry, "remote", "get-url", "origin"), _git(entry, "rev-parse", "--short", "HEAD")
-
-
-def scan_custom_nodes() -> dict:
-    """扫描 custom_nodes/：目录型节点包（git 信息）+ 单文件节点。"""
-    root = custom_nodes_dir()
-    packages: list[dict] = []
-    single_files: list[str] = []
-    if not root.is_dir():
-        return {"path": str(root), "packages": packages, "single_files": single_files}
-
-    for entry in sorted(root.iterdir()):
-        if entry.name.startswith("__") or entry.name.startswith("."):
-            continue
-        if entry.is_dir():
-            if not (entry / "__init__.py").is_file():
-                continue
-            repo, commit = _pkg_git_info(entry)
-            packages.append(
-                {
-                    "name": entry.name,
-                    "repo": repo,
-                    "commit": commit,
-                    "has_requirements": (entry / "requirements.txt").is_file(),
-                    "enabled": not entry.name.endswith(_DISABLED_SUFFIX),
-                }
-            )
-        elif entry.suffix == ".py":
-            single_files.append(entry.name)
-    return {"path": str(root), "packages": packages, "single_files": single_files}
 
 
 def _manifest(scan: dict | None = None) -> dict:
@@ -399,7 +349,7 @@ async def nodes_sync(body: NamesBody) -> dict:
                 await _volume_put(src, remote)
             results.append({
                 "name": name, "ok": True, "remote": remote,
-                "enabled": not name.endswith(_DISABLED_SUFFIX),
+                "enabled": not name.endswith(DISABLED_SUFFIX),
             })
         except ModalCliError as exc:
             results.append({"name": name, "ok": False, "error": str(exc)})
@@ -445,8 +395,8 @@ async def nodes_cloud_remove(body: NamesBody) -> dict:
         remote = f"custom_nodes/{name}"
         try:
             await _remove_remote(remote)
-            if not name.endswith(_DISABLED_SUFFIX):
-                await _remove_remote(f"custom_nodes/{name}{_DISABLED_SUFFIX}")
+            if not name.endswith(DISABLED_SUFFIX):
+                await _remove_remote(f"custom_nodes/{name}{DISABLED_SUFFIX}")
             results.append({"name": name, "ok": True})
         except ModalCliError as exc:
             results.append({"name": name, "ok": False, "error": str(exc)})
@@ -474,15 +424,15 @@ async def _remove_remote(remote: str) -> None:
         await volume_cli.run("volume", "rm", volume_cli.volume_name(), remote, "-r")
 
 
-# ---------------------------------------------------------------- 版本对齐（M2-5）
+# ---------------------------------------------------------------- 版本对齐与镜像固化
 
 @router.get("/nodes/version")
 async def nodes_version() -> dict:
-    """本地 ComfyUI 版本 vs 云端镜像 pin 对照 + 对齐任务状态（纯文件读，可轮询）。"""
+    """本地 ComfyUI 版本 vs 云端镜像 pin 对照 + 部署任务状态（纯文件读，可轮询）。"""
     return {
         **version_align.status(get_settings().local.comfy_root),
         "app_name": get_settings().modal.app_name,
-        "job": version_align.job_state(),
+        "job": deploy.job_state(),
     }
 
 
@@ -498,4 +448,16 @@ async def nodes_version_align() -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return {"ok": job["state"] == "running" or job["state"] == "ok", "job": job}
+    return {"ok": job["state"] in ("running", "ok"), "job": job}
+
+
+@router.post("/nodes/image/rebuild")
+async def nodes_image_rebuild() -> dict:
+    """镜像固化（M2-2）：按本地节点集生成 nodes.lock.yaml + install_nodes.sh 并重建镜像。"""
+    if not modal_configured():
+        raise HTTPException(status_code=400, detail="未配置 Modal 凭证（设置 → Modal）")
+    try:
+        job = await image_rebuild.start_rebuild()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"ok": job["state"] in ("running", "ok"), "job": job}
