@@ -2,11 +2,13 @@
 
 已接入：
 - 管理面 /api/v1（health / nodes / workflows / media / logs / requests / routing / modal_volume / modal）
+- 管理面 GUI /bridge（前端构建产物存在时挂载，见 app/gui_static；安装态入口）
 - 数据面拦截层（app/proxy）：POST /prompt 拦截（分类/决策/落库/改写 prompt_id），
   /ws 单上游双向中继，GET /object_info 合并云端模型清单，
   其余端点透明流式透传本地 ComfyUI（规划文档 §2.1 反代拦截层）。
 
-启动：uv run uvicorn app.main:app --reload --port 8189
+启动：仓库开发 uv run uvicorn app.main:app --reload --port 8189；
+安装态 comfy-bridge 命令（app/cli.py）。
 注意：浏览器指向 :8189 即可透明使用 ComfyUI；生成请求经拦截层路由。
 """
 
@@ -19,6 +21,7 @@ from fastapi.responses import StreamingResponse
 from starlette.websockets import WebSocket
 
 from .api.v1 import api_router
+from .gui_static import mount_gui
 from .logs.store import close_db, close_stale_pending, init_db
 from .models_mgr import cloud_index
 from .proxy.object_info import handle_object_info
@@ -66,6 +69,10 @@ async def _warm_node_presence() -> None:
 
 app = FastAPI(title="ComfyBridge", version="0.1.0", lifespan=lifespan)
 app.include_router(api_router)
+
+# 管理面 GUI 挂 /bridge（前端产物存在才挂）：必须在 catch-all 透传之前注册，
+# / 与其余路径仍是 ComfyUI 数据面，管理面不侵占数据面根路径
+mount_gui(app)
 
 
 @app.websocket("/ws")

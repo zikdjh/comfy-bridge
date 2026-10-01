@@ -15,11 +15,12 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+from .. import runner_assets
 from . import version_align
 from .scan import scan_custom_nodes
 
-LOCK_FILE = version_align.REPO_ROOT / "modal-runner" / "lock" / "nodes.lock.yaml"
-SCRIPT_FILE = version_align.REPO_ROOT / "modal-runner" / "lock" / "install_nodes.sh"
+LOCK_FILE = runner_assets.runner_file("lock", "nodes.lock.yaml")
+SCRIPT_FILE = runner_assets.runner_file("lock", "install_nodes.sh")
 
 
 def parse_requirements(text: str) -> list[str]:

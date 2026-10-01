@@ -15,12 +15,12 @@ import subprocess
 import time
 import uuid
 from dataclasses import dataclass, field
-from pathlib import Path
 
+from .. import runner_assets
 from ..modal_volume import client as modal_cli
 
-# runner.py 位于仓库根 modal-runner/（backend/app/volume_mgr/ 向上三级）
-_RUNNER_FILE = Path(__file__).resolve().parents[3] / "modal-runner" / "runner.py"
+# runner.py：仓库布局优先，wheel 安装回落包内副本（app/runner_assets.py）
+_RUNNER_FILE = runner_assets.runner_file("runner.py")
 _LOG_KEEP = 12          # 每作业保留的最近输出行数
 _JOBS_KEEP = 50         # 作业表保留上限（超出淘汰最旧已完成作业）
 _NAME_RE = re.compile(r"^[a-z][a-z0-9-]{2,31}$")   # 与 API 侧卷名校验一致

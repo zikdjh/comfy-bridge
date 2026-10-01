@@ -14,12 +14,12 @@ import re
 import subprocess
 from pathlib import Path
 
+from .. import runner_assets
 from ..modal_volume.client import auth_env  # noqa: F401 —— 保留引用便于测试断言同边界
 from . import deploy
 
-REPO_ROOT = deploy.REPO_ROOT
 RUNNER_FILE = deploy.RUNNER_FILE
-LOCK_FILE = REPO_ROOT / "modal-runner" / "lock" / "comfyui_version.txt"
+LOCK_FILE = runner_assets.runner_file("lock", "comfyui_version.txt")
 DEFAULT_PIN = "v0.37.4"
 
 _VERSION_RE = re.compile(r'__version__\s*=\s*"([^"]+)"')

@@ -12,12 +12,11 @@ import asyncio
 import os
 import shutil
 import time
-from pathlib import Path
 
+from .. import runner_assets
 from ..modal_volume.client import auth_env
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-RUNNER_FILE = REPO_ROOT / "modal-runner" / "runner.py"
+RUNNER_FILE = runner_assets.runner_file("runner.py")
 
 _DEPLOY_TIMEOUT = 1800.0        # 镜像重建兜底 30 分钟（实测热缓存 ~80s）
 _LOG_TAIL_LINES = 14

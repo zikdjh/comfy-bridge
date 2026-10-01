@@ -1,7 +1,11 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
-name = "comfy-bridge-backend"
+name = "comfy-bridge"
 version = "0.1.0"
-description = "ComfyBridge - 本地 ComfyUI 与 Modal 云端 GPU 的桥接器（后端）"
+description = "ComfyBridge - 本地 ComfyUI 与 Modal 云端 GPU 的桥接器"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
@@ -12,7 +16,30 @@ dependencies = [
     # modal 仅作子进程调用（CLI：volume/app/container；账单：子进程内用其 gRPC 客户端查 WorkspaceBillingSummary），
     # 后端主进程不 import 其 SDK（副作用重：事件循环策略、日志钩子）
     "modal>=0.70",
+    # modal 1.6+ 检测到系统代理时硬要求 python-socks（即 modal[api-proxy-support]），
+    # 缺失直接拒绝连接（Could not connect to the Modal server）；1.5 不需要但装了无害
+    "python-socks>=2.0",
 ]
+
+[project.scripts]
+comfy-bridge = "app.cli:main"
+
+# wheel 内顶层包沿用目录名 app：pipx 每应用独立 venv，通用名无冲突面；
+# 改名需迁移全部安装态引用，收益低
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+# modal-runner 在 backend/ 工程根之外：build_package.py 先复制到 pkg_assets/ 再并入包内副本
+[tool.hatch.build.targets.wheel.force-include]
+"pkg_assets/modal-runner" = "app/_modal_runner"
+
+[tool.hatch.build]
+# 前端构建产物被 gitignore，必须显式声明进构建（build_package.py 先生成）
+artifacts = ["app/static/**"]
+
+[tool.uv]
+# 开发态不把本包构建/安装进 venv（force-include 需要 pkg_assets 先就位）：
+# dev 走 pythonpath（pytest）与 cwd 导入（uvicorn），wheel 只由 scripts/build_package.py 显式构建
+package = false
 
 [dependency-groups]
 dev = [

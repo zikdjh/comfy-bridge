@@ -20,6 +20,7 @@ dist/
 
 # 构建嵌入产物
 backend/app/static/
+backend/pkg_assets/
 
 # 环境与密钥
 .env

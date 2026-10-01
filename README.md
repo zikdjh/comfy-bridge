@@ -11,7 +11,7 @@
 
 ```
 backend/       FastAPI 后端：数据面反代拦截 + /api/v1 管理面 + 日志/成本
-frontend/      React 控制台（开发期经 Vite dev server 访问；构建产物拷入 backend/app/static，后端挂载随 M4 接入）
+frontend/      React 控制台（开发期经 Vite dev server 访问；构建产物嵌入 backend/app/static，由后端挂载 /bridge）
 modal-runner/  Modal 云端 Runner App（runner.py 由原 comfyui_app.py 演进）
 e2e/           Playwright 端到端测试（预留，当前为空）
 docs/          项目文档
@@ -50,13 +50,24 @@ modal serve  modal-runner/runner.py   # 临时调试，改码自动重载
   runner 冷启动自动补装 custom_nodes 依赖，数据卷内容经管理台「数据卷」页管理。
 - Modal 执行通道无需常驻：按需冷启动（仪表盘可见通道状态，「预热」按钮可提前拉起容器），空闲自动缩容到 0。
 
-## 打包（M4）
+## 打包分发（M4）
 
 ```powershell
-powershell -File scripts/build.ps1   # 构建前端并拷入 backend/app/static
+cd backend
+uv run python scripts/build_package.py   # 前端嵌入构建 → modal-runner 副本 → uv build → 产物自检
 ```
 
-后端目前不挂载 `backend/app/static`（控制台请走 Vite dev server）；静态托管接入随 M4 打磨发布落地。
+产物 `backend/dist/comfy_bridge-*.whl`（内含 GUI 构建产物与 modal-runner 副本），安装即用：
+
+```powershell
+pipx install backend/dist/comfy_bridge-0.1.0-py3-none-any.whl
+comfy-bridge --port 8189   # 控制台 http://127.0.0.1:8189/bridge/
+```
+
+- 管理面 GUI 挂在 `/bridge`（SPA 回退）；`/` 与其余路径仍是本地 ComfyUI 数据面透传，**出图地址不变**。
+- 安装包自带 modal-runner 副本：节点同步 / 版本对齐 / 数据卷作业 / `modal deploy` 在安装态均可直接用。
+- `scripts/build.ps1` 仅做前端嵌入构建（`pnpm build:embed` → `backend/app/static`，开发后端同样挂 /bridge）。
+- 依赖注：modal 1.6+ 在系统代理环境硬要求 python-socks，已直接声明，代理环境开箱可用。
 
 ## 里程碑
 

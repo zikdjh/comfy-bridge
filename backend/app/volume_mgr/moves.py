@@ -18,13 +18,13 @@ import subprocess
 import time
 import uuid
 from dataclasses import dataclass, field
-from pathlib import Path
 
+from .. import runner_assets
 from ..modal_volume import client as modal_cli
 from . import usage
 
-# volume_ops.py 位于仓库根 modal-runner/（backend/app/volume_mgr/ 向上三级）
-_OPS_FILE = Path(__file__).resolve().parents[3] / "modal-runner" / "volume_ops.py"
+# volume_ops.py：仓库布局优先，wheel 安装回落包内副本（app/runner_assets.py）
+_OPS_FILE = runner_assets.runner_file("volume_ops.py")
 _LOG_KEEP = 20          # 每作业保留的最近输出行数
 _JOBS_KEEP = 50         # 作业表保留上限
 _NAME_RE = re.compile(r"^[a-z][a-z0-9-]{2,31}$")

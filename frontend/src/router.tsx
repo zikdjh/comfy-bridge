@@ -21,21 +21,25 @@ function NotFoundPage() {
   );
 }
 
-export const router = createBrowserRouter([
-  {
-    path: "/",
-    element: <Shell />,
-    children: [
-      { index: true, element: <DashboardPage /> },
-      { path: "routing", element: <RoutingPage /> },
-      { path: "nodes", element: <NodesPage /> },
-      { path: "workflows", element: <WorkflowsPage /> },
-      { path: "models", element: <ModelsPage /> },
-      { path: "volume", element: <VolumePage /> },
-      { path: "media", element: <MediaPage /> },
-      { path: "logs", element: <LogsPage /> },
-      { path: "settings", element: <SettingsPage /> },
-      { path: "*", element: <NotFoundPage /> },
-    ],
-  },
-]);
+// basename 跟随 vite base：dev 与普通构建为 "/"，打包嵌入构建为 /bridge/（后端挂载前缀）
+export const router = createBrowserRouter(
+  [
+    {
+      path: "/",
+      element: <Shell />,
+      children: [
+        { index: true, element: <DashboardPage /> },
+        { path: "routing", element: <RoutingPage /> },
+        { path: "nodes", element: <NodesPage /> },
+        { path: "workflows", element: <WorkflowsPage /> },
+        { path: "models", element: <ModelsPage /> },
+        { path: "volume", element: <VolumePage /> },
+        { path: "media", element: <MediaPage /> },
+        { path: "logs", element: <LogsPage /> },
+        { path: "settings", element: <SettingsPage /> },
+        { path: "*", element: <NotFoundPage /> },
+      ],
+    },
+  ],
+  { basename: import.meta.env.BASE_URL },
+);

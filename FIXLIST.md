@@ -417,3 +417,51 @@
   后护栏解除 → 配置恢复 0。注意：护栏只对决策目标为 modal 的请求生效（默认 local 的
   请求本就不上云，第一轮探针未触发属预期）。
 - 浏览器：设置 → 护栏与预算 tab 字段/说明/顶部提示三处渲染确认（value=0 恢复态）。
+
+## 十五、打包分发：wheel 单包 + GUI 嵌入托管（M4 · 2026-10-01）
+
+### 语义
+- 产物 `backend/dist/comfy_bridge-*.whl`：一键 `cd backend && uv run python scripts/build_package.py`
+  （前端嵌入构建 → modal-runner 复制进 pkg_assets → uv build → wheel 内容自检，缺关键文件即失败）。
+- 安装即用：`pipx install <wheel>`，入口脚本 `comfy-bridge [--host --port]`（app/cli.py）。
+- 管理面 GUI 挂 `/bridge`（app/gui_static：/bridge/assets 走 StaticFiles，其余 /bridge/* 一律回退
+  index.html；防穿越只回源产物目录内真实文件）；`/` 与其余路径仍是 ComfyUI 数据面透传，
+  管理面不侵占数据面根路径。产物目录缺失（开发态常态）自动跳过挂载。
+- 前端 `build:embed`：`vite build --base=/bridge/ --outDir ../backend/app/static --emptyOutDir`；
+  router basename = import.meta.env.BASE_URL —— dev（/）与嵌入构建（/bridge/）同一份配置。
+- modal-runner 双布局解析（app/runner_assets.py）：仓库 modal-runner/ 优先，wheel 安装回落包内
+  app/_modal_runner/ 副本；nodes_mgr.deploy/lockfile/version_align、volume_mgr.downloads/moves
+  五处 parents[N] 硬编码全部收口（安装态 parents[3] 会指到 site-packages 之外）。
+- 打包配置：backend/pyproject.toml 接 hatchling（发行名 comfy-bridge，wheel 顶层包沿用 `app`，
+  pipx 每应用独立 venv，通用名无冲突面）；static 产物经 `[tool.hatch.build] artifacts` 放行
+  （gitignore 文件默认不进构建）；`[tool.uv] package=false` 保持 dev 免构建——否则 uv run 会
+  因 force-include 缺 pkg_assets 而直接失败。
+
+### 改动
+- 新增 `backend/app/gui_static.py`、`backend/app/runner_assets.py`、`backend/app/cli.py`、
+  `backend/scripts/build_package.py`、`frontend/src/vite-env.d.ts`（import.meta.env 类型声明）。
+- 修改 main.py（mount_gui 于 catch-all 之前）、五处 runner 路径常量、pyproject（build-system +
+  project.scripts + hatch + python-socks）、frontend package.json / router.tsx、scripts/build.ps1
+  （改用 pnpm build:embed）、.gitignore（backend/pkg_assets/）。
+
+### 关键发现
+- **modal 1.6+ 系统代理硬依赖**：客户端检测到系统代理即要求 `python-socks`（modal[api-proxy-support]），
+  缺失直接 "Could not connect to the Modal server"，1.5.5 无此要求。分发包必须开箱可用 →
+  直接声明 `python-socks>=2.0`；装上后 1.6.0 经系统代理连接正常（真机 app list --json 验证 OK）。
+- hatchling 默认不收 gitignore 文件进 wheel/sdist，嵌入产物必须 artifacts 显式放行；
+  force-include 源必须在工程根内（modal-runner 在 backend/ 之外，故打包脚本先复制进来）。
+
+### 验证
+- 单测 `uv run pytest tests/unit -q` → **117 passed**（新增 8：gui_static 无产物跳过 / SPA 回退 /
+  根文件直出 / 资产缺失 404 / 路径穿越防护；runner_assets 仓库优先 / 包内回落 / dev 默认解析）。
+- 真实打包冒烟：干净 venv pip 安装 wheel → `comfy-bridge --port 8199`：/bridge/ 与 /bridge/settings
+  深链接 200（SPA 回退生效）、JS 资产 200（2.5MB，antd 为 CSS-in-JS 无独立 CSS 属预期）、
+  /api/v1/health 200 且 modal online=True、`/` 数据面透传 ComfyUI 200、穿越请求 404；
+  安装态 `_modal_runner` 副本五处路径 is_file() 全真。
+- 浏览器验收（:8199/bridge/）：仪表盘双通道在线（本地 0.38.0 · Modal 已接入 · 通道就绪 · 账单可见）、
+  设置页深链接渲染正常；截图归档 tmp/gui-test-screenshots/pkg_bridge_{dashboard,settings}.png
+  （visual-judge 供应商本环境不可用，按约定人工查验：布局/字体/组件无用户可感知问题）。
+- dev 无回归：重启 8189 后 /bridge/、健康检查（local+modal 双在线）、`/` 数据面全通；vite :5173
+  原路径不受 basename 改动影响（dev BASE_URL=/）。
+- ruff：改动集 6 条全为 downloads/moves 存量基线（UP037/UP041/S110）；全量 68 vs stash 基线 69
+  （净 -1，无新增）。
