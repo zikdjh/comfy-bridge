@@ -88,6 +88,10 @@ M0 技术验证收尾 → M1 MVP 桥接 → M2 同步引擎 → M3 模型卷管�
   （modal CLI `billing summary` 子进程，120s 缓存；CLI 即 SDK `Workspace.billing.summary` 的官方前端，1.5+ 可用）：
   账户级本期计量消耗/积分抵扣/实际计费（UTC 月），
   「剩余积分总额」Modal 无公开接口暂不展示。
-- 工作流双向同步（M2-4）、版本对齐作业（M2-5 余项）、成本报表升级与逐项账单对账（M4-1 余项）待做。
+- **成本报表 v2 已接入**（M4-1）：「成本报表」页按工作流/主模型维度聚合近 30 天成本（主模型 = 图内
+  checkpoint/扩散模型权重引用，历史请求启动时从图快照回填）；`GET /api/v1/cost/report`、
+  `GET /api/v1/cost/export`（CSV 导出：逐条流水/聚合，utf-8-sig）；`GET /api/v1/cost/reconciliation`
+  逐项账单对账（本地按次估算 vs Modal `billing report` 明细 GPU 资源计量，UTC 月 + UTC 日界，比值持续偏离 1 提示校准单价）。
+- 工作流双向同步（M2-4）余项（changed 内容哈希检测、反向同步提示、冲突对比视图）、版本对齐入口合并（M2-5 余项）待做。
 
 里程碑验收标准见计划书 §6–§7。

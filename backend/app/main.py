@@ -42,9 +42,11 @@ async def lifespan(_: FastAPI):
     get_upstream_client()
     warm = asyncio.create_task(_warm_cloud_index())
     warm_presence = asyncio.create_task(_warm_node_presence())
+    warm_backfill = asyncio.create_task(_warm_model_backfill())
     yield
     warm.cancel()
     warm_presence.cancel()
+    warm_backfill.cancel()
     await close_upstream_client()
     close_db()
 
@@ -65,6 +67,19 @@ async def _warm_node_presence() -> None:
         await node_presence.refresh()
     except Exception as exc:  # noqa: BLE001
         logging.getLogger(__name__).warning("节点在场索引初次刷新失败: %s", exc)
+
+
+async def _warm_model_backfill() -> None:
+    """启动即回填历史请求的主模型字段（读图快照提取，成本报表「按模型」维度用）。"""
+    from . import cost
+
+    try:
+        n = await asyncio.to_thread(cost.backfill_model_names)
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning("主模型字段回填失败: %s", exc)
+    else:
+        if n:
+            logging.getLogger(__name__).info("已回填 %d 条历史请求的主模型字段", n)
 
 
 app = FastAPI(title="ComfyBridge", version="0.1.0", lifespan=lifespan)

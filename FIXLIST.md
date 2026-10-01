@@ -465,3 +465,45 @@
   原路径不受 basename 改动影响（dev BASE_URL=/）。
 - ruff：改动集 6 条全为 downloads/moves 存量基线（UP037/UP041/S110）；全量 68 vs stash 基线 69
   （净 -1，无新增）。
+
+## 十六、成本报表 v2（M4-1 · 2026-10-01）
+
+### 语义
+- 「成本报表」页（/cost，导航新增）：①成本聚合——按工作流 / 主模型两维度汇总近 30 天已入账云端请求
+  （金额降序 + 占比条）；②账单对账——本地按次估算 vs Modal `billing report` 官方明细（GPU 资源计量同口径
+  对比 + 全资源计量），UTC 月窗口（月份选择器）+ UTC 日界逐日双列；③CSV 导出——逐条流水 / 按工作流 / 按主模型
+  （utf-8-sig，Excel 直开）。仪表盘「额度与成本」卡新增「成本报表」入口链接。
+- 主模型口径 = 图内 checkpoint/扩散模型权重引用（ckpt_name 优先，其次 unet_name，都没有退模型引用清单首个）；
+  新请求提交时落库 requests.model_name，历史请求启动时后台从图快照回填（快照缺失/无可识别模型写空串哨兵，
+  聚合展示「未记录」/「未命名」，不重复扫描）。
+
+### 改动
+- 新增 `backend/app/cost/reconciliation.py`（UTC 月界换算 + 本地/Modal 逐日合并 + 比值）、
+  `frontend/src/pages/cost/index.tsx`；修改 store.py（model_name 列 + 迁移 + cost_breakdown/cost_entries/
+  cost_daily_utc/requests_missing_model/set_model_name）、routing/engine.py（extract_primary_model）、
+  prompt_submit.py（落库 model_name）、cost/__init__.py（backfill_model_names + GPU_TYPE 上移 constants）、
+  modal_billing.py（report()：CLI `billing report --start --end --show-resources --json` + 解析聚合 + 独立缓存）、
+  api/v1/cost.py（/report /reconciliation /export）、main.py（启动回填任务）、前端 api/cost.ts + router + Shell 导航 +
+  dashboard 入口、core/constants.py（GPU_TYPE 共用）、README。
+
+### 关键发现
+- `modal billing report --show-resources --json` 按应用×日×资源（L40S/Memory/CPU…）给真实计量，是逐项对账的
+  官方数据源；GPU 资源行与本地估算同口径（估算不含 CPU/内存），全资源对比用于展示差额来源。日界为 UTC
+  （--tz 仅小时分辨率支持），与控制台逐日图（本地日界）最多差数小时，区间总量不受影响。
+- 本地账本只记「经桥接且已入账」的请求；Modal 计量含一切容器时间（冷启动/保活/未跟踪直调），
+  对账比值（Modal GPU ÷ 本地估算）短期大幅偏离属正常，持续偏离才说明 gpu_hourly_rate_usd 需校准。
+
+### 验证
+- 单测 `uv run pytest tests/unit -q` → **130 passed**（+13：聚合两维度/窗口外剔除、流水行、UTC 日界归桶、
+  cycle 校验、对账合并两侧/Modal 失败仅本地、report 解析聚合/空区间、CLI 拉取缓存与参数、主模型回填含哨兵、
+  extract_primary_model 三态；既有用例适配 insert_request 新参数）。
+- ruff：全量 68 = stash 基线 68（改动集新增 0，新增代码 4 条 DTZ005 已改显式 UTC 消除）。
+- `tsc --noEmit` 0 错；`pnpm build:embed` 嵌入构建成功（2.67MB JS）。
+- 真机打穿：dev 8189 重启回填 16 条历史主模型；回放历史快照发起真实云端请求（首条云端侧丢失，
+  重启重试后 done：74.9 GPU 秒、估算 $0.04058、model_name=krea2_turbo_fp8_scaled.safetensors 自动落库）；
+  /cost/report 两维度真数据、/cost/reconciliation 本地 $0.0406 vs Modal GPU $1.5891（含此前会话全天计量，
+  比值 39.16 属口径差异）、/cost/export CSV（BOM + 中文表头 + 附件头）全通过。
+- 浏览器验收（:8189/bridge/cost 嵌入构建）：导航「成本报表」、聚合卡（工作流↔主模型切换、占比条、导出图标）、
+  对账卡（月份选择器、四指标、资源构成标签、UTC 逐日双列表、口径注释）渲染全部正常；
+  截图归档 tmp/gui-test-screenshots/cost_report_{workflow,model}.png（visual-judge 本环境不可用，
+  按约定人工查验通过）。仪表盘卡片入口链接在位。

@@ -9,6 +9,7 @@ import {
   NodeIndexOutlined,
   PartitionOutlined,
   PictureOutlined,
+  PieChartOutlined,
   SettingOutlined,
   UnorderedListOutlined,
 } from "@ant-design/icons";
@@ -28,6 +29,7 @@ const NAV_ITEMS: MenuProps["items"] = [
   { key: "/models", icon: <DatabaseOutlined />, label: "模型卷" },
   { key: "/volume", icon: <HddOutlined />, label: "数据卷" },
   { key: "/media", icon: <FileImageOutlined />, label: "媒体库" },
+  { key: "/cost", icon: <PieChartOutlined />, label: "成本报表" },
   { key: "/logs", icon: <UnorderedListOutlined />, label: "日志" },
   { key: "/settings", icon: <SettingOutlined />, label: "设置" },
 ];

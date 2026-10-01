@@ -19,7 +19,7 @@ from ..core.config import get_settings
 from ..logs import store
 from ..models_mgr import cloud_index, local_index, node_presence
 from ..models_mgr.presence import classify_model_refs
-from ..routing.engine import classify_graph, decide
+from ..routing.engine import classify_graph, decide, extract_primary_model
 from ..runner import client as runner_client
 from ..runner import console as runner_console
 from ..runner import executor
@@ -96,6 +96,7 @@ async def handle_prompt_submit(request: Request) -> Response:
         "final_backend": decision.final_backend,
         "gen_type": decision.gen_type,
         "workflow_name": _extract_workflow_name(payload),
+        "model_name": extract_primary_model(prompt),
         "graph_hash": graph_hash,
         "graph_file": graph_file,
         "client_id": payload.get("client_id"),

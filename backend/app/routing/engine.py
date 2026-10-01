@@ -114,6 +114,24 @@ def extract_model_refs(prompt: dict) -> list[str]:
     return sorted(refs)
 
 
+def extract_primary_model(prompt: dict) -> str | None:
+    """主模型文件名 = checkpoint / 扩散模型输入引用（成本报表「按模型」聚合口径）。
+
+    一个请求通常还引用 lora/vae/clip 等附属模型，主模型取主权重加载节点
+    （CheckpointLoaderSimple 的 ckpt_name、UNETLoader 的 unet_name）；
+    都没有时退回模型引用清单首个（如放大工作流只有 upscale 模型）。
+    """
+    for key in ("ckpt_name", "unet_name"):
+        for node in (prompt or {}).values():
+            if not isinstance(node, dict):
+                continue
+            val = (node.get("inputs") or {}).get(key)
+            if isinstance(val, str) and val and val != "None":
+                return val
+    refs = extract_model_refs(prompt)
+    return refs[0] if refs else None
+
+
 def classify_graph(prompt: dict) -> dict:
     """解析 API 格式工作流图，产出分类事实：类型 / 输出节点 / 分辨率 / class / 模型引用。"""
     classes: set[str] = set()

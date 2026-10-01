@@ -17,13 +17,14 @@ on_budget_exceed 回落本地（并告警）或拒绝执行。决策留痕 rule_
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime
 
 from ..core.config import get_settings
+from ..core.constants import GPU_TYPE
 from ..logs import store
+from ..routing.engine import extract_primary_model
 from . import modal_billing
-
-GPU_TYPE = "L40S"  # runner 固定部署类型（modal-runner/runner.py），换型需同步改这里
 
 
 def est_cost_usd(gpu_seconds: float, rate: float | None = None) -> float:
@@ -97,3 +98,23 @@ async def afull_summary() -> dict:
     data = await asyncio.to_thread(summary)
     data["modal"] = await modal_billing.fetch()
     return data
+
+
+def backfill_model_names() -> int:
+    """历史请求主模型回填（报表「按模型」维度）：从图快照提取一次。
+
+    快照缺失/损坏/无可识别模型时写空串哨兵（聚合按「未记录」展示），
+    避免每次启动重复扫描同一批记录。
+    """
+    updated = 0
+    for row in store.requests_missing_model():
+        model = ""
+        try:
+            payload = json.loads((store.GRAPH_DIR / row["graph_file"]).read_bytes())
+            model = extract_primary_model(payload.get("prompt") or {}) or ""
+        except (OSError, ValueError):
+            pass  # 快照已被淘汰或损坏：留空哨兵，不再重扫
+        store.set_model_name(row["id"], model)
+        if model:
+            updated += 1
+    return updated

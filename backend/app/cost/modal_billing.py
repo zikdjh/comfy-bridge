@@ -24,6 +24,7 @@ import shutil
 import time
 from datetime import UTC, datetime
 
+from ..core.constants import GPU_TYPE
 from ..modal_volume.client import auth_env
 
 _TTL_OK = 120.0
@@ -114,4 +115,100 @@ async def fetch(force: bool = False) -> dict:
                 ).strip()
                 data = {"ok": False, "error": (msg or f"modal billing 退出码 {proc.returncode}")[:300]}
     _cache.update(at=now, data=data)
+    return data
+
+
+# —— 账单明细（report）：app × 日（× 资源）粒度真实计费，逐项对账的数据源（规划 §8.3 v2） ——
+
+_REPORT_TTL_OK = 600.0  # 天粒度历史数据，缓存可比 summary 长
+_REPORT_TTL_FAIL = 60.0
+_report_cache: dict[tuple[str, str], tuple[float, dict]] = {}
+
+
+def parse_report(raw: bytes) -> dict:
+    """CLI stdout（--json，--show-resources）→ 聚合明细；解析异常归为 ok=false。"""
+    try:
+        rows = json.loads(raw.decode("utf-8", errors="replace").strip() or "[]")
+    except (ValueError, UnicodeDecodeError) as exc:
+        return {"ok": False, "error": f"账单明细 CLI 输出解析失败: {exc}"[:300]}
+    if not isinstance(rows, list):
+        return {"ok": False, "error": "账单明细 CLI 返回异常数据"}[:300]
+
+    def f(text) -> float:
+        try:
+            return float(text)
+        except (TypeError, ValueError):
+            return 0.0
+
+    daily: dict[str, dict[str, float]] = {}
+    resources: dict[str, float] = {}
+    apps: dict[str, float] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        date = str(row.get("interval_start") or "")[:10]
+        usd = f(row.get("cost"))
+        resource = str(row.get("resource") or "总计")
+        if date:
+            bucket = daily.setdefault(date, {"gpu_usd": 0.0, "total_usd": 0.0})
+            bucket["total_usd"] += usd
+            if resource == GPU_TYPE:  # GPU 资源计量与本地估算同口径（cpu/memory 不算）
+                bucket["gpu_usd"] += usd
+        resources[resource] = resources.get(resource, 0.0) + usd
+        app = str(row.get("description") or row.get("object_id") or "未知应用")
+        apps[app] = apps.get(app, 0.0) + usd
+    return {
+        "ok": True,
+        "gpu_usd": round(resources.get(GPU_TYPE, 0.0), 4),
+        "total_usd": round(sum(resources.values()), 4),
+        "resources": {k: round(v, 4) for k, v in sorted(resources.items(), key=lambda kv: -kv[1])},
+        "apps": [{"name": k, "usd": round(v, 4)} for k, v in sorted(apps.items(), key=lambda kv: -kv[1])],
+        "daily": {
+            d: {"gpu_usd": round(v["gpu_usd"], 4), "total_usd": round(v["total_usd"], 4)}
+            for d, v in sorted(daily.items())
+        },
+    }
+
+
+async def report(start_date: str, end_date: str, force: bool = False) -> dict:
+    """区间账单明细（[start, end)，天粒度 × 资源拆分；永不抛出，失败转 ok=false）。"""
+    key = (start_date, end_date)
+    now = time.monotonic()
+    cached = _report_cache.get(key)
+    if cached and not force:
+        at, data = cached
+        if now - at < (_REPORT_TTL_OK if data.get("ok") else _REPORT_TTL_FAIL):
+            return data
+    args = [
+        shutil.which("modal") or "modal", "billing", "report",
+        "--start", start_date, "--end", end_date, "--show-resources", "--json",
+    ]
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env={**os.environ, "PYTHONWARNINGS": "ignore", **auth_env()},
+        )
+    except FileNotFoundError:
+        data = {"ok": False, "error": "找不到 modal CLI（请安装：pip install modal，并确认在 PATH 中）"}
+    except OSError as exc:
+        data = {"ok": False, "error": f"无法启动账单明细 CLI 子进程: {exc}"[:300]}
+    else:
+        try:
+            out, err = await asyncio.wait_for(proc.communicate(), timeout=_CLI_TIMEOUT)
+        except TimeoutError:
+            proc.kill()
+            data = {"ok": False, "error": f"Modal 账单明细查询超时（>{_CLI_TIMEOUT:g}s）"}
+        else:
+            if proc.returncode == 0:
+                data = parse_report(out)
+            else:
+                msg = (err or out).decode("utf-8", errors="replace").strip()
+                msg = "\n".join(
+                    line for line in msg.splitlines()
+                    if "DeprecationWarning" not in line and "set_event_loop_policy" not in line
+                ).strip()
+                data = {"ok": False, "error": (msg or f"modal billing report 退出码 {proc.returncode}")[:300]}
+    _report_cache[key] = (now, data)
     return data

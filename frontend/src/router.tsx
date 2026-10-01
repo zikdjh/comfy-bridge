@@ -9,6 +9,7 @@ import ModelsPage from "./pages/models";
 import VolumePage from "./pages/volume";
 import LogsPage from "./pages/logs";
 import MediaPage from "./pages/media";
+import CostPage from "./pages/cost";
 import SettingsPage from "./pages/settings";
 
 function NotFoundPage() {
@@ -35,6 +36,7 @@ export const router = createBrowserRouter(
         { path: "models", element: <ModelsPage /> },
         { path: "volume", element: <VolumePage /> },
         { path: "media", element: <MediaPage /> },
+        { path: "cost", element: <CostPage /> },
         { path: "logs", element: <LogsPage /> },
         { path: "settings", element: <SettingsPage /> },
         { path: "*", element: <NotFoundPage /> },

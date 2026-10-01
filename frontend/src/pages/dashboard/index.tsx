@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Alert, Badge, Button, Card, Col, Descriptions, Form, InputNumber, Modal, Popconfirm, Progress, Row, Select, Space, Statistic, Table, Tag, Tooltip, Typography, message } from "antd";
 import { CheckCircleOutlined, ClockCircleOutlined, DollarOutlined, FireOutlined, InfoCircleOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
 import { BackendTag, type Backend } from "../../components/common/BackendTag";
 import { TrendChart, type TrendPoint } from "../../components/common/TrendChart";
@@ -380,6 +380,11 @@ export default function DashboardPage() {
                   <InfoCircleOutlined style={{ color: "#8a90a2" }} />
                 </Tooltip>
               </Space>
+            }
+            extra={
+              <Link to="/cost" style={{ fontSize: 12 }}>
+                成本报表
+              </Link>
             }
           >
             <CostChart data={costTrend} />

@@ -53,6 +53,10 @@ MODEL_FILE_EXTS = {
     ".safetensors", ".sft", ".ckpt", ".pt", ".pth", ".bin", ".gguf", ".onnx",
 }
 
+# Runner 固定部署的 GPU 型号（modal-runner/runner.py）；换型需同步改这里。
+# 成本估算单价（cost）与 Modal 账单明细的 GPU 资源行匹配（modal_billing.report）共用。
+GPU_TYPE = "L40S"
+
 # 透传/回写时剥离的逐跳头（HTTP/1.1 RFC 7230 + host/content-length 由 httpx 重算）
 HOP_BY_HOP_HEADERS = {
     "connection",

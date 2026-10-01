@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS requests (
   final_backend TEXT NOT NULL,
   gen_type TEXT NOT NULL,
   workflow_name TEXT,
+  model_name TEXT,
   graph_hash TEXT,
   graph_file TEXT,
   client_id TEXT,
@@ -47,6 +48,7 @@ CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status);
 _MIGRATE_COLUMNS = {
     "gpu_seconds": "ALTER TABLE requests ADD COLUMN gpu_seconds REAL",
     "est_cost_usd": "ALTER TABLE requests ADD COLUMN est_cost_usd REAL",
+    "model_name": "ALTER TABLE requests ADD COLUMN model_name TEXT",
 }
 
 _lock = threading.Lock()
@@ -116,9 +118,9 @@ def insert_request(record: dict) -> int:
         cur = conn.execute(
             """INSERT INTO requests
                (prompt_id, created_at, created_ms, backend, final_backend, gen_type,
-                workflow_name, graph_hash, graph_file, client_id, status, rule_trace, error)
+                workflow_name, model_name, graph_hash, graph_file, client_id, status, rule_trace, error)
                VALUES (:prompt_id, :created_at, :created_ms, :backend, :final_backend, :gen_type,
-                       :workflow_name, :graph_hash, :graph_file, :client_id, :status, :rule_trace, :error)""",
+                       :workflow_name, :model_name, :graph_hash, :graph_file, :client_id, :status, :rule_trace, :error)""",
             record,
         )
         conn.commit()
@@ -204,6 +206,90 @@ def cost_daily(days: int = 30) -> list[dict]:
         }
         for r in rows
     ]
+
+
+_COST_BREAKDOWN_KEYS = {
+    "workflow": "COALESCE(NULLIF(workflow_name, ''), '（未命名）')",
+    "model": "COALESCE(NULLIF(model_name, ''), '（未记录）')",
+}
+
+
+def cost_breakdown(by: str, days: int = 30, limit: int = 50) -> list[dict]:
+    """成本按维度聚合（报表 v2）：by ∈ {workflow, model}，按估算金额降序。"""
+    key_expr = _COST_BREAKDOWN_KEYS.get(by)
+    if key_expr is None:
+        raise ValueError(f"未知聚合维度: {by}")
+    cutoff_ms = int((time.time() - days * 86400) * 1000)
+    sql = (
+        f"SELECT {key_expr} AS key, COUNT(*) AS requests, "
+        "COALESCE(SUM(gpu_seconds), 0) AS gpu_seconds, COALESCE(SUM(est_cost_usd), 0) AS est_cost_usd "
+        f"FROM requests WHERE {_MODAL_COST_WHERE} AND created_ms >= ? "
+        "GROUP BY key ORDER BY est_cost_usd DESC LIMIT ?"
+    )
+    with _lock:
+        rows = _get_conn().execute(sql, (cutoff_ms, limit)).fetchall()
+    return [
+        {
+            "key": r["key"],
+            "requests": int(r["requests"]),
+            "gpu_seconds": round(float(r["gpu_seconds"]), 1),
+            "est_cost_usd": round(float(r["est_cost_usd"]), 5),
+        }
+        for r in rows
+    ]
+
+
+def cost_entries(days: int = 30, limit: int = 20000) -> list[dict]:
+    """逐条成本流水（CSV 导出用）：仅云端已入账请求，新→旧。"""
+    cutoff_ms = int((time.time() - days * 86400) * 1000)
+    sql = (
+        "SELECT created_at, workflow_name, model_name, gen_type, final_backend, status, "
+        "gpu_seconds, est_cost_usd, error FROM requests "
+        f"WHERE {_MODAL_COST_WHERE} AND created_ms >= ? ORDER BY id DESC LIMIT ?"
+    )
+    with _lock:
+        rows = _get_conn().execute(sql, (cutoff_ms, limit)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def cost_daily_utc(start_ms: int, end_ms: int) -> list[dict]:
+    """区间内逐日成本（UTC 日界，与 Modal 账单 report 的日粒度对齐，对账专用）。"""
+    sql = (
+        "SELECT date(created_ms / 1000, 'unixepoch') AS date, COUNT(*) AS requests, "
+        "COALESCE(SUM(gpu_seconds), 0) AS gpu_seconds, COALESCE(SUM(est_cost_usd), 0) AS est_cost_usd "
+        f"FROM requests WHERE {_MODAL_COST_WHERE} AND created_ms >= ? AND created_ms < ? "
+        "GROUP BY date ORDER BY date"
+    )
+    with _lock:
+        rows = _get_conn().execute(sql, (start_ms, end_ms)).fetchall()
+    return [
+        {
+            "date": r["date"],
+            "requests": int(r["requests"]),
+            "gpu_seconds": round(float(r["gpu_seconds"]), 1),
+            "est_cost_usd": round(float(r["est_cost_usd"]), 5),
+        }
+        for r in rows
+    ]
+
+
+def requests_missing_model(limit: int = 2000) -> list[dict]:
+    """无模型字段但有图快照的请求（启动回填用）：只取 id + graph_file。"""
+    with _lock:
+        rows = _get_conn().execute(
+            "SELECT id, graph_file FROM requests "
+            "WHERE model_name IS NULL AND graph_file IS NOT NULL LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def set_model_name(req_id: int, model_name: str | None) -> None:
+    with _lock:
+        _get_conn().execute(
+            "UPDATE requests SET model_name = ? WHERE id = ?", (model_name, req_id)
+        )
+        _get_conn().commit()
 
 
 def list_requests(limit: int = 50, backend: str | None = None, status: str | None = None) -> list[dict]:
@@ -311,6 +397,22 @@ async def arecord_cost(prompt_id: str, gpu_seconds: float, est_cost_usd: float) 
 
 async def asave_graph_snapshot(prompt_id: str, raw_body: bytes) -> tuple[str, str]:
     return await asyncio.to_thread(save_graph_snapshot, prompt_id, raw_body)
+
+
+async def acost_breakdown(by: str, days: int = 30, limit: int = 50) -> list[dict]:
+    return await asyncio.to_thread(cost_breakdown, by, days, limit)
+
+
+async def acost_entries(days: int = 30, limit: int = 20000) -> list[dict]:
+    return await asyncio.to_thread(cost_entries, days, limit)
+
+
+async def acost_totals(start_ms: int | None = None, end_ms: int | None = None) -> dict:
+    return await asyncio.to_thread(cost_totals, start_ms, end_ms)
+
+
+async def acost_daily_utc(start_ms: int, end_ms: int) -> list[dict]:
+    return await asyncio.to_thread(cost_daily_utc, start_ms, end_ms)
 
 
 def now_ms() -> int:

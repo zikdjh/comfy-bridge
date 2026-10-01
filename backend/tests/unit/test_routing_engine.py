@@ -177,3 +177,33 @@ def test_budget_not_exceeded_keeps_modal(patch_engine):
     assert d.final_backend == "modal"
     assert d.fallback is None
     assert all(t["rule"] != "budget_guardrail" for t in d.trace)
+
+
+# ---------------------------------------------------------------- extract_primary_model（成本报表按模型聚合口径）
+def test_extract_primary_model_prefers_checkpoint():
+    g = _graph(
+        {"class_type": "LoraLoader", "inputs": {"lora_name": "detail.safetensors"}},
+        {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "sd15.safetensors"}},
+        {"class_type": "VAELoader", "inputs": {"vae_name": "vae.pt"}},
+    )
+    assert engine.extract_primary_model(g) == "sd15.safetensors"
+
+
+def test_extract_primary_model_unet_then_refs_fallback():
+    assert engine.extract_primary_model(
+        _graph({"class_type": "UNETLoader", "inputs": {"unet_name": "flux.gguf"}})
+    ) == "flux.gguf"
+    # 无主权重节点时退回模型引用清单首个（如放大工作流只有 upscale 模型）
+    assert engine.extract_primary_model(
+        _graph({"class_type": "UpscaleModelLoader", "inputs": {"model_name": "4x-ultrasharp.pt"}})
+    ) == "4x-ultrasharp.pt"
+
+
+def test_extract_primary_model_none_cases():
+    assert engine.extract_primary_model({}) is None
+    assert engine.extract_primary_model(
+        _graph({"class_type": "SaveImage", "inputs": {"filename_prefix": "out"}})
+    ) is None
+    assert engine.extract_primary_model(
+        _graph({"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "None"}})
+    ) is None

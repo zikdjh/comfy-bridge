@@ -67,3 +67,62 @@ export function useUpdateBudget() {
     return updated;
   };
 }
+
+// —— 报表 v2（规划 §8.3）：按工作流/模型聚合 + 逐项账单对账 + CSV 导出 ——
+
+export interface CostReportRow extends CostBucket {
+  key: string; // 维度值：工作流名（未命名）或主模型文件名（未记录）
+  share: number; // 占总额比例 0~1
+}
+
+export interface CostReport {
+  by: "workflow" | "model";
+  days: number;
+  rows: CostReportRow[];
+  total_est_cost_usd: number;
+}
+
+export function useCostReport(by: "workflow" | "model", days: number) {
+  return useQuery({
+    queryKey: ["cost-report", by, days],
+    queryFn: ({ signal }) =>
+      apiGet<CostReport>(`/api/v1/cost/report?by=${by}&days=${days}`, signal),
+  });
+}
+
+export interface ReconciliationDailyPoint {
+  date: string; // YYYY-MM-DD（UTC 日界，与 Modal 账单口径一致）
+  local_requests: number;
+  local_usd: number;
+  modal_gpu_usd: number;
+  modal_total_usd: number;
+}
+
+export interface Reconciliation {
+  cycle: string;
+  local: CostBucket;
+  modal: {
+    ok: boolean;
+    error?: string;
+    gpu_usd?: number; // GPU 型号资源行的真实计量（与本地估算同口径）
+    total_usd?: number; // 全资源计量（含 CPU/内存/卷等）
+    resources?: Record<string, number>;
+    apps?: { name: string; usd: number }[];
+  };
+  daily: ReconciliationDailyPoint[];
+  ratio_gpu_vs_est: number | null; // Modal GPU ÷ 本地估算；持续偏离 1 说明单价需校准
+  note: string;
+}
+
+export function useCostReconciliation(cycle: string) {
+  return useQuery({
+    queryKey: ["cost-reconciliation", cycle],
+    queryFn: ({ signal }) =>
+      apiGet<Reconciliation>(`/api/v1/cost/reconciliation?cycle=${cycle}`, signal),
+  });
+}
+
+/** CSV 导出直链（Content-Disposition 附件下载；同源相对路径，dev 经 vite 代理）。 */
+export function costExportUrl(scope: "entries" | "workflow" | "model", days: number): string {
+  return `/api/v1/cost/export?scope=${scope}&days=${days}`;
+}
