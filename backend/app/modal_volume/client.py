@@ -29,6 +29,21 @@ from ..core.config import get_settings
 _EXE: str | None = None
 
 _SIZE_RE = re.compile(r"([\d.]+)\s*([KMGT]?i?B)", re.IGNORECASE)
+
+# CLI quirk：`volume ls --json` 的 filename 对非 ASCII 双重转义（\u98ce 以字面 backslash+u 落地），
+# json.loads 一次后仍是 "\\u98ce" 字面串；真实中文与 ASCII 名不受影响，仅名字含该模式时还原。
+_DOUBLE_ESCAPED = re.compile(r"\\u([0-9a-fA-F]{4})")
+
+
+def _unescape_cli_name(text: str) -> str:
+    if "\\u" not in text:
+        return text
+    try:
+        out = _DOUBLE_ESCAPED.sub(lambda m: chr(int(m.group(1), 16)), text)
+        out.encode("utf-8")  # 代理对拆出的孤立代理项在此失败 → 保留原样
+        return out
+    except (ValueError, OverflowError, UnicodeEncodeError):
+        return text
 _SIZE_UNITS = {
     "B": 1,
     "KB": 1024, "KIB": 1024,
@@ -141,7 +156,7 @@ async def list_dir(remote_path: str, volume: str | None = None) -> list[dict]:
         if not rel:
             continue
         entries.append({
-            "name": rel,
+            "name": _unescape_cli_name(rel),
             "type": item.get("type", "file"),
             "size": str(item.get("size", "")),
             "mtime": str(item.get("created_modified", "")),

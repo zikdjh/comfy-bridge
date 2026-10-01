@@ -189,3 +189,84 @@
 - M2-2 镜像固化：`nodes.lock.yaml` + `install_nodes.sh`（节点依赖预装进镜像，消除每次冷启动 pip 安装）+ 失败回滚
 - 版本对齐余项：对齐历史留痕；「对齐」与「节点依赖」合并为一次重建（M2-2 后自然合并）
 - 节点同步其余遗留见 §六待做（changed 内容哈希检测、node_presence 路由、反向同步提示等）
+
+## 九、M2-2 镜像固化（2026-10-01）
+
+### 变更范围
+
+- `backend/app/nodes_mgr/deploy.py`（新）— 共享 modal deploy 后台任务：单飞互斥
+  （`begin_exclusive` 409）、失败回滚回调注入、超时（1800s）保留新文件并标记不确定、
+  CLI 输出剥噪 tail。版本对齐与镜像固化共用一条部署通道，消除双 deploy 竞争
+- `backend/app/nodes_mgr/scan.py`（新）— `scan_custom_nodes` 从 api/v1/nodes 抽出复用
+- `backend/app/nodes_mgr/lockfile.py`（新）— `nodes.lock.yaml` 生成（本地扫描为权威：
+  启用+有 requirements 的包，依赖去注释逐条登记 + comfyui_version 取 pin；JSON 文本
+  = 合法 YAML 1.2 子集，不新增 pyyaml 依赖）+ `install_nodes.sh` 渲染（逐节点
+  `pip install`，set -e 严格失败）+ 备份/回滚
+- `modal-runner/runner.py` — 镜像末尾追加 `add_local_file(lock/install_nodes.sh, copy=True)`
+  + `run_commands("bash …")`：依赖预装进镜像且脚本变更不失效 ComfyUI 基础层缓存；
+  冷启动 pip 安装降级为兜底（覆盖卷模式新装/未固化节点）。**首次实测失败**：
+  modal 1.5.x `add_local_file` 默认 copy=False（运行时挂载，构建期不可见），按 CLI
+  提示改 `copy=True` 后成功——失败已被回滚机制兜住（锁/脚本自动还原）
+- `backend/app/api/v1/nodes.py` — `POST /nodes/image/rebuild`（409 部署进行中）；
+  `/nodes/version` 的 job 改为共享 deploy 状态（含 label）
+- 前端 — 差异矩阵 alert 新增「固化到镜像」按钮（Popconfirm 说明语义）；
+  顶部部署横幅改为显示共享 job 的 label（对齐/固化两种目的）
+- `backend/tests/unit/test_version_align.py` 迁移到共享 deploy 补丁目标（8 用例）+
+  `test_lockfile.py`（6 用例：requirements 解析/启用过滤/脚本渲染/JSON=YAML 往返/回滚）
+
+### 验证
+
+- [x] 单测 64 passed（+6 lockfile；版本对齐 8 用例迁移到共享 deploy 补丁目标）；ruff 新文件 0 错
+- [x] 真实固化：锁文件生成 `comfybridge-openai-image: requests, pillow` + 脚本渲染正确；
+  `POST /nodes/image/rebuild` 真机 deploy ok（copy=True 后）；手动 redeploy 输出确认
+  `install_nodes.sh` 已挂镜像层；云端冷启动 `/system_stats` = 0.38.0
+- [x] 浏览器：差异矩阵「固化到镜像」按钮渲染正常（截图 `m2_2_rebuild_button.png`）
+
+### 已知行为 / 待做
+
+- deploy 以子进程随后端存活：后端在 deploy 进行中被强杀会中断部署（云端状态不确定，
+  与超时同语义）；部署任务状态存内存，重启清零
+- 曾观测到 deploy 报 ok 后应用从 workspace 消失（endpoint invalid function call），
+  手动 redeploy 恢复——疑似 deploy 收尾期后端被强杀所致；如复现按「重新固化/对齐」自愈
+- M2-2 余项：失败回滚自动化已做，nodes.lock 与版本 pin 的合并重建入口仍分开（共用 deploy 通道）
+
+## 十、M2-4 工作流双向同步（2026-10-01）
+
+### 变更范围
+
+- `backend/app/sync/workflows_rules.py`（新）— 三方检测纯逻辑：仅本地/仅云端/
+  两端一致/基线判单边改/冲突（基线缺失或双边都改）；冲突副本命名 `x.conflict-<ts>.json`
+- `backend/app/sync/workflows_sync.py`（新）— 本地 `user/default/workflows/`（hash）×
+  数据卷同名目录（volume ls + 逐文件 get 计 hash，免容器）× last-synced 基线
+  （存 `~/.comfybridge/workflows_state.json`，不污染 ComfyUI 工作流目录）；
+  `status()` 读取时顺带刷新 synced 行基线；`apply()` 单飞互斥执行 push/pull/keep_both
+  （keep_both = 云端版拉为本地冲突副本 + 本地版推上云端）；**v1 边界：删除不传播**
+  （仅本地的文件会重新推回云端，防误清卷）
+- `backend/app/api/v1/workflows.py` — `GET /workflows/sync`（矩阵）+ `POST /workflows/sync`（actions）
+- `backend/app/modal_volume/client.py` — 修复 CLI quirk：`volume ls --json` 的 filename
+  对非 ASCII **双重转义**（解析后仍是字面 `\u98ce`，中文文件名全部失效），
+  `list_dir` 出口 `_unescape_cli_name` 还原（模型列表/卷浏览同样受益）；
+  `volume get` 补 `--force`（pull 目标已存在时 CLI 默认拒绝覆盖）
+- 前端 — 工作流页「同步状态」tab 从静态示例数据换为真实矩阵：文件/两端 hash/状态
+  （仅本地、仅云端、本地已改、云端已改、冲突）/逐行动作（推送到云端、拉取到本地、
+  冲突三选：推本地版|推云端版|保留双副本）+「一键同步」（冲突行除外）；「运行统计」
+  保留示例并标注 v2
+- `backend/tests/unit/test_workflows_sync.py`（11 用例：三方检测矩阵/无基线冲突/
+  单向新增/基线刷新/apply 三动作/文件名校验/假卷回放）+ `test_modal_volume_client.py`（3 用例）
+
+### 验证
+
+- [x] 单测 **78 passed**（+11 workflows +3 volume quirk）；ruff 新文件 0 错（client.py UP041 为基线遗留）；`tsc` + `vite build` 0 错
+- [x] 真实卷周期探针 `tmp/probe_wf_sync.py` **13/13**：本地改→local_changed→push→synced；
+  只改云端→cloud_changed→pull（内容实拉回本地）→synced；双边改→conflict→keep_both
+  （云端版留 `cb-sync-probe.conflict-<ts>.json`、本地版推上云端）→synced；探针已清理
+- [x] 真实工作流上卷：2 个 krea2 工作流 push 后两端 hash 一致（`3c77ce08`/`01efc2c8`），
+  状态 synced；中文名经 unescape 修复后正确显示
+- [x] 浏览器：工作流页同步矩阵真实数据渲染（截图 `m2_4_workflow_sync_matrix.png`），
+  节点页差异矩阵与固化按钮正常（`m2_2_rebuild_button.png`）
+
+### 待做 / 后续
+
+- 冲突的「双列对比视图」（原占位按钮的另一半）与运行统计聚合（v2 报表）
+- 删除传播策略（本地删/云端删的双向 tombstone）——v1 有意不做，防误删
+- M2 全景收尾：node_presence 路由规则（M3 表内）与反向同步提示仍待做

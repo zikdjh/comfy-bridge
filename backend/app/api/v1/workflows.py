@@ -1,7 +1,9 @@
-"""GET /api/v1/workflows/local —— 本地工作流检测。
+"""工作流 API：本地清单 + 双向同步（M2-4）。
 
-Desktop 版工作流以 JSON 文件保存在 user/default/workflows/；
-SQLite(comfyui.db) 是资产(assets)系统，不含工作流，此处只读探测并报告。
+- GET  /workflows/local         本地工作流检测（user/default/workflows/ 只读探测）
+- GET  /workflows/sync          同步矩阵：本地⇄数据卷 user/default/workflows/ 三方检测
+                                （last-synced 基线 hash，冲突/变更分类，见 sync/workflows_rules）
+- POST /workflows/sync          执行动作 push/pull/keep_both（keep_both = 冲突双副本）
 """
 
 from __future__ import annotations
@@ -12,10 +14,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter
+from pydantic import BaseModel
 
 from ...core.config import get_settings, workflows_dir
+from ...sync import workflows_sync
 
 router = APIRouter()
+
+
+class SyncActionsBody(BaseModel):
+    actions: list[dict]
 
 
 def _short_hash(path: Path) -> str:
@@ -71,3 +79,15 @@ async def workflows_local() -> dict:
         "workflows": items,
         "assets_db": _probe_assets_db(),
     }
+
+
+@router.get("/workflows/sync")
+async def workflows_sync_status() -> dict:
+    """本地 ⇄ 云端数据卷 工作流同步矩阵（三方检测，读取时顺带刷新基线）。"""
+    return await workflows_sync.status()
+
+
+@router.post("/workflows/sync")
+async def workflows_sync_apply(body: SyncActionsBody) -> dict:
+    """执行同步动作：[{name, action}]，action ∈ push|pull|keep_both。"""
+    return await workflows_sync.apply(body.actions)
