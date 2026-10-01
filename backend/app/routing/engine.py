@@ -167,12 +167,14 @@ def decide(
     models: dict | None = None,
     budget: dict | None = None,
     presence: dict | None = None,
+    cloud_active: int | None = None,
 ) -> Decision:
     """models: 模型引用归属 {"cloud_only": [...], "missing": [...]}（由调用方按本地/云端索引判定）。
     budget: 预算护栏现状 {"exceeded": bool, "used_usd": float, "monthly_usd": float}
     （cost.budget_state()，由调用方在决策前计算；None = 未启用/未采集）。
     presence: 节点 class 在场 {"local": set|None, "cloud": set|None}（models_mgr.node_presence
-    快照；None/空集合 = 缓存未就绪，对应规则跳过并留痕）。"""
+    快照；None/空集合 = 缓存未就绪，对应规则跳过并留痕）。
+    cloud_active: 在途云端任务数（store.count_active_modal；None = 不启用并发护栏判定）。"""
     settings = get_settings().bridge
     trace: list[dict] = []
 
@@ -297,6 +299,16 @@ def decide(
             )
             final_backend = "local"
         trace.append({"rule": "budget_guardrail", "matched": True, "detail": fallback, "target": final_backend or None})
+    elif decision == "modal" and settings.max_cloud_concurrent > 0 and (cloud_active or 0) >= settings.max_cloud_concurrent:
+        # 并发护栏（M4-1 收尾）：满载视为通道暂不可用，复用 on_modal_unavailable 策略
+        cap = settings.max_cloud_concurrent
+        if settings.on_modal_unavailable == "reject":
+            fallback = f"云端在途任务 {cloud_active} 已达并发上限 {cap}，on_modal_unavailable=reject 拒绝执行"
+            final_backend = ""  # 拒绝执行，不落地
+        else:
+            fallback = f"云端在途任务 {cloud_active} 已达并发上限 {cap}，按 on_modal_unavailable=fallback_local 回落本地"
+            final_backend = "local"
+        trace.append({"rule": "concurrency_guardrail", "matched": True, "detail": fallback, "target": final_backend or None})
     elif decision == "modal" and not modal_available():
         if settings.on_modal_unavailable == "reject":
             fallback = "Modal 通道不可用且 on_modal_unavailable=reject"

@@ -59,6 +59,10 @@ class BridgeConfig(BaseModel):
     gpu_hourly_rate_usd: float = 1.95  # GPU 单价（$/容器·小时，随 Modal 价格在设置页更新）
     monthly_budget_usd: float = 0.0    # 月度预算上限（$），0 = 不启用护栏
     on_budget_exceed: str = "fallback_local"  # fallback_local | reject
+    # 云端最大并发护栏（M4-1 收尾）：在途云端任务（final_backend=modal 且 queued/running）
+    # 达到上限时，决策目标 modal 的请求按 on_modal_unavailable 策略回落本地或拒绝；0 = 不限制。
+    # 计数源 logs/store.count_active_modal；保守护栏（计数与入队无事务，±1 竞态可容忍）。
+    max_cloud_concurrent: int = 0
     # —— 自定义路由规则链（M3，规划文档 §3.1）——
     # 空列表 = 沿用内置 gen_type/size 规则（历史行为不变）；非空 = 自定义链按序求值并
     # 替换内置那两条；manual/tag/cloud_model/default 四步固定不参与 CRUD。

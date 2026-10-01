@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from ... import cost as cost_svc
 from ...core.config import get_settings
+from ...logs import store
 from ...models_mgr import node_presence
 from ...routing.engine import RULE_KINDS, classify_graph, decide, validate_rules
 from .config import update_bridge_section
@@ -44,12 +45,14 @@ async def routing_preview(body: dict) -> dict:
     node_presence.kick_refresh_if_stale()  # node_missing_* 规则的数据源保鲜（后台，不阻塞干跑）
     presence = node_presence.snapshot()
     budget = await cost_svc.abudget_state()
+    cloud_active = await store.acount_active_modal()  # 并发护栏现状（干跑如实呈现）
     decision = decide(
         facts,
         workflow_name=workflow_name,
         manual_backend=manual_backend,
         budget=budget,
         presence=presence,
+        cloud_active=cloud_active,
     )
     p_total = len(presence["local"]) + len(presence["cloud"])
     return {
@@ -58,6 +61,7 @@ async def routing_preview(body: dict) -> dict:
         "final_backend": decision.final_backend,
         "fallback": decision.fallback,
         "budget": budget,
+        "cloud_active": cloud_active,
         "presence": {"ready": p_total > 0, "local": len(presence["local"]), "cloud": len(presence["cloud"]),
                      "error": node_presence.last_error()},
         "trace": decision.trace,

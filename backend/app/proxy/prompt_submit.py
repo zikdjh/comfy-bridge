@@ -78,6 +78,7 @@ async def handle_prompt_submit(request: Request) -> Response:
         models={"cloud_only": cloud_only, "missing": missing},
         budget=budget,
         presence=node_presence.snapshot(),
+        cloud_active=await store.acount_active_modal(),  # 并发护栏计数（本请求尚未入库，不含自身）
     )
     if decision.backend == "modal" and budget.get("exceeded"):
         # 超限告警：护栏已把请求拉回本地/拒绝，控制台与 trace 双留痕（M4-1「并通知」）

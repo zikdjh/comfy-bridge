@@ -271,3 +271,22 @@ async def test_afull_summary_includes_modal(monkeypatch, tmp_db):
     data = await cost_svc.afull_summary()
     assert data["modal"]["ok"] is True and data["modal"]["metered_cost_usd"] == 5.97
     assert "budget" in data and "daily" in data  # 本地汇总不受账单子进程影响
+
+
+def test_count_active_modal(tmp_db):
+    """并发护栏计数源：final_backend=modal 且非终态才计入；回退/本地/终态均不算。"""
+    base = {"created_at": store.now_iso(), "created_ms": store.now_ms(), "gen_type": "image",
+            "workflow_name": None, "graph_hash": "h", "graph_file": "", "client_id": None,
+            "rule_trace": None, "error": None}
+    rows = [
+        {"prompt_id": "p1", "backend": "modal", "final_backend": "modal", "status": "queued", **base},
+        {"prompt_id": "p2", "backend": "modal", "final_backend": "modal", "status": "running", **base},
+        {"prompt_id": "p3", "backend": "modal", "final_backend": "local", "status": "queued", **base},  # 已回退
+        {"prompt_id": "p4", "backend": "local", "final_backend": "local", "status": "running", **base},
+        {"prompt_id": "p5", "backend": "modal", "final_backend": "modal", "status": "done", **base},
+    ]
+    for r in rows:
+        store.insert_request(r)
+    assert store.count_active_modal() == 2
+    store.update_status("p1", "done")
+    assert store.count_active_modal() == 1

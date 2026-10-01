@@ -12,6 +12,7 @@ class _Bridge:
         self.default_backend = kw.get("default_backend", "local")
         self.on_modal_unavailable = kw.get("on_modal_unavailable", "fallback_local")
         self.on_budget_exceed = kw.get("on_budget_exceed", "fallback_local")
+        self.max_cloud_concurrent = kw.get("max_cloud_concurrent", 0)
 
 
 class _Settings:

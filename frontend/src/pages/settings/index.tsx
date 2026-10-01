@@ -72,6 +72,7 @@ export default function SettingsPage() {
     execForm.setFieldsValue({ volume: config.modal.volume });
     guardForm.setFieldsValue({
       onModalUnavailable: config.bridge.on_modal_unavailable,
+      maxConcurrent: config.bridge.max_cloud_concurrent,
       taskTimeout: config.modal.task_timeout,
       monthlyBudgetUsd: config.bridge.monthly_budget_usd,
       onBudgetExceed: config.bridge.on_budget_exceed,
@@ -155,6 +156,7 @@ export default function SettingsPage() {
     monthlyBudgetUsd: number | null;
     onBudgetExceed: string;
     rateUsd: number | null;
+    maxConcurrent: number | null;
   }) => {
     try {
       await saveConfig({
@@ -163,6 +165,7 @@ export default function SettingsPage() {
           monthly_budget_usd: values.monthlyBudgetUsd ?? 0,
           on_budget_exceed: values.onBudgetExceed,
           gpu_hourly_rate_usd: values.rateUsd ?? 1.95,
+          max_cloud_concurrent: values.maxConcurrent ?? 0,
         },
         modal: { task_timeout: values.taskTimeout ?? 3600 },
       });
@@ -443,7 +446,7 @@ export default function SettingsPage() {
                   type="info"
                   showIcon
                   style={{ maxWidth: 640 }}
-                  message="「云端不可用动作」「单次运行超时」与「月度预算护栏」均已生效：预算按本月云端估算花费（单价 × 请求墙钟秒数）判定，超限请求自动回落本地或拒绝；使用曲线与快捷设置见仪表盘「额度与成本」卡片。云端最大并发护栏仍规划中。"
+                  message="「云端不可用动作」「单次运行超时」与「月度预算护栏」均已生效：预算按本月云端估算花费（单价 × 请求墙钟秒数）判定，超限请求自动回落本地或拒绝；使用曲线与快捷设置见仪表盘「额度与成本」卡片。云端最大并发护栏已生效：在途云端任务（排队/执行中）达到上限时，按「云端不可用动作」回落本地或拒绝。"
                 />
                 <Form
                   layout="vertical"
@@ -493,8 +496,12 @@ export default function SettingsPage() {
                   >
                     <InputNumber min={0.01} step={0.05} prefix="$" style={{ width: 160 }} />
                   </Form.Item>
-                  <Form.Item label="云端最大并发数" name="maxConcurrent" initialValue={2} extra="规划中：执行通道接入后生效">
-                    <InputNumber min={1} max={10} disabled />
+                  <Form.Item
+                    label="云端最大并发数"
+                    name="maxConcurrent"
+                    extra="0 = 不限制；在途云端任务（排队/执行中）达到上限时按「云端不可用动作」处理"
+                  >
+                    <InputNumber min={0} max={10} style={{ width: 160 }} />
                   </Form.Item>
                   <Button type="primary" htmlType="submit">保存</Button>
                 </Form>

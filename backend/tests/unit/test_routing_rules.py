@@ -150,3 +150,42 @@ def test_dump_toml_roundtrips_rules_list_of_dicts():
     data = tomllib.loads(text)
     assert data["bridge"]["rules"] == [rule]
     assert data["bridge"]["extra_launch_args"] == ["--fast"]
+
+
+# ---------------------------------------------------------------- 并发护栏（M4-1 收尾）
+
+def test_decide_concurrency_guardrail_falls_back(monkeypatch):
+    _patch_bridge(monkeypatch, max_cloud_concurrent=2, default_backend="modal")
+    d = engine.decide(_facts("image"), cloud_active=2)
+    assert d.backend == "modal" and d.final_backend == "local"
+    row = d.trace[-1]
+    assert row["rule"] == "concurrency_guardrail" and "已达并发上限 2" in row["detail"]
+
+
+def test_decide_concurrency_guardrail_rejects(monkeypatch):
+    _patch_bridge(monkeypatch, max_cloud_concurrent=1, on_modal_unavailable="reject", default_backend="modal")
+    d = engine.decide(_facts("image"), cloud_active=1)
+    assert d.final_backend == ""  # 拒绝执行
+    assert "拒绝执行" in (d.fallback or "")
+
+
+def test_decide_concurrency_below_cap_and_disabled(monkeypatch):
+    _patch_bridge(monkeypatch, max_cloud_concurrent=2, default_backend="modal")
+    d = engine.decide(_facts("image"), cloud_active=1)
+    assert not any(t["rule"] == "concurrency_guardrail" for t in d.trace)
+
+    _patch_bridge(monkeypatch, max_cloud_concurrent=0, default_backend="modal")  # 0 = 不限制
+    d = engine.decide(_facts("image"), cloud_active=99)
+    assert not any(t["rule"] == "concurrency_guardrail" for t in d.trace)
+
+    _patch_bridge(monkeypatch, max_cloud_concurrent=2, default_backend="modal")
+    d = engine.decide(_facts("image"), cloud_active=None)  # 调用方未采集 = 不判定
+    assert not any(t["rule"] == "concurrency_guardrail" for t in d.trace)
+
+
+def test_decide_budget_guard_dominates_concurrency(monkeypatch):
+    _patch_bridge(monkeypatch, max_cloud_concurrent=1, monthly_budget_usd=10, default_backend="modal")
+    d = engine.decide(_facts("image"), cloud_active=5,
+                      budget={"exceeded": True, "used_usd": 12.0, "monthly_usd": 10.0})
+    rules_seen = [t["rule"] for t in d.trace]
+    assert "budget_guardrail" in rules_seen and "concurrency_guardrail" not in rules_seen  # 预算先行

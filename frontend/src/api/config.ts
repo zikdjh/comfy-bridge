@@ -17,6 +17,7 @@ export interface BridgeConfigDto {
   gpu_hourly_rate_usd: number;
   monthly_budget_usd: number;
   on_budget_exceed: string;
+  max_cloud_concurrent: number;
 }
 
 /** Modal 认证与执行参数：secret 只回显脱敏值，明文仅保存时提交一次 */

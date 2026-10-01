@@ -241,6 +241,19 @@ def count_requests(backend: str | None = None, status: str | None = None) -> int
     return n
 
 
+def count_active_modal() -> int:
+    """在途云端任务数：final_backend=modal 且尚未终态（queued/running）——并发护栏计数源。
+
+    用 final_backend 而非 backend：护栏/可用性回退会把 final 改成本地，这类请求不占云端槽位。
+    保守护栏：决策（计数）与入队（落库）之间无事务，±1 竞态可容忍。
+    """
+    with _lock:
+        (n,) = _get_conn().execute(
+            "SELECT COUNT(*) FROM requests WHERE final_backend = 'modal' AND status IN ('queued', 'running')"
+        ).fetchone()
+    return n
+
+
 def get_request(req_id: int) -> dict | None:
     with _lock:
         row = _get_conn().execute("SELECT * FROM requests WHERE id = ?", (req_id,)).fetchone()
@@ -282,6 +295,10 @@ def save_graph_snapshot(prompt_id: str, raw_body: bytes) -> tuple[str, str]:
 
 async def ainsert_request(record: dict) -> int:
     return await asyncio.to_thread(insert_request, record)
+
+
+async def acount_active_modal() -> int:
+    return await asyncio.to_thread(count_active_modal)
 
 
 async def aupdate_status(prompt_id: str, status: str, error: str | None = None) -> None:

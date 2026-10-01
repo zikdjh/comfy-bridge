@@ -387,3 +387,33 @@
   966 class」（截图 `tmp/gui-test-screenshots/m3_2_node_presence_rule.png`）；测试后恢复空链。
 - 运维注意：后端启动时若本地 ComfyUI 未运行，local 侧记错保留空集，等 TTL 或调
   `POST /nodes/presence/refresh`（本地起来后）补齐——实测过该路径。
+
+## 十四、云端最大并发护栏（M4-1 收尾 · 2026-10-01）
+
+### 语义
+- `bridge.max_cloud_concurrent`（默认 0 = 不限制）：在途云端任务（final_backend=modal 且
+  queued/running）达到上限时，决策目标 modal 的请求按既有「云端不可用动作」
+  （on_modal_unavailable）回落本地或拒绝；trace 行 `concurrency_guardrail`。
+- 求值顺序：预算护栏 → 并发护栏 → 通道可用性（超预算优先于满载，均优先于健康检查）。
+- 计数源 `store.count_active_modal`：用 final_backend 而非 backend（回退请求不占云端槽位）。
+  保守护栏——决策计数与入队落库之间无事务，±1 竞态可容忍（真机验证走干跑呈现）。
+
+### 改动
+- `backend/app/logs/store.py`：`count_active_modal()` + `acount_active_modal()`。
+- `backend/app/core/config.py`：`BridgeConfig.max_cloud_concurrent`。
+- `backend/app/routing/engine.py`：decide() 新增 `cloud_active` 参数与护栏分支。
+- `backend/app/proxy/prompt_submit.py` / `api/v1/routing.py`：决策前计数传入
+  （本请求尚未入库，不含自身）；preview 响应新增 `cloud_active`。
+- `frontend/src/api/config.ts` + `pages/settings/index.tsx`：护栏 tab 占位字段转正
+  （0=不限制 InputNumber，接 saveGuard 真实保存），说明文案更新。
+
+### 验证
+- 单测 `uv run pytest tests/unit -q` → **109 passed**（新增 5 例：超限回落/拒绝、
+  未达限与 0=关闭与未采集均不触发、预算护栏优先级；store 计数只认 final_backend=modal
+  非终态——回退/本地/终态行均排除；存量 test_routing_engine 的 _Bridge 桩补新字段）。
+- ruff 改动文件与 stash 基线一致（14 个全存量）；tsc 0 错 + vite build 8.1s。
+- 真机闭环（8189）：设上限 1 → 伪造一条 queued 云端任务 → 干跑 manual=modal 出现
+  `concurrency_guardrail`（"云端在途任务 1 已达并发上限 1"）且 final=local → 任务置 cancelled
+  后护栏解除 → 配置恢复 0。注意：护栏只对决策目标为 modal 的请求生效（默认 local 的
+  请求本就不上云，第一轮探针未触发属预期）。
+- 浏览器：设置 → 护栏与预算 tab 字段/说明/顶部提示三处渲染确认（value=0 恢复态）。
