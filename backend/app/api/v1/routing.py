@@ -1,12 +1,19 @@
-"""路由决策 API：干跑预览（规划文档 §3.1 POST /api/routing/preview）。"""
+"""路由决策 API：干跑预览 + 自定义规则链 CRUD（规划文档 §3.1 / M3）。
+
+规则链语义见 routing/engine.py 模块注释：manual/tag/cloud_model/default 固定，
+bridge.rules 自定义链非空时替换内置 gen_type/size 两步。CRUD 用集合级
+GET/PUT（整链替换），行级增删改由设置页在内存完成后一次提交。
+"""
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ... import cost as cost_svc
-from ...routing.engine import classify_graph, decide
+from ...core.config import get_settings
+from ...routing.engine import RULE_KINDS, classify_graph, decide, validate_rules
+from .config import update_bridge_section
 
 router = APIRouter(prefix="/routing", tags=["routing"])
 
@@ -16,6 +23,10 @@ class RoutingPreviewBody(BaseModel):
     prompt: dict | None = None
     workflow_name: str | None = None
     manual_backend: str | None = None
+
+
+class RoutingRulesBody(BaseModel):
+    rules: list[dict]
 
 
 @router.post("/preview")
@@ -39,3 +50,28 @@ async def routing_preview(body: dict) -> dict:
         "budget": budget,
         "trace": decision.trace,
     }
+
+
+@router.get("/rules")
+async def read_rules() -> dict:
+    """当前自定义规则链 + 类型注册表 + 按现行内置设置给出的种子建议（供前端一键生成）。"""
+    bridge = get_settings().bridge
+    suggest: dict = {
+        "gen_type": {"kind": "gen_type", "params": {"gen_type": "video"},
+                     "target": bridge.video_backend if bridge.video_backend in ("local", "modal") else "modal",
+                     "name": "视频上云"},
+    }
+    if bridge.large_side_pixels > 0:
+        suggest["min_pixels"] = {"kind": "min_pixels", "params": {"pixels": bridge.large_side_pixels},
+                                 "target": "modal", "name": "大分辨率上云"}
+    return {"rules": [r.model_dump() for r in bridge.rules], "kinds": RULE_KINDS, "suggest": suggest}
+
+
+@router.put("/rules")
+async def write_rules(body: RoutingRulesBody) -> dict:
+    """整链替换自定义规则（先全量校验再落盘，非法即 422，不落半套）。"""
+    try:
+        cleaned = validate_rules(body.rules)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return update_bridge_section({"rules": cleaned})

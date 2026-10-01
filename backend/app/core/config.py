@@ -33,6 +33,21 @@ class LocalConfig(BaseModel):
     launch_command: list[str] = []
 
 
+class RoutingRule(BaseModel):
+    """自定义路由规则（bridge.rules，M3）。
+
+    宽松模型：结构校验在 API 层（routing.engine.validate_rules），引擎对未知
+    kind/目标一律跳过并留痕——config.toml 被手编坏值不至于毒化整个决策链。
+    """
+
+    id: str = ""
+    name: str = ""
+    kind: str = ""  # workflow_tag | gen_type | min_pixels（见 routing.engine.RULE_KINDS）
+    params: dict[str, object] = {}
+    target: str = ""  # local | modal
+    enabled: bool = True
+
+
 class BridgeConfig(BaseModel):
     listen: str = "127.0.0.1:8189"
     # 路由规则（§3.1）：default 规则兜底 / 视频类请求目标 / 大分辨率阈值（0=关闭）/ Modal 不可用策略
@@ -44,6 +59,10 @@ class BridgeConfig(BaseModel):
     gpu_hourly_rate_usd: float = 1.95  # GPU 单价（$/容器·小时，随 Modal 价格在设置页更新）
     monthly_budget_usd: float = 0.0    # 月度预算上限（$），0 = 不启用护栏
     on_budget_exceed: str = "fallback_local"  # fallback_local | reject
+    # —— 自定义路由规则链（M3，规划文档 §3.1）——
+    # 空列表 = 沿用内置 gen_type/size 规则（历史行为不变）；非空 = 自定义链按序求值并
+    # 替换内置那两条；manual/tag/cloud_model/default 四步固定不参与 CRUD。
+    rules: list[RoutingRule] = []
 
 
 class ModalConfig(BaseModel):

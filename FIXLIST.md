@@ -312,3 +312,40 @@
   无凭证 401 / 错 secret 401 / 正确凭证 200 / WS 握手 + status 事件推送，
   桥接器 health `online: true`（Runner 通道就绪，云端模型索引 8 项）；
   executor 加 compression=None 后单测 8 passed、后端重启加载生效。
+
+## 十二、M3-1 路由规则 CRUD（2026-10-01）
+
+### 语义（规划文档 §3.1 的数据化落地）
+- 固定链不参与 CRUD：`manual → tag → cloud_model → default`（显式指定/安全/兜底）。
+- 自定义链 `bridge.rules`：**空列表 = 完全沿用内置 gen_type/size 规则（历史行为零迁移）**；
+  非空时插在 cloud_model 与 default 之间按序求值、首条命中生效，并替换内置那两条。
+- 规则类型（`routing.engine.RULE_KINDS`）：`workflow_tag`（工作流名前缀，不区分大小写）、
+  `gen_type`（video/image）、`min_pixels`（图最大边阈值）。校验在 API 层（validate_rules，
+  非法 422 整链不落）；引擎对未知 kind/坏参数一律跳过并留痕（手编 config.toml 不致命）。
+
+### 改动
+- `backend/app/core/config.py`：`RoutingRule` 宽松模型 + `BridgeConfig.rules`。
+- `backend/app/routing/engine.py`：RULE_KINDS 注册表 + validate_rules + decide() 自定义链求值
+  （trace 行 `custom:<名称或类型>`，停用/未知类型均有留痕步骤）。
+- `backend/app/api/v1/routing.py`：`GET/PUT /api/v1/routing/rules`（集合级整链替换；
+  GET 附 kinds 注册表与按现行内置设置的种子建议）。落盘复用 config.update_bridge_section。
+- `backend/app/api/v1/config.py`：**修复 `_dump_toml` 存量 bug**——list 内的 dict 元素被
+  toml_str 当字符串转义（Python repr 落盘），回读即 ValidationError 毒化整个配置；改为递归
+  render（dict → TOML 内联表）。此 bug 此前未触发只因列表里只存过字符串。
+- `frontend/src/api/routing.ts` + `pages/routing/index.tsx`：路由页左侧改为「固定规则表 +
+  可编辑自定义链」（启用开关/名称/类型/动态条件参数/目标/上移下移删除/保存）；
+  空链时显示内置两条并附「按当前内置设置生成」种子按钮；干跑预览器不变。
+
+### 验证
+- 单测 `uv run pytest tests/unit -q` → **96 passed**（新增 test_routing_rules.py 10 例：
+  校验器形状矩阵、空链兼容内置链、首条命中、停用/未知类型跳过、min_pixels 阈值边界、
+  default 兜底、cloud_model 先于自定义链、_dump_toml 规则列表回环）。
+- ruff 改动文件与 stash 基线一致（engine.py 仅存量 SIM114）；tsc 0 错 + vite build 5.9s。
+- API 冒烟（真机 8189）：PUT 一条 workflow_tag 链 → GET 回读一致 → 干跑 `gpu:*` 命中
+  `custom:显卡工作流上云` 决策 modal、普通名走 default → 非法 kind 422 → 恢复空链。
+- 浏览器 E2E：路由页编辑器渲染、按内置设置生成、保存成功提示、贴 VHS 视频图干跑 trace 出现
+  `custom:视频上云` 命中 + 最终决策云端（截图 `tmp/gui-test-screenshots/m3_1_routing_rules_editor.png`）；
+  测试后删行保存恢复空链（GET 确认 0 条）。
+- 期间事故与自愈：首次 PUT 触发上述 `_dump_toml` bug，坏行写进 config.toml 致后端整体 500；
+  修复渲染器 + 手工移除坏行 + 重启恢复，并补回环单测防复发。
+- 待办（M3 余项）：node_presence 路由规则（需本地/云端节点 class 差异的持久化缓存）。

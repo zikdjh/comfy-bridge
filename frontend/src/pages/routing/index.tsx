@@ -1,28 +1,36 @@
-import { useState } from "react";
-import { Alert, Button, Card, Col, Input, Row, Select, Space, Steps, Table, Tag, Typography, message } from "antd";
+import { useEffect, useState } from "react";
+import {
+  Alert, Button, Card, Col, Divider, Input, InputNumber, Row, Select, Space, Steps, Switch, Table, Tag,
+  Typography, message,
+} from "antd";
+import { ArrowDownOutlined, ArrowUpOutlined, DeleteOutlined, PlusOutlined, SaveOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { BackendTag, type Backend } from "../../components/common/BackendTag";
 import { EmptyGuide } from "../../components/common/EmptyGuide";
 import { apiSend } from "../../api/client";
 import { useLocalWorkflows } from "../../api/workflows";
+import { useRoutingRules, useSaveRoutingRules, type RuleRow, type RuleKindInfo } from "../../api/routing";
 
-// 与后端 routing/engine.py 内置规则链一一对应（M2 计划 DB 化 CRUD，此页先只读展示）
+// 固定规则（不参与 CRUD，决策链两端的安全与兜底步骤）
 interface BuiltinRule {
   rule: string;
   condition: string;
   target: string;
 }
 
-const builtinRules: BuiltinRule[] = [
+const fixedRules: BuiltinRule[] = [
   { rule: "manual", condition: "提交方显式指定（x-bridge-backend 头或 bridge_backend 元数据）", target: "manual_backend" },
   { rule: "tag", condition: "工作流名 cloud: 前缀", target: "modal" },
   { rule: "cloud_model", condition: "引用云端专有模型（本地无副本）", target: "modal" },
-  { rule: "gen_type", condition: "视频类输出节点 → video_backend（默认 modal）", target: "video_backend" },
-  { rule: "size", condition: "图最大边 ≥ large_side_pixels（0 = 关闭）", target: "modal" },
-  { rule: "default", condition: "以上均未命中 → default_backend 兜底", target: "default_backend" },
 ];
 
-const ruleColumns: ColumnsType<BuiltinRule> = [
+// rules 为空时仍然生效的内置规则（历史行为；保存自定义链后被替换）
+const legacyRules: BuiltinRule[] = [
+  { rule: "gen_type", condition: "视频类输出节点 → video_backend（设置 → 护栏与预算）", target: "video_backend" },
+  { rule: "size", condition: "图最大边 ≥ large_side_pixels（0 = 关闭）", target: "modal" },
+];
+
+const fixedColumns: ColumnsType<BuiltinRule> = [
   { title: "#", key: "i", width: 44, render: (_v, _r, i) => i + 1 },
   { title: "规则", dataIndex: "rule", width: 110, render: (r: string) => <Tag>{r}</Tag> },
   { title: "条件", dataIndex: "condition" },
@@ -59,11 +67,65 @@ interface PreviewResp {
 
 export default function RoutingPage() {
   const { data: wf } = useLocalWorkflows();
+  const { data: rulesResp } = useRoutingRules();
+  const saveRules = useSaveRoutingRules();
+
+  const [rows, setRows] = useState<RuleRow[] | null>(null);
+  const [saving, setSaving] = useState(false);
   const [workflow, setWorkflow] = useState<string | undefined>();
   const [graphJson, setGraphJson] = useState("");
   const [manual, setManual] = useState<string | undefined>();
   const [running, setRunning] = useState(false);
   const [preview, setPreview] = useState<PreviewResp | null>(null);
+
+  // 服务端数据到达/刷新后同步本地编辑副本（params 浅拷贝，避免直接改缓存）
+  useEffect(() => {
+    if (rulesResp) setRows(rulesResp.rules.map((r) => ({ ...r, params: { ...r.params } })));
+  }, [rulesResp]);
+
+  const kinds: Record<string, RuleKindInfo> = rulesResp?.kinds ?? {};
+  const suggest = rulesResp?.suggest ?? {};
+  const customRules = rows ?? [];
+
+  const updateRow = (idx: number, patch: Partial<RuleRow>) =>
+    setRows((rs) => (rs ?? []).map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  const updateParam = (idx: number, key: string, val: unknown) =>
+    setRows((rs) => (rs ?? []).map((r, i) => (i === idx ? { ...r, params: { ...r.params, [key]: val } } : r)));
+
+  const addRow = () =>
+    setRows((rs) => [
+      ...(rs ?? []),
+      { id: "", name: "", kind: "workflow_tag", params: { prefix: "" }, target: "modal", enabled: true },
+    ]);
+
+  const seedFromSettings = () =>
+    setRows((rs) => [
+      ...(rs ?? []),
+      ...Object.values(suggest).map((s) => ({
+        id: "", name: s.name, kind: s.kind, params: { ...s.params }, target: s.target, enabled: true,
+      })),
+    ]);
+
+  const move = (idx: number, delta: -1 | 1) =>
+    setRows((rs) => {
+      const next = [...(rs ?? [])];
+      const j = idx + delta;
+      if (j < 0 || j >= next.length) return next;
+      [next[idx], next[j]] = [next[j], next[idx]];
+      return next;
+    });
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await saveRules(customRules);
+      message.success("规则链已保存并热生效（空列表 = 沿用内置视频/大分辨率规则）");
+    } catch (err) {
+      message.error(`保存失败：${err instanceof Error ? err.message : err}`);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const dryRun = async () => {
     let prompt: unknown;
@@ -102,19 +164,161 @@ export default function RoutingPage() {
   const finalBackend = preview?.final_backend ?? "";
   const rejected = preview != null && !finalBackend;
 
+  const paramCell = (idx: number, row: RuleRow) => {
+    const info = kinds[row.kind];
+    if (!info) return <Tag color="warning">未知类型</Tag>;
+    if (row.kind === "gen_type") {
+      return (
+        <Select
+          size="small"
+          style={{ width: "100%" }}
+          value={String(row.params.gen_type ?? "video")}
+          onChange={(v) => updateParam(idx, "gen_type", v)}
+          options={[
+            { value: "video", label: "视频类" },
+            { value: "image", label: "图片类" },
+          ]}
+        />
+      );
+    }
+    if (row.kind === "min_pixels") {
+      return (
+        <InputNumber
+          size="small"
+          style={{ width: "100%" }}
+          min={1}
+          precision={0}
+          placeholder="像素阈值"
+          value={Number(row.params.pixels ?? undefined) || undefined}
+          onChange={(v) => updateParam(idx, "pixels", v ?? 0)}
+        />
+      );
+    }
+    return (
+      <Input
+        size="small"
+        placeholder={info.param_label}
+        value={String(row.params[info.param_key] ?? "")}
+        onChange={(e) => updateParam(idx, info.param_key, e.target.value)}
+      />
+    );
+  };
+
+  const ruleColumns: ColumnsType<RuleRow> = [
+    {
+      title: "启用",
+      key: "enabled",
+      width: 62,
+      render: (_v, r, i) => <Switch size="small" checked={r.enabled} onChange={(v) => updateRow(i, { enabled: v })} />,
+    },
+    {
+      title: "名称",
+      key: "name",
+      width: 130,
+      render: (_v, r, i) => (
+        <Input
+          size="small"
+          placeholder="如：视频上云"
+          value={r.name}
+          onChange={(e) => updateRow(i, { name: e.target.value })}
+        />
+      ),
+    },
+    {
+      title: "类型",
+      key: "kind",
+      width: 130,
+      render: (_v, r, i) => (
+        <Select
+          size="small"
+          style={{ width: "100%" }}
+          value={r.kind in kinds ? r.kind : undefined}
+          placeholder="类型"
+          onChange={(v) => {
+            const info = kinds[v];
+            updateRow(i, { kind: v, params: info ? { [info.param_key]: v === "min_pixels" ? 1024 : "" } : {} });
+          }}
+          options={Object.entries(kinds).map(([k, info]) => ({ value: k, label: info.label }))}
+        />
+      ),
+    },
+    { title: "条件参数", key: "params", render: (_v, r, i) => paramCell(i, r) },
+    {
+      title: "目标",
+      key: "target",
+      width: 110,
+      render: (_v, r, i) => (
+        <Select
+          size="small"
+          style={{ width: "100%" }}
+          value={r.target || undefined}
+          placeholder="目标"
+          onChange={(v) => updateRow(i, { target: v })}
+          options={[
+            { value: "local", label: "本地" },
+            { value: "modal", label: "云端" },
+          ]}
+        />
+      ),
+    },
+    {
+      title: "操作",
+      key: "op",
+      width: 108,
+      render: (_v, r, i) => (
+        <Space size={0}>
+          <Button type="text" size="small" icon={<ArrowUpOutlined />} disabled={i === 0} onClick={() => move(i, -1)} />
+          <Button
+            type="text"
+            size="small"
+            icon={<ArrowDownOutlined />}
+            disabled={i === customRules.length - 1}
+            onClick={() => move(i, 1)}
+          />
+          <Button
+            type="text"
+            size="small"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => setRows((rs) => (rs ?? []).filter((_, j) => j !== i))}
+          />
+        </Space>
+      ),
+    },
+  ];
+
   return (
     <Row gutter={[12, 12]}>
       <Col span={13}>
-        <Card
-          size="small"
-          title="规则链（代码内置，自上而下求值，首条命中生效）"
-          extra={<Tag color="default">规则 CRUD 规划中</Tag>}
-        >
-          <Table<BuiltinRule> columns={ruleColumns} dataSource={builtinRules} pagination={false} size="small" />
-          <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 0, marginTop: 10 }}>
-            决策后还会应用可用性回退：目标为云端但 Modal 通道不可用时，按 bridge.on_modal_unavailable（fallback_local / reject）处理，
-            回退步骤会以「fallback」出现在干跑链路里。
-          </Typography.Paragraph>
+        <Card size="small" title="路由规则链（自上而下求值，首条命中生效）">
+          <Space direction="vertical" size={10} style={{ width: "100%" }}>
+            <Table<BuiltinRule> columns={fixedColumns} dataSource={fixedRules} pagination={false} size="small" />
+            <Divider plain style={{ margin: "2px 0", fontSize: 12 }}>
+              自定义规则{customRules.length ? `（${customRules.length} 条）` : "（未配置）"}
+            </Divider>
+            {customRules.length ? (
+              <Table<RuleRow> columns={ruleColumns} dataSource={customRules} pagination={false} size="small" rowKey={(_r, i) => String(i)} />
+            ) : (
+              <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 0 }}>
+                未配置自定义规则：内置「视频 → video_backend」「大分辨率 → modal」两条继续生效（历史行为）。
+                保存任意自定义链后，这两条内置规则将被替换。
+              </Typography.Paragraph>
+            )}
+            <Space>
+              <Button icon={<PlusOutlined />} onClick={addRow}>添加规则</Button>
+              {customRules.length === 0 && Object.keys(suggest).length > 0 && (
+                <Button onClick={seedFromSettings}>按当前内置设置生成</Button>
+              )}
+              <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>
+                保存规则链
+              </Button>
+            </Space>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              规则链保存在 ~/.comfybridge/config.toml 的 [bridge].rules（热生效）。决策后还会应用可用性回退：
+              目标为云端但 Modal 通道不可用时，按 bridge.on_modal_unavailable（fallback_local / reject）处理，
+              回退步骤会以「fallback」出现在干跑链路里。
+            </Typography.Text>
+          </Space>
         </Card>
       </Col>
       <Col span={11}>

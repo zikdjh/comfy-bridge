@@ -57,23 +57,23 @@ def _dump_toml(sections: dict[str, dict]) -> str:
         # TOML basic string：反斜杠必须转义（Windows 路径含 \），引号同理
         return '"' + str(v).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
-    def scalar(key: str, value) -> str:
+    def render(value) -> str:
+        """递归渲染值：dict → 内联表（list 里的 dict 也必须走这里，否则退化成 Python repr 字符串）。"""
         if isinstance(value, bool):
-            return f"{key} = {str(value).lower()}"
+            return str(value).lower()
         if isinstance(value, (int, float)):
-            return f"{key} = {value}"
+            return str(value)
         if isinstance(value, dict):
-            inner = ", ".join(f"{k} = {toml_str(v)}" for k, v in value.items())
-            return f"{key} = {{ {inner} }}"
-        if isinstance(value, (list, tuple)):  # 如 extra_launch_args / launch_command
-            inner = ", ".join(toml_str(v) for v in value)
-            return f"{key} = [{inner}]"
-        return f"{key} = {toml_str(value)}"
+            inner = ", ".join(f"{k} = {render(v)}" for k, v in value.items())
+            return f"{{ {inner} }}"
+        if isinstance(value, (list, tuple)):  # 如 extra_launch_args / launch_command / rules
+            return "[" + ", ".join(render(v) for v in value) + "]"
+        return toml_str(value)
 
     lines = [_HEADER.rstrip("\n")]
     for section, values in sections.items():
         lines.append(f"\n[{section}]")
-        lines.extend(scalar(k, v) for k, v in values.items() if v is not None)
+        lines.extend(f"{k} = {render(v)}" for k, v in values.items() if v is not None)
     return "\n".join(lines) + "\n"
 
 
