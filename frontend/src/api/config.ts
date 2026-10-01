@@ -25,6 +25,9 @@ export interface ModalConfigDto {
   environment: string;
   has_secret: boolean;
   secret_masked: string;
+  proxy_token_id: string;
+  has_proxy_secret: boolean;
+  proxy_secret_masked: string;
   volume: string;
   task_timeout: number;
 }
@@ -52,6 +55,8 @@ export function useSaveConfig() {
       token_id?: string;
       environment?: string;
       token_secret?: string | null;
+      proxy_token_id?: string;
+      proxy_token_secret?: string | null;
       volume?: string;
       task_timeout?: number;
     };

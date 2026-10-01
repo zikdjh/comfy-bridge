@@ -234,7 +234,13 @@ async def _ws_pump(client_id: str, modal_pid: str, bridge_pid: str,
                    on_terminal) -> None:
     """云端 WS → 浏览器单向泵：progress/executing/status 实时转发（prompt_id 映射）。"""
     try:
-        async with websockets.connect(runner_client.ws_url(client_id), max_size=None) as up:
+        # additional_headers：websockets>=14 新实现参数名；WS 握手同 HTTP，走 Modal 代理鉴权。
+        # compression=None：Modal 边缘不支持 RFC 7692 permessage-deflate，默认压缩扩展会被
+        # 接受升级后立即 1000 关闭（实测），禁用后连接稳定、status/progress 事件正常。
+        async with websockets.connect(
+            runner_client.ws_url(client_id), max_size=None, additional_headers=runner_client.proxy_headers(),
+            compression=None,
+        ) as up:
             last_logged = [0.0]  # 进度节流（同批多步事件只按时间采样写控制台）
             async for raw in up:
                 if not isinstance(raw, str):

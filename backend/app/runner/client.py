@@ -4,6 +4,9 @@
   + web_url 已配置。部署状态用后台刷新 + 缓存读取，决策路径不做阻塞 CLI 调用
   （prompt_submit 在决策前 await ensure_state() 保鲜）。
 - Web URL：settings.modal.web_url（modal deploy 输出的固定端点）。
+- 端点鉴权：runner web_server 开启 requires_proxy_auth，所有直连请求（HTTP 与 WS 握手）
+  必须携带 Modal-Key/Modal-Secret 头（proxy_headers()），值取设置页的代理鉴权 token
+  （独立凭证族 wk-…/ws-…，与账户 API token 不同）。
 - 云端与本地是同一镜像同一版本 ComfyUI，/prompt /history /view /ws 协议完全一致；
   冷启动请求最长等 startup_timeout=600s，故 HTTP 读超时放宽到 660s。
 """
@@ -67,14 +70,28 @@ def available() -> bool:
         modal_configured()
         and modal.runner_enabled
         and web_url()
+        and modal_cli.proxy_credentials()  # 端点已开代理鉴权，缺凭证必然全部 401
         and _state["state"] == "deployed"
         and time.monotonic() - _state["fetched_ms"] < _STATE_TTL
     )
 
 
+def proxy_headers() -> dict[str, str]:
+    """Modal 代理鉴权头（runner web_server 开启 requires_proxy_auth 后必带）。
+
+    头名是 Modal 边缘代理的约定（Modal-Key/Modal-Secret），值是独立的代理鉴权
+    token 族（wk-…/ws-…，非账户 API token）；未配置返回空 dict，由边缘代理按
+    401 拒绝，错误自然上浮到调用方。
+    """
+    creds = modal_cli.proxy_credentials()
+    if not creds:
+        return {}
+    return {"Modal-Key": creds[0], "Modal-Secret": creds[1]}
+
+
 def _client() -> httpx.AsyncClient:
-    # connect 15s（Modal 边缘快连）；read 覆盖冷启动 600s + 余量；整体不限
-    return httpx.AsyncClient(timeout=httpx.Timeout(660.0, connect=15.0))
+    # 鉴权头默认注入全部云端请求；connect 15s（Modal 边缘快连）；read 覆盖冷启动 600s + 余量
+    return httpx.AsyncClient(timeout=httpx.Timeout(660.0, connect=15.0), headers=proxy_headers())
 
 
 async def fetch_object_info() -> dict:

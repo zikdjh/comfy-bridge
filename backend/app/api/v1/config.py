@@ -28,12 +28,15 @@ def _mask_secret(secret: str) -> str:
 
 
 def _modal_view(modal: ModalConfig) -> dict:
-    # token_secret 永不回显；volume/task_timeout 等非敏感执行参数正常回显供设置页编辑
+    # token_secret / proxy_token_secret 永不回显；volume/task_timeout 等非敏感执行参数正常回显供设置页编辑
     return {
         "token_id": modal.token_id,
         "environment": modal.environment,
         "has_secret": bool(modal.token_secret),
         "secret_masked": _mask_secret(modal.token_secret),
+        "proxy_token_id": modal.proxy_token_id,
+        "has_proxy_secret": bool(modal.proxy_token_secret),
+        "proxy_secret_masked": _mask_secret(modal.proxy_token_secret),
         "volume": modal.volume,
         "task_timeout": modal.task_timeout,
     }
@@ -81,18 +84,19 @@ class ConfigBody(BaseModel):
 
 
 def _merge_modal(current: dict, incoming: dict) -> dict:
-    """token_secret：留空（或缺省）= 保留现有；显式 null = 清除。
+    """token_secret / proxy_token_secret：留空（或缺省）= 保留现有；显式 null = 清除。
 
     其余键缺省 = 保留现有；null 一律忽略（此前 null 会清空任意字段，
-    PUT {"volume": null} 即可瘫痪卷操作——现只对 token_secret 保留清除语义）。
+    PUT {"volume": null} 即可瘫痪卷操作——现只对两个 secret 保留清除语义）。
     字符串值一律 strip：粘贴凭证时带入的尾部空白会让 modal CLI 报
     "Token validation failed"，且极难排查。
     """
     merged = dict(current)
+    secret_keys = ("token_secret", "proxy_token_secret")
     for key, value in incoming.items():
         if isinstance(value, str):
             value = value.strip()
-        if key == "token_secret":
+        if key in secret_keys:
             if value is None:
                 merged[key] = ""
             elif value == "":

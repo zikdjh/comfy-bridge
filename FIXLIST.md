@@ -270,3 +270,45 @@
 - 冲突的「双列对比视图」（原占位按钮的另一半）与运行统计聚合（v2 报表）
 - 删除传播策略（本地删/云端删的双向 tombstone）——v1 有意不做，防误删
 - M2 全景收尾：node_presence 路由规则（M3 表内）与反向同步提示仍待做
+
+## 十一、Runner 端点鉴权（P0 安全 · 2026-10-01）
+
+### 背景
+- 云端 `web_server` 端点此前零鉴权：任何拿到 web_url 的人可直接提交工作流/取图，烧 GPU 额度。
+
+### 改动
+- `modal-runner/runner.py`：`@modal.web_server(..., requires_proxy_auth=True)` —— 无凭证请求被
+  Modal 边缘代理 401（不触发容器，烧不到 GPU）。真机 redeploy 后无凭证/错凭证均 401 实证。
+- `backend/app/core/config.py`：ModalConfig 新增 `proxy_token_id`（wk-…）/`proxy_token_secret`（ws-…）。
+  **关键发现 1：代理鉴权 token 是独立凭证族**（wk-…/ws-…，仅仪表盘 modal.com/settings/proxy-auth-tokens 可建，
+  CLI 无命令），与账户 API token（ak-/as-）不通——两种 ak/as 凭证带 Modal-Key/Secret 头均被
+  边缘代理判 "invalid credentials"（探针实证）。
+- `backend/app/modal_volume/client.py`：`proxy_credentials()` 读代理凭证对（strip；未配置返回 None；
+  不回显不落日志）。HTTP 无 CLI 那条「缺省回落 ~/.modal.toml」路径（且 toml 里也没有 wk- 族），不设兜底。
+- `backend/app/runner/client.py`：`proxy_headers()`（Modal-Key/Modal-Secret）；`_client()` 默认注入全部
+  六处云端 HTTP 调用；`available()` 加代理凭证门控（缺凭证时通道判不可用，避免决策后必然 401）。
+- `backend/app/runner/executor.py` + `backend/tests/ws_probe.py`：云端 WS 连接带
+  `additional_headers=proxy_headers()`（websockets>=14 新实现参数名，装 17.1），
+  并 `compression=None`（见关键发现 2）。
+- `backend/app/api/v1/modal.py`：warmup 直连 GET 带鉴权头。
+- `backend/app/api/v1/config.py`：`_modal_view`/`_merge_modal` 扩展两个新字段
+  （secret 脱敏 first5+****+last4；PUT 留空=保留、null=清除，与 token_secret 同语义）。
+- `backend/app/api/v1/health.py`：缺代理凭证时 reason 精确提示（不再笼统「通道不可用」）。
+- `frontend/src/api/config.ts` + `pages/settings/index.tsx`：Modal tab 新增代理凭证两个字段
+  （Password 输入、留空不修改提示、清除凭证按钮同时清代理凭证）。
+- `backend/config.example.toml`：字段说明补全。
+
+### 验证
+- 单测 `uv run pytest tests/unit -q` → **86 passed**（新增 test_runner_auth.py 8 例：凭证读取/头注入/
+  available 门控/websockets 参数兼容；ak-/as- 族不得充当代理凭证有专属用例）。
+- ruff（改动文件）与 stash 基线完全一致，零新增；py_compile 通过；tsc 0 错 + vite build 6.8s。
+- 真机探针（tmp/probe_runner_auth.py + tmp/probe_401_reason.py）：无凭证 401 / 错 secret 401 /
+  ak-as 凭证 401 "invalid credentials"（`requires_proxy_auth` 生效实证）。
+  **关键发现 2：Modal 边缘不支持 RFC 7692（permessage-deflate）**——websockets 默认提供压缩扩展，
+  升级握手成功后连接立即被远端 1000 干净关闭、status 事件收不到（升级已过鉴权，纯 HTTP 一切正常）；
+  `websockets.connect(..., compression=None)` 后连接稳定、事件正常（实测 30s 只听不掉线）。
+  查询串带凭证（`modal_key`/`modal_secret` 与 `Modal-Key`/`Modal-Secret` 两种命名）均 401——WS 只认请求头。
+- 凭证经用户仪表盘创建、经设置 API 写入 config.toml 后完整探针 **PASS**：
+  无凭证 401 / 错 secret 401 / 正确凭证 200 / WS 握手 + status 事件推送，
+  桥接器 health `online: true`（Runner 通道就绪，云端模型索引 8 项）；
+  executor 加 compression=None 后单测 8 passed、后端重启加载生效。

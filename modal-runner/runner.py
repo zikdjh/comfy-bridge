@@ -292,7 +292,9 @@ def launch_comfyui() -> None:
     timeout=86400,
     max_containers=1,    # 单容器：ComfyUI 队列本身串行，且保证 WS/HTTP 路由到同一实例
 )
-@modal.web_server(PORT, startup_timeout=600)
+# requires_proxy_auth：端点不再裸奔——请求必须携带 Modal-Key/Modal-Secret 头
+# （桥接器 runner/client.py 统一注入；无凭证者被 Modal 边缘代理 401，烧不到我们的 GPU）
+@modal.web_server(PORT, startup_timeout=600, requires_proxy_auth=True)
 def comfyui() -> None:
     prepare_data_volume()
     if INSTALL_CUSTOM_NODE_DEPS:

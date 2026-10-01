@@ -30,6 +30,10 @@ on_modal_unavailable = "fallback_local"  # 云端不可用时：fallback_local�
 token_id = ""        # ak-...
 token_secret = ""    # as-...（仅落盘本文件，API 不回传明文）
 environment = ""     # Modal 环境，空 = 默认环境
+# Runner 端点代理鉴权（web_server requires_proxy_auth=True）：独立凭证族，
+# 在 modal.com/settings/proxy-auth-tokens 创建，与上面的账户 API token 不通
+proxy_token_id = ""      # wk-...
+proxy_token_secret = ""  # ws-...（仅落盘本文件，API 不回传明文）
 volume = "comfyui-data"  # 模型卷（modal-volume 同步与 Runner 共用；改后需同步重建 runner 部署）
 
 # —— Modal Runner 执行通道 ——

@@ -50,6 +50,8 @@ async def health() -> dict:
             reason = "Runner 通道已停用（modal.runner_enabled=false）"
         elif not url:
             reason = "未配置 web_url（modal deploy modal-runner/runner.py 后写入 config.toml）"
+        elif not runner_client.proxy_headers():
+            reason = "未配置代理鉴权凭证（modal.proxy_token_id/proxy_token_secret，端点已开代理鉴权）"
         elif online:
             reason = f"Runner 通道就绪；云端模型索引 {total} 项"
         else:

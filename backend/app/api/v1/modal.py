@@ -24,7 +24,7 @@ async def warmup() -> dict:
     start = time.monotonic()
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(_WARMUP_TIMEOUT, connect=30)) as client:
-            resp = await client.get(f"{url.rstrip('/')}/system_stats")
+            resp = await client.get(f"{url.rstrip('/')}/system_stats", headers=runner_client.proxy_headers())
         resp.raise_for_status()
     except httpx.HTTPStatusError as exc:
         return {

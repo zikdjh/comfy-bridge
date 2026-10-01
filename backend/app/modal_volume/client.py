@@ -88,6 +88,20 @@ def auth_env() -> dict[str, str]:
     return {}
 
 
+def proxy_credentials() -> tuple[str, str] | None:
+    """Runner 端点代理鉴权凭证对（proxy_token_id, proxy_token_secret）。
+
+    代理鉴权 token 是独立凭证族（wk-…/ws-…，仪表盘创建），与 ~/.modal.toml 里的
+    账户 API token（ak-/as-）不通——CLI 那条 token 文件兜底路径在这里不成立，
+    未配置就返回 None，由调用方决定报错形态。仅在内存使用，不落日志不回显。
+    """
+    modal = get_settings().modal
+    token_id, token_secret = modal.proxy_token_id.strip(), modal.proxy_token_secret.strip()
+    if token_id and token_secret:
+        return token_id, token_secret
+    return None
+
+
 def volume_name() -> str:
     return get_settings().modal.volume
 

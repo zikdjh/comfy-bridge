@@ -66,6 +66,8 @@ export default function SettingsPage() {
       tokenId: config.modal.token_id,
       environment: config.modal.environment,
       tokenSecret: "", // secret 永不回显明文，留空 = 不修改
+      proxyTokenId: config.modal.proxy_token_id,
+      proxyTokenSecret: "",
     });
     execForm.setFieldsValue({ volume: config.modal.volume });
     guardForm.setFieldsValue({
@@ -170,7 +172,13 @@ export default function SettingsPage() {
     }
   };
 
-  const saveModal = async (values: { tokenId: string; tokenSecret?: string; environment?: string }) => {
+  const saveModal = async (values: {
+    tokenId: string;
+    tokenSecret?: string;
+    environment?: string;
+    proxyTokenId?: string;
+    proxyTokenSecret?: string;
+  }) => {
     try {
       // secret 留空不提交（后端语义：缺省/空 = 保留现有；null = 清除）
       await saveConfig({
@@ -178,6 +186,8 @@ export default function SettingsPage() {
           token_id: values.tokenId,
           environment: values.environment ?? "",
           ...(values.tokenSecret ? { token_secret: values.tokenSecret } : {}),
+          proxy_token_id: values.proxyTokenId ?? "",
+          ...(values.proxyTokenSecret ? { proxy_token_secret: values.proxyTokenSecret } : {}),
         },
       });
       message.success("Modal 认证信息已保存并热生效");
@@ -188,7 +198,9 @@ export default function SettingsPage() {
 
   const clearModal = async () => {
     try {
-      await saveConfig({ modal: { token_id: "", environment: "", token_secret: null } });
+      await saveConfig({
+        modal: { token_id: "", environment: "", token_secret: null, proxy_token_id: "", proxy_token_secret: null },
+      });
       message.success("已清除 Modal 凭证");
     } catch (err) {
       message.error(`清除失败：${err instanceof Error ? err.message : err}`);
@@ -365,10 +377,28 @@ export default function SettingsPage() {
                     <Form.Item label="环境 environment（可选）" name="environment" extra="留空使用默认环境">
                       <Input placeholder="默认环境" autoComplete="off" />
                     </Form.Item>
+                    <Form.Item
+                      label="代理鉴权 Token ID（wk-…）"
+                      name="proxyTokenId"
+                      extra="云端端点已开启 Modal 代理鉴权，访问需独立于账户 token 的代理凭证；在 modal.com/settings/proxy-auth-tokens 创建"
+                    >
+                      <Input placeholder="wk-…" autoComplete="off" />
+                    </Form.Item>
+                    <Form.Item
+                      label="代理鉴权 Token Secret（ws-…）"
+                      name="proxyTokenSecret"
+                      extra={config?.modal.has_proxy_secret ? `已保存：${config.modal.proxy_secret_masked}（留空表示不修改）` : "云端提交/取图/进度 WS 都依赖它；未配置时 Runner 通道判定为不可用"}
+                    >
+                      <Input.Password placeholder={config?.modal.has_proxy_secret ? "留空不修改" : "ws-…"} autoComplete="new-password" />
+                    </Form.Item>
                     <Space>
                       <Button type="primary" htmlType="submit">保存认证信息</Button>
-                      <Popconfirm title="确定清除已保存的 Modal 凭证？" onConfirm={clearModal} disabled={!config?.modal.has_secret}>
-                        <Button danger disabled={!config?.modal.has_secret}>清除凭证</Button>
+                      <Popconfirm
+                        title="确定清除已保存的 Modal 凭证（含代理鉴权凭证）？"
+                        onConfirm={clearModal}
+                        disabled={!config?.modal.has_secret && !config?.modal.has_proxy_secret}
+                      >
+                        <Button danger disabled={!config?.modal.has_secret && !config?.modal.has_proxy_secret}>清除凭证</Button>
                       </Popconfirm>
                     </Space>
                   </Form>
