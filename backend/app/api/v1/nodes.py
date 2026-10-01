@@ -34,6 +34,7 @@ from ...core import comfy_client
 from ...core.config import custom_nodes_dir, get_settings, modal_configured
 from ...modal_volume import client as volume_cli
 from ...modal_volume.client import ModalCliError
+from ...models_mgr import node_presence
 from ...nodes_mgr import deploy, image_rebuild, version_align
 from ...nodes_mgr.scan import DISABLED_SUFFIX, scan_custom_nodes
 from ...runner import client as runner_client
@@ -461,3 +462,15 @@ async def nodes_image_rebuild() -> dict:
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"ok": job["state"] in ("running", "ok"), "job": job}
+
+
+@router.post("/nodes/presence/refresh")
+async def nodes_presence_refresh() -> dict:
+    """强制刷新节点 class 两端在场索引（M3-2；装完节点后手动保鲜，node_missing_* 规则数据源）。"""
+    snap = await node_presence.refresh(force=True)
+    return {
+        "ok": True,
+        "local": len(snap["local"]),
+        "cloud": len(snap["cloud"]),
+        "error": node_presence.last_error(),
+    }

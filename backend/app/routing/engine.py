@@ -29,10 +29,13 @@ from ..core.constants import (
 from ..runner import client as runner_client
 
 # 自定义规则类型注册表：label/param_key/param_label 供设置页渲染与 API 文档共用
+# param_key 为空 = 无参数规则（判定数据来自工作流引用 + 节点在场缓存）
 RULE_KINDS: dict[str, dict[str, str]] = {
     "workflow_tag": {"label": "工作流名前缀", "param_key": "prefix", "param_label": "前缀（不区分大小写）"},
     "gen_type": {"label": "生成类型", "param_key": "gen_type", "param_label": "类型（video/image）"},
     "min_pixels": {"label": "最小分辨率", "param_key": "pixels", "param_label": "图最大边 ≥（px）"},
+    "node_missing_local": {"label": "本地缺节点", "param_key": "", "param_label": "引用了本地没有的节点 class"},
+    "node_missing_cloud": {"label": "云端缺节点", "param_key": "", "param_label": "引用了云端没有的节点 class"},
 }
 
 _RULE_TARGETS = ("local", "modal")
@@ -79,6 +82,8 @@ def validate_rules(raw: list) -> list[dict]:
             if pixels <= 0:
                 raise ValueError(f"{pos}（最小分辨率）阈值必须大于 0（0 等于关闭，请直接停用规则）")
             params = {"pixels": pixels}
+        else:  # node_missing_local / node_missing_cloud：无参数，判定数据来自在场缓存
+            params = {}
         cleaned.append({
             "id": str(item.get("id") or "").strip() or uuid.uuid4().hex[:8],
             "name": str(item.get("name") or "").strip(),
@@ -161,10 +166,13 @@ def decide(
     manual_backend: str | None = None,
     models: dict | None = None,
     budget: dict | None = None,
+    presence: dict | None = None,
 ) -> Decision:
     """models: 模型引用归属 {"cloud_only": [...], "missing": [...]}（由调用方按本地/云端索引判定）。
     budget: 预算护栏现状 {"exceeded": bool, "used_usd": float, "monthly_usd": float}
-    （cost.budget_state()，由调用方在决策前计算；None = 未启用/未采集）。"""
+    （cost.budget_state()，由调用方在决策前计算；None = 未启用/未采集）。
+    presence: 节点 class 在场 {"local": set|None, "cloud": set|None}（models_mgr.node_presence
+    快照；None/空集合 = 缓存未就绪，对应规则跳过并留痕）。"""
     settings = get_settings().bridge
     trace: list[dict] = []
 
@@ -247,6 +255,16 @@ def decide(
                 threshold = int(params.get("pixels") or 0)
                 matched = threshold > 0 and side >= threshold
                 detail = f"图最大边 {side or '未知'}px 判断 ≥ {threshold}px"
+            elif r.kind in ("node_missing_local", "node_missing_cloud"):
+                side_name = "local" if r.kind == "node_missing_local" else "cloud"
+                known = (presence or {}).get(side_name)
+                if not known:  # None 或空集合：缓存未就绪，宁可跳过不误判
+                    step(label, False, "节点在场缓存未就绪，跳过")
+                    continue
+                missing = sorted(set(facts["class_types"]) - set(known))
+                matched = bool(missing)
+                shown = ("、".join(missing[:3]) + ("…" if len(missing) > 3 else "")) if missing else "无"
+                detail = f"{'本地' if side_name == 'local' else '云端'}缺失 class：{shown}"
             else:
                 step(label, False, f"未知规则类型 {r.kind or '(空)'}，跳过（请检查 config.toml）")
                 continue

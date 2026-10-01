@@ -62,6 +62,7 @@ interface PreviewResp {
   backend: string;
   final_backend: string;
   fallback: string | null;
+  presence: { ready: boolean; local: number; cloud: number; error: string | null };
   trace: TraceStep[];
 }
 
@@ -194,6 +195,13 @@ export default function RoutingPage() {
         />
       );
     }
+    if (!info.param_key) {
+      return (
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          按引用节点自动判定
+        </Typography.Text>
+      );
+    }
     return (
       <Input
         size="small"
@@ -208,13 +216,13 @@ export default function RoutingPage() {
     {
       title: "启用",
       key: "enabled",
-      width: 62,
+      width: 56,
       render: (_v, r, i) => <Switch size="small" checked={r.enabled} onChange={(v) => updateRow(i, { enabled: v })} />,
     },
     {
       title: "名称",
       key: "name",
-      width: 130,
+      width: 120,
       render: (_v, r, i) => (
         <Input
           size="small"
@@ -227,7 +235,7 @@ export default function RoutingPage() {
     {
       title: "类型",
       key: "kind",
-      width: 130,
+      width: 124,
       render: (_v, r, i) => (
         <Select
           size="small"
@@ -236,7 +244,10 @@ export default function RoutingPage() {
           placeholder="类型"
           onChange={(v) => {
             const info = kinds[v];
-            updateRow(i, { kind: v, params: info ? { [info.param_key]: v === "min_pixels" ? 1024 : "" } : {} });
+            updateRow(i, {
+              kind: v,
+              params: info && info.param_key ? { [info.param_key]: v === "min_pixels" ? 1024 : "" } : {},
+            });
           }}
           options={Object.entries(kinds).map(([k, info]) => ({ value: k, label: info.label }))}
         />
@@ -246,7 +257,7 @@ export default function RoutingPage() {
     {
       title: "目标",
       key: "target",
-      width: 110,
+      width: 96,
       render: (_v, r, i) => (
         <Select
           size="small"
@@ -264,7 +275,7 @@ export default function RoutingPage() {
     {
       title: "操作",
       key: "op",
-      width: 108,
+      width: 100,
       render: (_v, r, i) => (
         <Space size={0}>
           <Button type="text" size="small" icon={<ArrowUpOutlined />} disabled={i === 0} onClick={() => move(i, -1)} />
@@ -289,7 +300,7 @@ export default function RoutingPage() {
 
   return (
     <Row gutter={[12, 12]}>
-      <Col span={13}>
+      <Col span={16}>
         <Card size="small" title="路由规则链（自上而下求值，首条命中生效）">
           <Space direction="vertical" size={10} style={{ width: "100%" }}>
             <Table<BuiltinRule> columns={fixedColumns} dataSource={fixedRules} pagination={false} size="small" />
@@ -297,7 +308,14 @@ export default function RoutingPage() {
               自定义规则{customRules.length ? `（${customRules.length} 条）` : "（未配置）"}
             </Divider>
             {customRules.length ? (
-              <Table<RuleRow> columns={ruleColumns} dataSource={customRules} pagination={false} size="small" rowKey={(_r, i) => String(i)} />
+              <Table<RuleRow>
+                columns={ruleColumns}
+                dataSource={customRules}
+                pagination={false}
+                size="small"
+                tableLayout="fixed"
+                rowKey={(_r, i) => String(i)}
+              />
             ) : (
               <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 0 }}>
                 未配置自定义规则：内置「视频 → video_backend」「大分辨率 → modal」两条继续生效（历史行为）。
@@ -321,7 +339,7 @@ export default function RoutingPage() {
           </Space>
         </Card>
       </Col>
-      <Col span={11}>
+      <Col span={8}>
         <Card size="small" title="干跑预览器">
           <Space direction="vertical" size={10} style={{ width: "100%" }}>
             <Select
@@ -383,8 +401,9 @@ export default function RoutingPage() {
                 )}
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                   事实：类型 {preview.facts.gen_type} · 最大边 {preview.facts.max_width ?? "?"}×{preview.facts.max_height ?? "?"} ·
-                  模型引用 {preview.facts.model_refs.length ? preview.facts.model_refs.join("、") : "无"}
-                  （干跑不评估模型在本地/云端的实际归属，实际提交时由桥接器按索引判定）
+                  模型引用 {preview.facts.model_refs.length ? preview.facts.model_refs.join("、") : "无"} ·
+                  节点缓存 {preview.presence.ready ? `本地 ${preview.presence.local} / 云端 ${preview.presence.cloud} class` : "未就绪（node_missing 规则将跳过）"}
+                  （模型实际归属在提交时按索引判定；节点缓存约 15 分钟 TTL）
                 </Typography.Text>
               </>
             ) : (

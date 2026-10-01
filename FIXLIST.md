@@ -349,3 +349,41 @@
 - 期间事故与自愈：首次 PUT 触发上述 `_dump_toml` bug，坏行写进 config.toml 致后端整体 500；
   修复渲染器 + 手工移除坏行 + 重启恢复，并补回环单测防复发。
 - 待办（M3 余项）：node_presence 路由规则（需本地/云端节点 class 差异的持久化缓存）。
+
+## 十三、M3-2 node_presence 路由规则（2026-10-01）
+
+### 语义
+- 两种无参规则类型：`node_missing_local`（图引用了本地没有的节点 class，目标通常=云端）、
+  `node_missing_cloud`（引用了云端没有的 class，目标通常=本地）。判定数据 = 工作流 class_types
+  与两端在场缓存的差集；缓存未就绪（空集合）宁可跳过并留痕，不误判。
+
+### 改动
+- `backend/app/models_mgr/node_presence.py`（新）：本地/云端 /object_info class 集合缓存。
+  15 分钟 TTL + kick 后台单飞；持久化 `~/.comfybridge/node_presence.json`（重启不丢，
+  首次 snapshot 同步读盘一次）；时间戳用 wall clock（跨进程新鲜度成立）；单端失败保留
+  另一端与旧值（实测 303 瞬时故障即走此路径恢复）。本地侧 20s 超时，云端侧走
+  runner_client（660s 覆盖冷启动）。
+- `backend/app/routing/engine.py`：RULE_KINDS 增两种类型（param_key 空 = 无参规则）；
+  decide() 新增 presence 参数与两个判定分支（缺失 class 最多展示 3 个）。
+- `backend/app/api/v1/nodes.py`：`POST /nodes/presence/refresh` 强制刷新（装完节点后手动保鲜）。
+- `backend/app/proxy/prompt_submit.py`：决策前 kick 保鲜 + 传 presence 快照。
+- `backend/app/api/v1/routing.py`：preview 传 presence；响应新增 presence 透明度字段
+  （ready/local/cloud/error）。
+- `backend/app/main.py`：lifespan 启动即后台预热 presence（与 cloud_index 同款）。
+- `frontend/src/pages/routing/index.tsx`：无参类型条件参数列渲染说明文案；干跑事实行展示
+  节点缓存规模与就绪状态；布局修复（左栏 13→16、tableLayout=fixed、列宽收紧——无参文案
+  曾把条件参数列挤成竖排一字列）。
+
+### 验证
+- 单测 `uv run pytest tests/unit -q` → **104 passed**（新增 test_node_presence.py 7 例：
+  双端取数+落盘回环、单端失败保留旧集合、TTL 命中不发请求、缺文件空快照、校验器接纳
+  无参类型、引擎命中/未就绪跳过/云端缺节点留本地）。
+- ruff 改动文件与 stash 基线一致；tsc 0 错 + vite build 6.8s。
+- 真机四连（8189，本地 ComfyUI 0.38.0 已启动 + 云端 0.38.0 在线，两端各 966 class）：
+  本地缺 class 命中 → modal；云端缺 class 命中 → local；两端都有 → 不命中走 default；
+  恢复空链确认 0 条。
+- 浏览器 E2E：UI 添加「本地缺节点」规则保存 → 干跑 trace 出现 `custom:node_missing_local`
+  「本地缺失 class：BridgeMadeUpNode」→ 最终决策云端；事实行显示「节点缓存 本地 966 / 云端
+  966 class」（截图 `tmp/gui-test-screenshots/m3_2_node_presence_rule.png`）；测试后恢复空链。
+- 运维注意：后端启动时若本地 ComfyUI 未运行，local 侧记错保留空集，等 TTL 或调
+  `POST /nodes/presence/refresh`（本地起来后）补齐——实测过该路径。

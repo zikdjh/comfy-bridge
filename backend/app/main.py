@@ -38,8 +38,10 @@ async def lifespan(_: FastAPI):
         logging.getLogger(__name__).info("已关闭 %d 条遗留的未完成请求记录（执行跟踪不跨重启）", stale)
     get_upstream_client()
     warm = asyncio.create_task(_warm_cloud_index())
+    warm_presence = asyncio.create_task(_warm_node_presence())
     yield
     warm.cancel()
+    warm_presence.cancel()
     await close_upstream_client()
     close_db()
 
@@ -50,6 +52,16 @@ async def _warm_cloud_index() -> None:
         await cloud_index.refresh()
     except Exception as exc:  # noqa: BLE001
         logging.getLogger(__name__).warning("云端模型索引初次构建失败: %s", exc)
+
+
+async def _warm_node_presence() -> None:
+    """启动即后台刷新节点 class 两端在场索引（M3-2；云端侧可能等冷启动，不阻塞就绪）。"""
+    from .models_mgr import node_presence
+
+    try:
+        await node_presence.refresh()
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning("节点在场索引初次刷新失败: %s", exc)
 
 
 app = FastAPI(title="ComfyBridge", version="0.1.0", lifespan=lifespan)

@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 from .. import cost as cost_svc
 from ..core.config import get_settings
 from ..logs import store
-from ..models_mgr import cloud_index, local_index
+from ..models_mgr import cloud_index, local_index, node_presence
 from ..models_mgr.presence import classify_model_refs
 from ..routing.engine import classify_graph, decide
 from ..runner import client as runner_client
@@ -65,6 +65,7 @@ async def handle_prompt_submit(request: Request) -> Response:
 
     # 模型引用归属：本地索引 vs 云端索引（快照，不做 IO；过期由后台重建保鲜）
     cloud_index.kick_refresh_if_stale()
+    node_presence.kick_refresh_if_stale()  # 节点 class 两端在场（node_missing_* 规则数据源）
     await runner_client.ensure_state()  # Modal 应用部署状态保鲜（TTL 60s，过期才探一次 CLI）
     cloud_only, missing = classify_model_refs(
         facts.get("model_refs") or [], await local_index.local_names(), cloud_index.snapshot()
@@ -76,6 +77,7 @@ async def handle_prompt_submit(request: Request) -> Response:
         manual_backend=request.headers.get("x-bridge-backend") or _extract_manual_backend(payload),
         models={"cloud_only": cloud_only, "missing": missing},
         budget=budget,
+        presence=node_presence.snapshot(),
     )
     if decision.backend == "modal" and budget.get("exceeded"):
         # 超限告警：护栏已把请求拉回本地/拒绝，控制台与 trace 双留痕（M4-1「并通知」）
