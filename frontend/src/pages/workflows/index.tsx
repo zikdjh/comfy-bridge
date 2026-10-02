@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Alert, Button, Card, Modal, Space, Spin, Table, Tabs, Tag, Typography, message } from "antd";
+import { Alert, Button, Card, Modal, Segmented, Space, Spin, Table, Tabs, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -7,14 +7,15 @@ import {
   applyWorkflowSync,
   fetchWorkflowCompare,
   useLocalWorkflows,
+  useWorkflowRunStats,
   useWorkflowSync,
   type LocalWorkflow,
   type WfCompare,
   type WfCompareSide,
+  type WfRunStat,
   type WfSyncAction,
   type WfSyncRow,
 } from "../../api/workflows";
-import { BackendTag, type Backend } from "../../components/common/BackendTag";
 import { EmptyGuide } from "../../components/common/EmptyGuide";
 
 /* ---------------- 本地清单（真实数据） ---------------- */
@@ -342,35 +343,84 @@ function SyncMatrix() {
   );
 }
 
-interface StatsRow {
-  key: string;
-  name: string;
-  runs: number;
-  avg: string;
-  max: string;
-  cost: string;
-  backend: Backend;
+function fmtSec2(ms: number): string {
+  if (ms >= 60_000) return `${Math.floor(ms / 60_000)}m${Math.round((ms % 60_000) / 1000)}s`;
+  return `${(ms / 1000).toFixed(1)}s`;
 }
 
-const statsRows: StatsRow[] = [
-  { key: "1", name: "SDXL文生图", runs: 28, avg: "9.2s", max: "15s", cost: "$0.0000", backend: "local" },
-  { key: "2", name: "cloud:flux人像", runs: 12, avg: "33s", max: "58s", cost: "$0.2208", backend: "modal" },
-];
-
-const statsColumns: ColumnsType<StatsRow> = [
-  { title: "工作流", dataIndex: "name" },
-  { title: "运行次数", dataIndex: "runs", width: 90 },
-  { title: "平均耗时", dataIndex: "avg", width: 90 },
-  { title: "最大耗时", dataIndex: "max", width: 90 },
-  { title: "估算成本", dataIndex: "cost", width: 100 },
-  { title: "常用后端", dataIndex: "backend", width: 90, render: (b: Backend) => <BackendTag backend={b} /> },
-];
-
 function RunStats() {
+  const [days, setDays] = useState(30);
+  const { data, isLoading } = useWorkflowRunStats(days);
+  const rows = data?.rows ?? [];
+  const columns: ColumnsType<WfRunStat> = [
+    { title: "工作流", dataIndex: "name" },
+    {
+      title: "运行次数",
+      dataIndex: "runs",
+      width: 90,
+      render: (v: number) => <b style={{ fontVariantNumeric: "tabular-nums" }}>{v}</b>,
+    },
+    {
+      title: "成功 / 失败",
+      key: "ok",
+      width: 100,
+      render: (_, r) => (
+        <Space size={4}>
+          <span style={{ color: "#43a047" }}>{r.done}</span>
+          {r.errored > 0 && <span style={{ color: "#cf1322" }}>/ {r.errored}</span>}
+        </Space>
+      ),
+    },
+    {
+      title: "本地 / 云端",
+      key: "side",
+      width: 110,
+      render: (_, r) => (
+        <span style={{ fontVariantNumeric: "tabular-nums" }}>
+          {r.local_runs} / {r.modal_runs}
+        </span>
+      ),
+    },
+    { title: "平均耗时", key: "avg", width: 90, render: (_, r) => (r.avg_ms != null ? fmtSec2(r.avg_ms) : "—") },
+    { title: "最大耗时", key: "max", width: 90, render: (_, r) => (r.max_ms != null ? fmtSec2(r.max_ms) : "—") },
+    {
+      title: "估算成本",
+      key: "cost",
+      width: 100,
+      render: (_, r) => (r.est_cost_usd > 0 ? `$${r.est_cost_usd.toFixed(4)}` : "—"),
+    },
+    {
+      title: "最近运行",
+      key: "last",
+      width: 120,
+      render: (_, r) => dayjs(r.last_ms).format("MM-DD HH:mm"),
+    },
+  ];
   return (
     <Space direction="vertical" size={12} style={{ width: "100%" }}>
-      <Alert type="warning" showIcon message="示例数据 —— 运行统计按工作流聚合属 v2（规划 §8.3 报表升级）" />
-      <Table<StatsRow> columns={statsColumns} dataSource={statsRows} pagination={false} size="small" />
+      <Space style={{ justifyContent: "space-between", width: "100%" }} align="center">
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          {data?.note ?? "统计自桥接请求日志实时聚合"}
+        </Typography.Text>
+        <Segmented
+          options={[
+            { label: "近 7 天", value: 7 },
+            { label: "近 30 天", value: 30 },
+            { label: "近 90 天", value: 90 },
+          ]}
+          value={days}
+          onChange={(v) => setDays(v as number)}
+        />
+      </Space>
+      <Table<WfRunStat>
+        columns={columns}
+        dataSource={rows}
+        rowKey="name"
+        loading={isLoading}
+        pagination={false}
+        size="small"
+        locale={{ emptyText: `近 ${days} 天没有记录到工作流运行 —— 经桥接提交一次生成后这里会出现统计` }}
+      />
     </Space>
   );
 }

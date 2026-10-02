@@ -7,6 +7,7 @@ import { useConfig, useSaveConfig, validateComfyRoot } from "../../api/config";
 import { LaunchArgsPanel } from "./LaunchArgsPanel";
 import { ComfyScanModal } from "./ComfyScanModal";
 import { SettingsSyncTab } from "./SettingsSyncTab";
+import { ConfigWizard } from "./ConfigWizard";
 
 export default function SettingsPage() {
   const { data: config, isLoading } = useConfig();
@@ -17,6 +18,7 @@ export default function SettingsPage() {
   const [execForm] = Form.useForm();
   const [guardForm] = Form.useForm();
   const [scanOpen, setScanOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [checking, setChecking] = useState(false);
 
   /** 手动指定目录的即时完整性校验（保存时后端还会再强制校验一次） */
@@ -211,7 +213,14 @@ export default function SettingsPage() {
   };
 
   return (
-    <Card size="small">
+    <Card
+      size="small"
+      extra={
+        <Button size="small" onClick={() => setWizardOpen(true)}>
+          配置向导
+        </Button>
+      }
+    >
       <Tabs
         defaultActiveKey="local"
         items={[
@@ -524,6 +533,7 @@ export default function SettingsPage() {
           message.success(`已填入 ComfyUI 根目录：${path}（点「保存」后生效）`);
         }}
       />
+      <ConfigWizard open={wizardOpen} onClose={() => setWizardOpen(false)} />
     </Card>
   );
 }

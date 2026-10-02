@@ -4,6 +4,8 @@
 - GET  /workflows/sync          同步矩阵：本地⇄数据卷 user/default/workflows/ 三方检测
                                 （last-synced 基线 hash，冲突/变更分类，见 sync/workflows_rules）
 - POST /workflows/sync          执行动作 push/pull/keep_both（keep_both = 冲突双副本）
+- GET  /workflows/run-stats     运行统计：requests 表按工作流聚合（次数/成败/本地云端/
+                                平均与最大耗时/估算成本/最近运行），SQL 现算无回写表
 - GET  /workflows/compare       冲突双列对比：本地版 vs 云端版元数据 + 内容摘要
                                 （节点类型计数 / 模型引用，UI 格式与 API 格式都能解析）
 """
@@ -24,6 +26,7 @@ from pydantic import BaseModel
 
 from ...core.config import get_settings, workflows_dir
 from ...core.constants import MODEL_FILE_EXTS
+from ...logs import store
 from ...modal_volume import client as volume_cli
 from ...modal_volume.client import ModalCliError
 from ...sync import workflows_sync
@@ -101,6 +104,24 @@ async def workflows_sync_status() -> dict:
 async def workflows_sync_apply(body: SyncActionsBody) -> dict:
     """执行同步动作：[{name, action}]，action ∈ push|pull|keep_both。"""
     return await workflows_sync.apply(body.actions)
+
+
+@router.get("/workflows/run-stats")
+async def workflows_run_stats(days: int = 30, limit: int = 50) -> dict:
+    """运行统计（规划 §8.3）：按工作流聚合 requests 表——次数/成败/本地云端拆分/
+    平均与最大耗时/估算成本/最近运行。SQL 现算，无独立回写表。"""
+    if not 1 <= days <= 365:
+        raise HTTPException(status_code=422, detail="days 需在 1~365 之间")
+    if not 1 <= limit <= 200:
+        raise HTTPException(status_code=422, detail="limit 需在 1~200 之间")
+    rows = await store.aworkflow_run_stats(days, limit)
+    for r in rows:
+        r["local_runs"] = r["runs"] - r["modal_runs"]
+    return {
+        "days": days,
+        "rows": rows,
+        "note": "统计自桥接请求日志（requests 表）实时聚合；估算成本只计云端执行请求",
+    }
 
 
 def _summarize_workflow(data) -> dict:

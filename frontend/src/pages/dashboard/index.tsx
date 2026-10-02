@@ -8,6 +8,7 @@ import { BackendTag, type Backend } from "../../components/common/BackendTag";
 import { TrendChart, type TrendPoint } from "../../components/common/TrendChart";
 import { CostChart, type CostPoint } from "../../components/common/CostChart";
 import { useHealth, warmupModal } from "../../api/health";
+import { useModalContainers } from "../../api/launch";
 import { useRequests, type BridgeRequest, type RequestStatus } from "../../api/requests";
 import { useCostSummary, useUpdateBudget, type ModalBilling } from "../../api/cost";
 import { statusMeta } from "../logs/RequestLogPanel";
@@ -159,6 +160,10 @@ export default function DashboardPage() {
 
   const local = health?.local;
   const modal = health?.modal;
+  // 容器数面板（M4-2）：后端 45s 缓存 + 前端 60s 轮询，跟随 Modal 通道卡片展示
+  const { data: containers } = useModalContainers();
+  const containersLine =
+    containers?.ok && containers.count != null ? ` · 容器 ${containers.count} 个运行中` : "";
 
   const runningColumns: ColumnsType<BridgeRequest> = [
     { title: "时间", dataIndex: "created_at", width: 120, render: (v: string) => v?.slice(11, 19) },
@@ -310,6 +315,7 @@ export default function DashboardPage() {
             <div style={{ color: "#8a90a2", fontSize: 12, marginBottom: 8 }}>
               {modalStateText}
               {modal?.cloud_index_files != null && ` · 云端模型 ${modal.cloud_index_files} 项`}
+              {containersLine}
             </div>
             <Popconfirm
               title="预热云端容器？"

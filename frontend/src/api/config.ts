@@ -31,6 +31,8 @@ export interface ModalConfigDto {
   proxy_secret_masked: string;
   volume: string;
   task_timeout: number;
+  runner_enabled: boolean;
+  web_url: string;
 }
 
 export interface ConfigResponse {
@@ -60,6 +62,7 @@ export function useSaveConfig() {
       proxy_token_secret?: string | null;
       volume?: string;
       task_timeout?: number;
+      web_url?: string;
     };
   }) => {
     const updated = await apiSend<ConfigResponse>("/api/v1/config", "PUT", body);

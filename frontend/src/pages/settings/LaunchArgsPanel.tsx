@@ -5,7 +5,7 @@ import type { ColumnsType } from "antd/es/table";
 import { CheckOutlined, CopyOutlined, PauseCircleOutlined, PlayCircleOutlined, PoweroffOutlined, ReloadOutlined, ThunderboltOutlined, UndoOutlined } from "@ant-design/icons";
 import {
   restartLocalProc, saveLaunch, startLocalProc, stopLocalProc, stopModalContainers,
-  useLaunch, useLocalProcState,
+  useLaunch, useLocalProcState, useModalContainers,
   type LaunchView, type LocalProcState, type ProcResult,
 } from "../../api/launch";
 import { warmupModal } from "../../api/health";
@@ -290,9 +290,10 @@ function LocalControl() {
   );
 }
 
-/** 云端容器控制条：预热启动（拉起新容器）/ 停止容器（新参数下次冷启动生效） */
+/** 云端容器控制条：运行中容器数（M4-2 面板）/ 预热启动 / 停止容器 */
 function ModalControl() {
   const [busy, setBusy] = useState<"warmup" | "stop" | null>(null);
+  const { data: containers, refetch: refetchContainers, isFetching: containersFetching } = useModalContainers();
 
   const doWarmup = async () => {
     setBusy("warmup");
@@ -304,6 +305,7 @@ function ModalControl() {
       message.error(`预热失败：${err instanceof Error ? err.message : err}`);
     } finally {
       setBusy(null);
+      refetchContainers();
     }
   };
 
@@ -324,12 +326,25 @@ function ModalControl() {
       message.error(`停止容器失败：${err instanceof Error ? err.message : err}`);
     } finally {
       setBusy(null);
+      refetchContainers();
     }
   };
 
+  const count = containers?.count;
+  const containerTip = containers?.ok
+    ? (containers.containers.length
+        ? containers.containers.map((c) => `${c.id.slice(0, 12)}…${c.started_at ? `（${c.started_at} 启动）` : ""}`).join("；")
+        : (containers.detail ?? "当前没有运行中的云端容器"))
+    : (containers?.detail ?? "容器数检测中…（modal container list，约 1~3s）");
   return (
     <Space size={8} wrap style={{ marginBottom: 12 }}>
       <Tag color="geekblue" style={{ marginInlineEnd: 0 }}>容器冷启动自动生效</Tag>
+      <Tooltip title={containerTip}>
+        <Tag color={count ? "processing" : "default"} style={{ marginInlineEnd: 0 }}>
+          运行中容器 {count ?? "—"}
+        </Tag>
+      </Tooltip>
+      <Button size="small" type="text" icon={<ReloadOutlined />} aria-label="刷新容器数" loading={containersFetching} onClick={() => void refetchContainers()} />
       <Button size="small" icon={<ThunderboltOutlined />} loading={busy === "warmup"} onClick={doWarmup}>
         预热启动
       </Button>

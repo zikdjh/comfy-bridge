@@ -108,3 +108,31 @@ export const restartLocalProc = (takeover: boolean) =>
 /** 停止云端运行中的容器（新参数下次冷启动生效） */
 export const stopModalContainers = () =>
   apiSend<ModalStopResult>("/api/v1/launch/modal/stop", "POST");
+
+/* ---------------- 云端容器清单（M4-2 面板；后端 45s 进程内缓存） ---------------- */
+
+export interface ModalContainerRow {
+  id: string;
+  started_at?: string;
+  cpu?: string;
+  memory?: string;
+  gpu?: string;
+  region?: string;
+}
+
+export interface ModalContainers {
+  ok: boolean;
+  count: number | null;
+  containers: ModalContainerRow[];
+  unknown_rows?: number;
+  detail: string;
+}
+
+export function useModalContainers() {
+  return useQuery({
+    queryKey: ["launch", "modal-containers"],
+    queryFn: ({ signal }) => apiGet<ModalContainers>("/api/v1/launch/modal/containers", signal),
+    staleTime: 45_000,
+    refetchInterval: 60_000,
+  });
+}

@@ -13,6 +13,7 @@ PUT  /api/v1/launch 保存两端追加启动参数到 ~/.comfybridge/config.toml
   POST /launch/local/start     启动本地实例（外部占用需 takeover 确认）
   POST /launch/local/stop      停止本地实例（外部托管需 force 确认）
   POST /launch/local/restart   重启本地实例（使追加参数生效）
+  GET  /launch/modal/containers  云端运行中容器清单（45s 进程内缓存，M4-2 面板数据源）
   POST /launch/modal/stop      停止云端运行中的容器（下次冷启动读取新参数）
 """
 
@@ -23,6 +24,7 @@ import json
 import os
 import re
 import subprocess
+import time
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -204,8 +206,12 @@ async def local_restart(body: ProcBody) -> dict:
 
 
 # ---------------------------------------------------------------- 云端容器控制
-def _stop_modal_containers() -> dict:
-    """结束当前应用的运行中容器：新参数下次冷启动即生效（相当于立即缩容）。"""
+def _container_rows() -> tuple[list[dict], int, str | None]:
+    """`modal container list --json` → (本应用容器行, 缺 app_name 的行数, 错误信息)。
+
+    归属只认 app_name 与当前配置相等的行：字段缺失/改名的行宁可不碰，
+    避免契约变化时误操作账号下所有应用的容器。
+    """
     settings = get_settings()
     app_name = settings.modal.app_name
     try:
@@ -215,9 +221,9 @@ def _stop_modal_containers() -> dict:
             env={**os.environ, **auth_env()},
         )
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "detail": str(exc) or type(exc).__name__}
+        return [], 0, str(exc) or type(exc).__name__
     if proc.returncode != 0:
-        return {"ok": False, "detail": (proc.stderr or proc.stdout or "").strip()[-300:]}
+        return [], 0, (proc.stderr or proc.stdout or "").strip()[-300:]
     rows: list = []
     try:
         data = json.loads(proc.stdout or "[]")
@@ -230,9 +236,7 @@ def _stop_modal_containers() -> dict:
                     rows.append(json.loads(line))
                 except json.JSONDecodeError:
                     continue
-    # 只停当前应用的容器：app_name 字段缺失/改名的行无法判定归属，宁可不杀，
-    # 避免契约变化时误停账号下所有应用的容器
-    ids, unknown = [], 0
+    own, unknown = [], 0
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -241,9 +245,58 @@ def _stop_modal_containers() -> dict:
             continue
         if row.get("app_name") != app_name:
             continue
-        cid = row.get("container_id") or row.get("id")
-        if cid:
-            ids.append(cid)
+        own.append(row)
+    return own, unknown, None
+
+
+_CONTAINER_CACHE_TTL = 45.0
+_containers_cache: tuple[float, dict] | None = None
+
+
+def _list_modal_containers() -> dict:
+    """本应用运行中容器清单（CLI 调用约 1~3s，进程内 45s 缓存；停止容器后失效）。"""
+    global _containers_cache
+    now = time.monotonic()
+    if _containers_cache is not None and now - _containers_cache[0] < _CONTAINER_CACHE_TTL:
+        return _containers_cache[1]
+    own, unknown, error = _container_rows()
+    if error:
+        data = {"ok": False, "count": None, "containers": [], "detail": error}
+    else:
+        containers = []
+        for row in own:
+            cid = row.get("container_id") or row.get("id")
+            if not cid:
+                continue
+            item: dict = {"id": cid}
+            for key in ("started_at", "cpu", "memory", "gpu", "region"):
+                if key in row:
+                    item[key] = row[key]
+            containers.append(item)
+        if containers:
+            detail = f"{len(containers)} 个运行中容器"
+        elif unknown:
+            detail = f"container list 返回的 {unknown} 行缺少 app_name 字段，无法判定归属"
+        else:
+            detail = "当前没有运行中的云端容器"
+        data = {
+            "ok": True,
+            "count": len(containers),
+            "containers": containers,
+            "unknown_rows": unknown,
+            "detail": detail,
+        }
+    _containers_cache = (now, data)
+    return data
+
+
+def _stop_modal_containers() -> dict:
+    """结束当前应用的运行中容器：新参数下次冷启动即生效（相当于立即缩容）。"""
+    global _containers_cache
+    own, unknown, error = _container_rows()
+    if error:
+        return {"ok": False, "detail": error}
+    ids = [cid for row in own if (cid := row.get("container_id") or row.get("id"))]
 
     stopped, failed = [], []
     for cid in ids:
@@ -266,13 +319,20 @@ def _stop_modal_containers() -> dict:
         detail = f"container list 返回的 {unknown} 行缺少 app_name 字段，无法判定归属，未停止任何容器"
     else:
         detail = "当前没有运行中的云端容器"
-    return {
+    result = {
         "ok": not failed,
         "running": len(ids),
         "stopped": stopped,
         "failed": failed,
         "detail": detail,
     }
+    _containers_cache = None  # 停止后立刻失效，面板下次读取即反映新状态
+    return result
+
+
+@router.get("/modal/containers")
+async def modal_containers_list() -> dict:
+    return await asyncio.to_thread(_list_modal_containers)
 
 
 @router.post("/modal/stop")

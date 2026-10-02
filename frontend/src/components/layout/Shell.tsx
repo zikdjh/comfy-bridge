@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Badge, Button, Layout, Menu, Space, Tag, Tooltip } from "antd";
+import { useEffect, useState } from "react";
+import { Alert, Badge, Button, Layout, Menu, Space, Tag, Tooltip } from "antd";
 import {
   ClusterOutlined,
   DashboardOutlined,
@@ -17,7 +17,9 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import type { MenuProps } from "antd";
 import { useHealth } from "../../api/health";
 import { useCostSummary } from "../../api/cost";
+import { useConfig } from "../../api/config";
 import { LOCAL_COMFY_URL } from "../../theme";
+import { ConfigWizard, WIZARD_DONE_KEY } from "../../pages/settings/ConfigWizard";
 
 const { Sider, Header, Content } = Layout;
 
@@ -55,6 +57,40 @@ export function Shell() {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const { data: health, isLoading } = useHealth();
+
+  // —— 首次配置向导（M4-3）：Modal 凭证未配置且本浏览器未完成过向导时，自动弹一次 + 顶部常驻提示 ——
+  const { data: config } = useConfig();
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardDismissed, setWizardDismissed] = useState(() => {
+    try {
+      return localStorage.getItem(WIZARD_DONE_KEY) === "1";
+    } catch {
+      return true; // localStorage 不可用时保持安静，不打扰
+    }
+  });
+  const needSetup = !!config && !config.modal.token_id;
+  useEffect(() => {
+    if (!needSetup || wizardDismissed) return;
+    const timer = window.setTimeout(() => setWizardOpen(true), 600);
+    return () => window.clearTimeout(timer);
+  }, [needSetup, wizardDismissed]);
+  const closeWizard = () => {
+    setWizardOpen(false);
+    setWizardDismissed(true);
+    try {
+      localStorage.setItem(WIZARD_DONE_KEY, "1");
+    } catch {
+      /* 同上，忽略 */
+    }
+  };
+  const dismissBanner = () => {
+    setWizardDismissed(true);
+    try {
+      localStorage.setItem(WIZARD_DONE_KEY, "1");
+    } catch {
+      /* 忽略 */
+    }
+  };
 
   const local = health?.local;
   const bridgeUrl = health?.bridge?.url ?? LOCAL_COMFY_URL;
@@ -159,9 +195,28 @@ export function Shell() {
           </Space>
         </Header>
         <Content style={{ padding: 16 }}>
+          {needSetup && !wizardDismissed && (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginBottom: 12 }}
+              message="尚未配置 Modal 云端凭证 —— 先用配置向导完成初始化（也可稍后在「设置 → Modal」补齐，纯本地模式不受影响）"
+              action={
+                <Space>
+                  <Button size="small" type="primary" onClick={() => setWizardOpen(true)}>
+                    配置向导
+                  </Button>
+                  <Button size="small" onClick={dismissBanner}>
+                    不再提示
+                  </Button>
+                </Space>
+              }
+            />
+          )}
           <Outlet />
         </Content>
       </Layout>
+      <ConfigWizard open={wizardOpen} onClose={closeWizard} />
     </Layout>
   );
 }

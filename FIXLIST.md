@@ -552,3 +552,55 @@
 - 演示产物已清理（卷上 zz-rev-demo.py / 两端 zz-conflict-demo.json），两端恢复 synced 2/2。
 - 备注：本地 ComfyUI（Desktop）本段验证期间未运行（顶栏显示未连接，不影响上述功能验证）；
   其嵌入 python 无法直接命令行拉起（缺 torch 路径），需经 Desktop 启动。
+
+## 十八、零星项收尾：运行统计真实化 + 容器面板 + 首次配置向导（2026-10-02）
+
+### 语义
+- **运行统计真实化（M2-4 余项「远端运行统计回写」）**：工作流页「运行统计」Tab 此前是写死的示例数据；
+  现改为 requests 表按工作流聚合——运行次数/成功/失败/本地·云端拆分/平均与最大耗时/估算成本/最近运行，
+  近 7/30/90 天 Segmented 切换。**「回写」以 SQL 现算实现**（遵循成本口径 ADR：不做回写表/夜间任务，
+  与成本报表同口径：未命名落「（未命名）」桶、估算成本只计云端入账请求）。
+- **容器数面板（M4-2 余项）**：`GET /api/v1/launch/modal/containers`（modal container list --json，
+  归属判定与停止逻辑共用 _container_rows；45s 进程内 TTL 缓存，停止容器后立即失效）。设置 → 启动命令
+  的 Modal 控制条显示「运行中容器 N」+ 刷新按钮（悬停见容器 ID/启动时间）；仪表盘 Modal 通道卡片
+  副标追加「容器 N 个运行中」。预热/停止操作后自动刷新计数。
+- **首次配置向导（M4-3 余项）**：`ConfigWizard` 五步（检测 → Modal 凭证 → 本地 ComfyUI → 云端 Runner →
+  完成），全部可跳过、复用设置页同款 PUT /config 热生效保存与 validate-comfy 校验。Shell 在「Modal
+  凭证未配置且本浏览器未完成过向导」时自动弹一次（localStorage cb_wizard_done）+ 顶部常驻提示条
+  （可「不再提示」）；设置页右上角「配置向导」按钮可随时重跑。完成步汇总三态并可直接预热云端容器。
+  config 视图补回显 runner_enabled/web_url（非敏感；web_url 此前已由 /health 明文返回）。
+
+### 关键发现
+- `duration_ms` **不是表列**——store 读取时由 finished_ms − started_ms 现算；聚合 SQL 必须用
+  `MAX(CASE WHEN finished_ms IS NOT NULL AND started_ms IS NOT NULL THEN finished_ms - started_ms END)`，
+  直接 AVG(duration_ms) 会因列不存在而报错（单测覆盖）。
+- 真机撞上 Modal CLI 网络抖动：`modal container list` 从平时 1.8s 飙到 43s（CLI 内部
+  "Could not connect to the Modal server" 重试）。TTL 缓存 + to_thread 下事件循环不阻塞、面板显示
+  「—」降级，属可接受行为；缓存焐热后前端即恢复正常显示真实计数（期间容器恰好缩容 1 → 0，数据真实）。
+- 凭证红线自查：向导检测页初版把真实 Token ID（ak-…）明文渲染进截图，已改为只显示脱敏 secret
+  （与设置页可编辑输入框的既有回显不同，向导是纯展示场景，无必要明文）；含凭证截图已删除重拍。
+
+### 改动
+- 后端：logs/store.py（workflow_run_stats + aworkflow_run_stats）、api/v1/workflows.py（GET
+  /workflows/run-stats，days 1~365 / limit 1~200 校验，端点层补 local_runs）、api/v1/launch.py
+  （_container_rows 抽取共用 + _list_modal_containers 45s TTL 缓存 + GET /modal/containers +
+  停止后失效缓存）、api/v1/config.py（_modal_view 补 runner_enabled/web_url）。
+- 前端：api/workflows.ts（WfRunStat/useWorkflowRunStats）、api/launch.ts（ModalContainers/
+  useModalContainers）、api/config.ts（DTO 补 web_url/runner_enabled）、pages/workflows/index.tsx
+  （运行统计真实化）、pages/settings/LaunchArgsPanel.tsx（容器数 Tag + 刷新）、pages/dashboard/index.tsx
+  （容器数副标）、pages/settings/ConfigWizard.tsx（新）、components/layout/Shell.tsx（自动弹出 +
+  提示条）、pages/settings/index.tsx（向导入口）。
+- 测试：tests/unit/test_leftover_polish.py（9 个）。
+
+### 验证
+- 单测 **150 passed**（+9：聚合桶/时长 AVG 忽略 NULL/天数窗口与降序/成本只计云端、端点拆分与
+  422、容器归属过滤/TTL 缓存命中/空与 CLI 失败/停止后缓存失效、config 视图字段与 secret 不回显）。
+- ruff 全量 68 = 基线 68（新增 0）；`tsc --noEmit` 0 错；`pnpm build:embed` 成功。
+- 真机验证（dev 8189 重启后）：`/workflows/run-stats?days=90` 返回真实聚合（23 次/成功 10/云端 12/
+  平均 48.5s/$0.04058）；`/launch/modal/containers` 真实返回（先 1 后 0，容器缩容）；config 视图含
+  web_url/runner_enabled。GUI：运行统计 Tab 真实渲染（截图 m3_runstats_tab.png）、启动命令容器面板
+  （m3_modal_containers.png，运行中容器 0 + 刷新按钮）、仪表盘「已部署 · 云端模型 8 项 · 容器 0 个
+  运行中」（m3_dashboard_containers.png）、向导全流程走查（检测三项就绪 → 凭证表单 secret 脱敏回显 →
+  Runner 步部署指引与预填正确 → 完成步汇总，完成后 localStorage 标记落盘、弹窗干净关闭；截图
+  m3_wizard_step0/step1_creds.png，step3/4 因截图表面间歇超时以 DOM 断言验证）。已配置环境下顶部
+  提示条不出现（符合预期）；自动弹出路径需清空凭证才能触发，未做破坏性验证。

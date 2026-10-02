@@ -39,6 +39,9 @@ def _modal_view(modal: ModalConfig) -> dict:
         "proxy_secret_masked": _mask_secret(modal.proxy_token_secret),
         "volume": modal.volume,
         "task_timeout": modal.task_timeout,
+        # Runner 通道参数（非敏感，health 也回显 web_url）：配置向导步骤读取/写入
+        "runner_enabled": modal.runner_enabled,
+        "web_url": modal.web_url,
     }
 
 

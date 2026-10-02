@@ -99,3 +99,32 @@ export interface WfCompare {
 export function fetchWorkflowCompare(name: string, signal?: AbortSignal) {
   return apiGet<WfCompare>(`/api/v1/workflows/compare?name=${encodeURIComponent(name)}`, signal);
 }
+
+/* ---------------- 运行统计（requests 表按工作流聚合，SQL 现算） ---------------- */
+
+export interface WfRunStat {
+  name: string;
+  runs: number;
+  done: number;
+  errored: number;
+  modal_runs: number;
+  local_runs: number;
+  avg_ms: number | null;
+  max_ms: number | null;
+  est_cost_usd: number;
+  last_ms: number;
+}
+
+export interface WfRunStats {
+  days: number;
+  rows: WfRunStat[];
+  note: string;
+}
+
+export function useWorkflowRunStats(days: number) {
+  return useQuery({
+    queryKey: ["workflows", "run-stats", days],
+    queryFn: ({ signal }) => apiGet<WfRunStats>(`/api/v1/workflows/run-stats?days=${days}`, signal),
+    staleTime: 15_000,
+  });
+}

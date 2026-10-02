@@ -273,6 +273,46 @@ def cost_daily_utc(start_ms: int, end_ms: int) -> list[dict]:
     ]
 
 
+def workflow_run_stats(days: int = 30, limit: int = 100) -> list[dict]:
+    """按工作流聚合运行统计（requests 表现算，遵循成本口径 ADR：不做回写表/夜间任务）。
+
+    duration_ms 只在终态请求上有值（读取时由 finished_ms - started_ms 现算，非表列），
+    AVG/MAX 聚合自动忽略 NULL；估算成本只累计云端入账请求（final_backend = 'modal'），
+    本地执行恒为 0 成本。未命名工作流（NULL/空串）落「（未命名）」桶，与成本报表同口径。
+    """
+    cutoff_ms = int((time.time() - days * 86400) * 1000)
+    duration = "CASE WHEN finished_ms IS NOT NULL AND started_ms IS NOT NULL THEN finished_ms - started_ms END"
+    sql = (
+        "SELECT COALESCE(NULLIF(workflow_name, ''), '（未命名）') AS name, "
+        "COUNT(*) AS runs, "
+        "SUM(status = 'done') AS done, "
+        "SUM(status = 'error') AS errored, "
+        "SUM(final_backend = 'modal') AS modal_runs, "
+        f"AVG({duration}) AS avg_ms, "
+        f"MAX({duration}) AS max_ms, "
+        "COALESCE(SUM(CASE WHEN final_backend = 'modal' THEN est_cost_usd ELSE 0 END), 0) AS est_cost_usd, "
+        "MAX(created_ms) AS last_ms "
+        "FROM requests WHERE created_ms >= ? "
+        "GROUP BY name ORDER BY runs DESC LIMIT ?"
+    )
+    with _lock:
+        rows = _get_conn().execute(sql, (cutoff_ms, limit)).fetchall()
+    return [
+        {
+            "name": r["name"],
+            "runs": int(r["runs"]),
+            "done": int(r["done"]),
+            "errored": int(r["errored"]),
+            "modal_runs": int(r["modal_runs"]),
+            "avg_ms": round(float(r["avg_ms"])) if r["avg_ms"] is not None else None,
+            "max_ms": int(r["max_ms"]) if r["max_ms"] is not None else None,
+            "est_cost_usd": round(float(r["est_cost_usd"]), 5),
+            "last_ms": int(r["last_ms"]),
+        }
+        for r in rows
+    ]
+
+
 def requests_missing_model(limit: int = 2000) -> list[dict]:
     """无模型字段但有图快照的请求（启动回填用）：只取 id + graph_file。"""
     with _lock:
@@ -413,6 +453,10 @@ async def acost_totals(start_ms: int | None = None, end_ms: int | None = None) -
 
 async def acost_daily_utc(start_ms: int, end_ms: int) -> list[dict]:
     return await asyncio.to_thread(cost_daily_utc, start_ms, end_ms)
+
+
+async def aworkflow_run_stats(days: int = 30, limit: int = 100) -> list[dict]:
+    return await asyncio.to_thread(workflow_run_stats, days, limit)
 
 
 def now_ms() -> int:
