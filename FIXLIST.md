@@ -604,3 +604,46 @@
   Runner 步部署指引与预填正确 → 完成步汇总，完成后 localStorage 标记落盘、弹窗干净关闭；截图
   m3_wizard_step0/step1_creds.png，step3/4 因截图表面间歇超时以 DOM 断言验证）。已配置环境下顶部
   提示条不出现（符合预期）；自动弹出路径需清空凭证才能触发，未做破坏性验证。
+
+## 十九、提交前预校验框架（M3-5 余项 · 2026-10-02）
+
+### 语义
+- 提交 /prompt 前按**目标端**复刻 validate_prompt 的关键检查，把「云端跑到一半才发现缺节点/缺模型」
+  提前到执行前拦截（零执行零费用）。数据源全部复用路由决策的缓存，模块自身不做索引 IO：
+  节点 class 用 node_presence 两端 /object_info 在场缓存，模型文件用 local_index + cloud_index。
+- 供给策略 `bridge.preflight`（设置 → 桥接）：**off** 不校验（默认，历史行为不变）；**strict** 拦截不带选项；
+  **ask** 拦截并附结构化可操作选项（装哪些节点 / 上传哪些模型 / 改走云端）；**auto** 缺失模型全部可本地供给时
+  先自动 `modal volume put` 上传云端卷再放行（即使同时缺节点——上传成功后剩余问题按 ask 语义拦截）。
+  未知取值按 off；presence 索引不可用时节点校验降级跳过（note 说明），不误杀。
+- 拦截响应 409：error 人类文案（ComfyUI 前端原样展示）+ options（strict 不带）+ rule_trace；
+  请求落库为独立状态 **preflight**（预校验拦截，volcano 标签 + 日志筛选项），与「待云端通道」(blocked) 区分。
+  auto_supply 上传清单/失败明细写 rule_trace + 控制台留痕。
+
+### 关键发现
+- **node_presence 缓存键是 "local"/"cloud"，后端名是 "local"/"modal"**——直接用 target 查 snapshot 会永远
+  拿到空集、节点校验被静默跳过（单测抓出）；scan 内部做 side 映射。
+- auto 初版把「缺节点」挡在供给之前；改为先完成可供给上传、再对剩余不可修复项拦截更符合使用顺序
+  （修节点与传模型可并行准备，重提交时模型已就位）。
+- 真机时序坑：本地模型索引 60s TTL——刚落盘的新模型文件最多延迟 1 分钟才进入 supplyable 判定。
+
+### 改动
+- 后端：proxy/precheck.py（新：extract_ref_categories/scan/decide_action/mark_supply_done/
+  mark_supply_failures/block_options/blocked_message/auto_supply）、proxy/prompt_submit.py
+  （预校验接线：决策后扫描 → 策略判定 → auto 供给 → 拦截落库与 409，local_names 复用）、
+  core/config.py（bridge.preflight）。
+- 前端：api/config.ts（DTO）、pages/settings/index.tsx（桥接 Tab 供给策略选择器四档）、
+  api/requests.ts + pages/logs/RequestLogPanel.tsx（preflight 状态类型/标签/筛选项）。
+- 测试：tests/unit/test_precheck.py（11 个）。
+
+### 验证
+- 单测 **161 passed**（+11：引用提取（已知输入名分类 + *_name 兜底）、扫描（modal 缺节点/缺模型/
+  supplyable、local 云端专有、索引为空降级）、策略（off/ok/未知取值放行、strict 无选项、ask 带选项、
+  auto 三路径、供给成败清单挪移）、拦截文案、auto_supply（真实路径拼装 argv、无分类/本地缺文件/
+  CLI 失败三态））。ruff 全量 68 = 基线；`tsc --noEmit` 0 错；`pnpm build:embed` 成功。
+- 真机验证（dev 8189）：**ask**——GhostNode 图 → 409「云端（Modal）缺少节点类型 GhostNode…未产生任何
+  执行与费用」+ install_nodes 选项；两端都缺的模型图 → 409 + missing_models 选项。**auto**——
+  本地真实放置 zz 演示模型 + GhostNode → 真实 `modal volume put` 上传数据卷（rule_trace
+  auto_supply.uploaded 确认，卷 ls 可见）→ 剩余缺节点按 ask 拦截（supplyable 已清空、无陈旧提示）；
+  演示产物已清理（卷 rm + 本地删除），preflight 复位 off。日志页出现独立「预校验拦截」标签
+  （截图 tmp/gui-test-screenshots/m3_preflight_setting.png、m3_preflight_logs.png）；设置页四档
+  选择器渲染正确。

@@ -63,6 +63,9 @@ class BridgeConfig(BaseModel):
     # 达到上限时，决策目标 modal 的请求按 on_modal_unavailable 策略回落本地或拒绝；0 = 不限制。
     # 计数源 logs/store.count_active_modal；保守护栏（计数与入队无事务，±1 竞态可容忍）。
     max_cloud_concurrent: int = 0
+    # 提交前预校验（M3-5 余项）：off=不校验（默认，历史行为）/ strict=拦截 / ask=拦截+可操作选项 /
+    # auto=缺模型且本地有副本时自动上传云端卷后放行（缺节点仍拦截）。未知取值按 off。
+    preflight: str = "off"
     # —— 自定义路由规则链（M3，规划文档 §3.1）——
     # 空列表 = 沿用内置 gen_type/size 规则（历史行为不变）；非空 = 自定义链按序求值并
     # 替换内置那两条；manual/tag/cloud_model/default 四步固定不参与 CRUD。

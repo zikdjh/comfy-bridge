@@ -26,6 +26,7 @@ export const statusMeta: Record<RequestStatus, { color: string; text: string }> 
   error: { color: "red", text: "失败" },
   cancelled: { color: "orange", text: "已中断" },
   blocked: { color: "gold", text: "待云端通道" },
+  preflight: { color: "volcano", text: "预校验拦截" },
 };
 
 const genTypeMeta: Record<GenType, { color: string; text: string }> = {
@@ -133,6 +134,7 @@ export function RequestLogPanel() {
               { value: "error", label: "失败" },
               { value: "cancelled", label: "已中断" },
               { value: "blocked", label: "待云端通道" },
+              { value: "preflight", label: "预校验拦截" },
             ]}
           />
           <Space size={4}>

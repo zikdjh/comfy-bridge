@@ -63,6 +63,7 @@ export default function SettingsPage() {
       defaultBackend: config.bridge.default_backend,
       videoBackend: config.bridge.video_backend,
       largeSidePixels: config.bridge.large_side_pixels,
+      preflight: config.bridge.preflight,
     });
     modalForm.setFieldsValue({
       tokenId: config.modal.token_id,
@@ -127,6 +128,7 @@ export default function SettingsPage() {
     defaultBackend: string;
     videoBackend: string;
     largeSidePixels: number | null;
+    preflight: string;
   }) => {
     try {
       await saveConfig({
@@ -135,6 +137,7 @@ export default function SettingsPage() {
           default_backend: values.defaultBackend,
           video_backend: values.videoBackend,
           large_side_pixels: values.largeSidePixels ?? 0,
+          preflight: values.preflight,
         },
       });
       message.success("已保存（监听地址需重启桥接器进程生效，路由参数立即生效）");
@@ -341,6 +344,20 @@ export default function SettingsPage() {
                   extra="0 = 关闭；图最大边达到阈值时请求改走云端"
                 >
                   <InputNumber min={0} step={128} style={{ width: 200 }} />
+                </Form.Item>
+                <Form.Item
+                  label="提交前预校验（缺节点/缺模型拦截）"
+                  name="preflight"
+                  extra="off = 不校验（历史行为）；strict = 目标端缺节点/缺模型时直接拦截；ask = 拦截并附可操作选项；auto = 缺模型且本地有副本时自动上传云端卷后放行（缺节点仍拦截）。拦截发生在执行前，零费用。"
+                >
+                  <Select
+                    options={[
+                      { value: "off", label: "off —— 不校验（默认）" },
+                      { value: "strict", label: "strict —— 拦截" },
+                      { value: "ask", label: "ask —— 拦截 + 可操作选项" },
+                      { value: "auto", label: "auto —— 自动供给缺失模型" },
+                    ]}
+                  />
                 </Form.Item>
                 <Button type="primary" htmlType="submit">保存</Button>
               </Form>

@@ -9,7 +9,7 @@ export interface RuleStep {
 }
 
 export type GenType = "image" | "video" | "none";
-export type RequestStatus = "queued" | "running" | "done" | "error" | "cancelled" | "blocked";
+export type RequestStatus = "queued" | "running" | "done" | "error" | "cancelled" | "blocked" | "preflight";
 
 export interface BridgeRequest {
   id: number;

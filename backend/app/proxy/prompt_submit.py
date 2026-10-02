@@ -23,6 +23,7 @@ from ..routing.engine import classify_graph, decide, extract_primary_model
 from ..runner import client as runner_client
 from ..runner import console as runner_console
 from ..runner import executor
+from . import precheck
 from .passthrough import get_upstream_client
 
 
@@ -67,8 +68,9 @@ async def handle_prompt_submit(request: Request) -> Response:
     cloud_index.kick_refresh_if_stale()
     node_presence.kick_refresh_if_stale()  # 节点 class 两端在场（node_missing_* 规则数据源）
     await runner_client.ensure_state()  # Modal 应用部署状态保鲜（TTL 60s，过期才探一次 CLI）
+    local_names = await local_index.local_names()
     cloud_only, missing = classify_model_refs(
-        facts.get("model_refs") or [], await local_index.local_names(), cloud_index.snapshot()
+        facts.get("model_refs") or [], local_names, cloud_index.snapshot()
     )
     budget = await cost_svc.abudget_state()  # 月度预算护栏现状（决策前采集，纯本地 SQL）
     decision = decide(
@@ -83,6 +85,45 @@ async def handle_prompt_submit(request: Request) -> Response:
     if decision.backend == "modal" and budget.get("exceeded"):
         # 超限告警：护栏已把请求拉回本地/拒绝，控制台与 trace 双留痕（M4-1「并通知」）
         runner_console.log(f"[预算护栏] {decision.fallback}", "warning")
+
+    # —— 提交前预校验（M3-5 余项）：目标端缺节点/缺模型提前拦截或自动供给（off = 历史行为）——
+    preflight_mode = get_settings().bridge.preflight
+    preflight_block_error: str | None = None
+    preflight_options: list[dict] | None = None
+    if preflight_mode in {"strict", "ask", "auto"} and decision.final_backend in {"local", "modal"}:
+        pfr = precheck.scan(
+            prompt,
+            decision.final_backend,
+            presence=node_presence.snapshot(),
+            local_models=local_names,
+            cloud_models=cloud_index.snapshot(),
+        )
+        action, options = precheck.decide_action(preflight_mode, pfr)
+        if action == "auto_supply":
+            supply = await precheck.auto_supply(pfr["supplyable"])
+            pfr["auto_supply"] = supply
+            precheck.mark_supply_done(pfr, supply["uploaded"])
+            if supply["failed"]:
+                # 上传失败的条目挪回缺失清单，与剩余缺节点一起按 ask 语义拦截
+                precheck.mark_supply_failures(pfr, supply["failed"])
+            if pfr["missing_nodes"] or pfr["missing_models"]:
+                action, options = "block", precheck.block_options(pfr)
+            else:
+                action = "allow"  # 供给完成，放行执行
+        decision.trace.append({
+            "rule": "preflight",
+            "mode": preflight_mode,
+            "target": pfr["target"],
+            "verdict": action,
+            "missing_nodes": pfr["missing_nodes"],
+            "missing_models": pfr["missing_models"],
+            "cloud_only_models": pfr["cloud_only_models"],
+            "supplyable_refs": pfr["supplyable_refs"],
+            "auto_supply": pfr.get("auto_supply"),
+        })
+        if action == "block":
+            preflight_block_error = precheck.blocked_message(pfr)
+            preflight_options = options
 
     prompt_id = str(uuid.uuid4())
     payload["prompt_id"] = prompt_id
@@ -100,11 +141,22 @@ async def handle_prompt_submit(request: Request) -> Response:
         "graph_hash": graph_hash,
         "graph_file": graph_file,
         "client_id": payload.get("client_id"),
-        "status": "queued",
+        "status": "preflight" if preflight_block_error else "queued",
         "rule_trace": json.dumps(decision.trace, ensure_ascii=False),
-        "error": None,
+        "error": preflight_block_error,
     }
     await store.ainsert_request(record)
+
+    if preflight_block_error:
+        # 预校验拦截：零执行零费用，strict 不带选项，ask/auto 附可操作选项
+        content: dict = {
+            "error": preflight_block_error,
+            "prompt_id": prompt_id,
+            "rule_trace": decision.trace,
+        }
+        if preflight_options is not None:
+            content["options"] = preflight_options
+        return JSONResponse(status_code=409, content=content)
 
     if decision.final_backend == "":
         # Modal 不可用且策略为 reject：不落地执行
