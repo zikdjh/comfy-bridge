@@ -73,14 +73,28 @@ comfy-bridge --port 8189   # 控制台 http://127.0.0.1:8189/bridge/
 
 M0 技术验证收尾 → M1 MVP 桥接 → M2 同步引擎 → M3 模型卷管理 → M4 打磨发布。
 
-当前进度（2026-09-30）：桥接主链路可用（反代拦截 / 路由干跑 / Modal 执行通道 / 日志与控制台 / 数据卷管理）；M2 进行中：
+当前进度（2026-10-01）：桥接主链路可用（反代拦截 / 路由干跑 / Modal 执行通道 / 日志与控制台 / 数据卷管理）；
+M2 同步引擎主体、M3 规则链数据化、M4 护栏与打包分发均已落地：
 
 - **节点清单与卷同步已接入**（M2-1 部分 + M2-3 卷模式）：本地 `custom_nodes/` 扫描（git remote/commit、依赖声明、
   启停状态）与云端数据卷清单对比，差异矩阵给出 `same / changed / missing_cloud / missing_local`，含 commit 与启用状态
   一致性判定；可选 `deep=1` 拉云端 `/object_info` 做 class_type 级对比（会冷启动容器，仅手动触发）。「安装到云端」
   把节点目录/单文件写入数据卷并维护 `custom_nodes/.comfybridge-manifest.json`，云端清单经 `modal volume get`
   免容器读取。「从云端移除」同步清理 manifest。停用节点整目录以 `.disabled` 后缀落卷（云端加载与装依赖均跳过）。
-  镜像固化（M2-2：`nodes.lock.yaml` + `install_nodes.sh` + `modal deploy` + 失败回滚）与 Manager API 兜底采集待做。
+  镜像固化已接入（M2-2）：`nodes.lock.yaml` + `install_nodes.sh` 把启用节点依赖预装进镜像（`modal deploy` 重建，
+  失败自动回滚）；Manager API 兜底采集待做。ComfyUI 版本对齐已接入（M2-5 第一片）：本地版本为权威，
+  云端 pin 追随本地并自动重建镜像，失败回滚 pin。
+- **工作流双向同步已接入**（M2-4）：本地 ⇄ 云端用户卷按文件同步，三方变更检测（本地/云端/基线）+ 冲突双副本
+  （`name.conflict-时间戳.json`），修复 `volume ls` 中文双重转义。余项：changed 内容哈希检测、反向同步提示、
+  冲突双列对比视图。
+- **Runner 端点鉴权已接入**（P0 安全）：web_server 开启 `requires_proxy_auth`，桥接侧 HTTP/WS 统一注入
+  Modal-Key/Secret 代理凭证；设置页独立凭证族字段。云端最大并发护栏已接入（M4-1 收尾）：在途云端任务计数达上限
+  按不可用动作回落/拒绝。
+- **路由规则链数据化已接入**（M3-1/M3-2）：自定义规则链（workflow_tag / gen_type / min_pixels /
+  node_missing_local / node_missing_cloud）存配置可 CRUD 排序，路由页可编辑；node_presence 节点 class 两端在场
+  缓存（持久化 + TTL 单飞），本地/云端缺节点自动改道，支持强制刷新。
+- **打包分发已接入**（M4）：`backend/scripts/build_package.py` 一键构建 wheel（GUI 产物嵌入 `/bridge` 挂载 + SPA
+  回退、modal-runner 包内副本双布局解析、`comfy-bridge` 启动命令），pipx 安装即用；见「打包分发（M4）」节。
 - **设置键级推拉已接入**（M2-5 部分：两端 comfy.settings.json 键级 diff 与按方向执行，见「设置 → 设置同步」）。
 - **额度使用与监控已接入**（M4-1 部分）：云端请求按次入账（GPU 单价 × 墙钟秒数，含冷启动等待），
   `GET /api/v1/cost/summary` 聚合今日/本月/近 30 天；月度预算护栏超限自动回落本地或拒绝（决策留痕 `budget_guardrail` +
