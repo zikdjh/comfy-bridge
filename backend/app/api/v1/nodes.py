@@ -1,9 +1,13 @@
 """节点清单与同步 API。
 
-- GET  /nodes/local             本地清单（运行中 /object_info + custom_nodes/ 目录扫描）
+- GET  /nodes/local             本地清单（运行中 /object_info + custom_nodes/ 目录扫描
+                                + ComfyUI-Manager API 兜底增强：在线且装了 Manager 时补
+                                非 git 包的 repo/版本/展示名，任何失败静默跳过）
 - GET  /nodes/cloud             云端清单（Modal 数据卷 custom_nodes/ 免容器列举，modal volume ls）
-- GET  /nodes/diff?deep=        差异矩阵：包级并集对比；deep=1 时同时拉云端 /object_info
-                                （容器未运行会触发冷启动计费，故仅由前端按钮显式触发）
+- GET  /nodes/diff?deep=&force= 差异矩阵：包级并集对比；deep=1 时同时拉云端 /object_info
+                                （容器未运行会触发冷启动计费，故仅由前端按钮显式触发）；
+                                矩阵短 TTL 缓存、deep class_type 块持久化缓存（~/.comfybridge/
+                                nodes_diff_cache.json，重启不丢），force=1 绕过缓存现算
 - POST /nodes/sync              安装本地节点包/单文件 → 云端数据卷（整目录 volume put）
 - POST /nodes/cloud/remove      从云端数据卷移除节点（volume rm）
 - GET  /nodes/version           本地 ComfyUI 版本 vs 云端镜像 pin 对照 + 部署任务状态
@@ -36,7 +40,7 @@ from ...core.config import custom_nodes_dir, get_settings, modal_configured
 from ...modal_volume import client as volume_cli
 from ...modal_volume.client import ModalCliError
 from ...models_mgr import node_presence
-from ...nodes_mgr import deploy, image_rebuild, version_align
+from ...nodes_mgr import deploy, diff_cache, image_rebuild, manager_api, version_align
 from ...nodes_mgr.scan import DISABLED_SUFFIX, scan_custom_nodes
 from ...runner import client as runner_client
 
@@ -150,6 +154,14 @@ async def nodes_local() -> dict:
     except Exception:  # noqa: BLE001
         pass
 
+    # Manager API 兜底（M2-1 余项）：在线且装有 ComfyUI-Manager 时增强目录扫描，
+    # 补非 git 包的 repo/版本/展示名；离线或失败静默跳过，不影响主清单
+    custom_nodes = await asyncio.to_thread(scan_custom_nodes)
+    mgr = await manager_api.fetch_index()
+    mgr_view = {"online": mgr["online"], "entries": mgr["entries"], "error": mgr["error"]}
+    if mgr["online"]:
+        mgr_view["matched"] = manager_api.apply_enrichment(custom_nodes, mgr["index"])
+
     return {
         "online": online,
         "version": version,
@@ -158,7 +170,8 @@ async def nodes_local() -> dict:
         "total_class_types": len(class_types),
         "class_types": class_types,
         "class_types_sample": class_types[:40],
-        "custom_nodes": await asyncio.to_thread(scan_custom_nodes),
+        "manager": mgr_view,
+        "custom_nodes": custom_nodes,
     }
 
 
@@ -263,8 +276,8 @@ def _diff_state(
     return "same" if lp and cloud_has else "unknown"
 
 
-@router.get("/nodes/diff")
-async def nodes_diff(deep: bool = Query(False, description="同时拉取云端 class_type（可能触发容器冷启动）")) -> dict:
+async def _compute_matrix() -> dict:
+    """差异矩阵现算（本地目录扫描 + 云端卷清单，含单文件内容哈希对比）。"""
     scan = await asyncio.to_thread(scan_custom_nodes)
     local_manifest = _manifest(scan)
     local: dict[str, dict] = {}
@@ -331,15 +344,6 @@ async def nodes_diff(deep: bool = Query(False, description="同时拉取云端 c
     only_local = sum(1 for r in rows if r["local"] and not r["cloud"])
     only_cloud = sum(1 for r in rows if r["cloud"] and not r["local"])
 
-    cloud_class_types: list[str] | None = None
-    deep_error: str | None = None
-    if deep and cloud["ok"]:
-        try:
-            info = await runner_client.fetch_object_info()
-            cloud_class_types = sorted(info.keys())
-        except Exception as exc:  # noqa: BLE001 —— 冷启动超时/容器不可达
-            deep_error = str(exc) or type(exc).__name__
-
     return {
         "ok": cloud["ok"],
         "cloud_error": cloud["error"],
@@ -352,12 +356,51 @@ async def nodes_diff(deep: bool = Query(False, description="同时拉取云端 c
             "only_local": only_local,
             "only_cloud": only_cloud,
         },
-        "class_types": {
-            "local": await _local_class_types(),
-            "cloud": cloud_class_types,
-            "error": deep_error,
-        },
     }
+
+
+@router.get("/nodes/diff")
+async def nodes_diff(
+    deep: bool = Query(False, description="同时取两端 class_type 对比（无缓存时可能触发容器冷启动）"),
+    force: bool = Query(False, description="绕过缓存现算"),
+) -> dict:
+    matrix = None if force else diff_cache.load_matrix()
+    matrix_hit = matrix is not None
+    if matrix is None:
+        matrix = await _compute_matrix()
+        diff_cache.save_matrix(matrix)  # 失败结果（ok=False）不会被缓存
+    if matrix_hit:
+        # 缓存命中时 app_state 属运行时状态，每次现取（runner_client 自带 60s TTL）
+        try:
+            matrix["app_state"] = await runner_client.ensure_state()
+        except Exception as exc:  # noqa: BLE001
+            matrix["app_state"] = f"状态获取失败: {exc}"
+    matrix["cached"] = matrix_hit
+    matrix["cached_at"] = matrix.get("cached_at") if matrix_hit else None
+
+    if deep:
+        # deep class_type 块持久缓存（无 TTL）：避免每次进页面都重新触发云端冷启动计费；
+        # 只有 force=1 或块缺失才重拉
+        class_types = None if force else diff_cache.load_class_types()
+        ct_hit = class_types is not None
+        if class_types is None:
+            class_types = {"local": await _local_class_types(), "cloud": None, "error": None}
+            if matrix.get("ok"):
+                try:
+                    info = await runner_client.fetch_object_info()
+                    class_types["cloud"] = sorted(info.keys())
+                except Exception as exc:  # noqa: BLE001 —— 冷启动超时/容器不可达
+                    class_types["error"] = str(exc) or type(exc).__name__
+            diff_cache.save_class_types(class_types)
+        class_types["cached"] = ct_hit
+        class_types["cached_at"] = class_types.get("cached_at") if ct_hit else None
+    else:
+        class_types = {
+            "local": await _local_class_types(), "cloud": None,
+            "error": None, "cached": False, "cached_at": None,
+        }
+
+    return {**matrix, "class_types": class_types}
 
 
 class NamesBody(BaseModel):
@@ -439,6 +482,7 @@ async def nodes_sync(body: NamesBody) -> dict:
                 key=lambda p: p["name"],
             ),
         })
+        diff_cache.invalidate_matrix()  # 卷上节点已变，矩阵缓存失效，下次请求现算
     return {
         "ok": bool(results) and all(r["ok"] for r in results),
         "results": results,
@@ -469,6 +513,7 @@ async def nodes_cloud_remove(body: NamesBody) -> dict:
     # manifest 条目以实际名字（含 .disabled 后缀）记录，按名精确清理
     successful = {r["name"] for r in results if r["ok"]}
     if successful:
+        diff_cache.invalidate_matrix()  # 卷上节点已变，矩阵缓存失效
         manifest = await _read_cloud_manifest()
         if manifest is not None:
             manifest["packages"] = [

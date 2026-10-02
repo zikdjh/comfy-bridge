@@ -25,6 +25,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   removeCloudNodes,
   rebuildNodeImage,
+  refreshNodeDiff,
   syncCloudNodes,
   useLocalNodes,
   useNodeDiff,
@@ -34,6 +35,7 @@ import type { NodeDiffRow, VersionJob } from "../../api/nodes";
 import { stopModalContainers } from "../../api/launch";
 import { warmupModal } from "../../api/health";
 import { EmptyGuide } from "../../components/common/EmptyGuide";
+import dayjs from "dayjs";
 
 /* ---------------- 本地清单（真实数据） ---------------- */
 
@@ -106,12 +108,18 @@ function LocalInventory() {
   }
 
   const cn = data.custom_nodes;
+  const mgr = data.manager;
   return (
     <Space direction="vertical" size={12} style={{ width: "100%" }}>
       <Alert
         type="success"
         showIcon
         message={`本地 ComfyUI 已连接：v${data.version ?? "?"} @ ${data.comfy_url}`}
+        description={
+          mgr?.online
+            ? `ComfyUI-Manager 兜底采集已生效：注册表 ${mgr.entries} 项，匹配本地节点包 ${mgr.matched ?? 0} 个。`
+            : undefined
+        }
         action={
           <Button size="small" onClick={() => refetch()} loading={isFetching}>
             重新扫描
@@ -131,8 +139,39 @@ function LocalInventory() {
           <Table
             columns={[
               { title: "包名", dataIndex: "name" },
-              { title: "仓库", dataIndex: "repo", render: (v: string | null) => v ?? "非 git 目录" },
+              {
+                title: "仓库",
+                dataIndex: "repo",
+                render: (v: string | null, r) =>
+                  v ? (
+                    <Space size={4}>
+                      <Typography.Text style={{ fontSize: 12 }} code ellipsis>
+                        {v}
+                      </Typography.Text>
+                      {r.repo_via_manager && (
+                        <Tooltip title="repo 由 ComfyUI-Manager API 兜底采集补齐（非 git 目录安装）">
+                          <Tag color="purple">Manager</Tag>
+                        </Tooltip>
+                      )}
+                    </Space>
+                  ) : (
+                    "非 git 目录"
+                  ),
+              },
               { title: "commit", dataIndex: "commit", render: (v: string | null) => v ?? "—" },
+              {
+                title: "版本",
+                dataIndex: "manager_version",
+                width: 90,
+                render: (v: string | null) =>
+                  v ? (
+                    <Tooltip title="版本来自 ComfyUI-Manager 注册表">
+                      <Tag color="geekblue">{v}</Tag>
+                    </Tooltip>
+                  ) : (
+                    "—"
+                  ),
+              },
               {
                 title: "依赖声明",
                 dataIndex: "has_requirements",
@@ -188,10 +227,24 @@ function DiffMatrix() {
   const [selectedKeys, setSelectedKeys] = useState<Key[]>([]);
   const [operating, setOperating] = useState(false);
 
-  const { data: diff, isLoading, refetch, isFetching } = useNodeDiff(deep);
+  const { data: diff, isLoading } = useNodeDiff(deep);
+  const [hardRefreshing, setHardRefreshing] = useState(false);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["nodes"] });
+  };
+
+  // 强制刷新：绕过后端矩阵缓存与 deep class_type 缓存现算（结果回写缓存，再失效查询回读）
+  const hardRefresh = async (withDeep: boolean) => {
+    setHardRefreshing(true);
+    try {
+      await refreshNodeDiff(withDeep);
+      invalidate();
+    } catch (exc) {
+      message.error(`刷新失败：${exc instanceof Error ? exc.message : String(exc)}`);
+    } finally {
+      setHardRefreshing(false);
+    }
   };
 
   const install = async (names: string[]) => {
@@ -413,20 +466,23 @@ function DiffMatrix() {
           type="info"
           showIcon
           message={`云端数据卷 ${diff.volume} · 应用状态 ${diff.app_state ?? "未知"} · 已同步 ${diff.counts.synced} / 仅本地 ${diff.counts.only_local} / 仅云端 ${diff.counts.only_cloud}`}
-          description="「安装到云端」把节点文件写入云端数据卷；Python 依赖由容器下次冷启动时按 requirements.txt 自动安装。"
+          description={
+            "「安装到云端」把节点文件写入云端数据卷；Python 依赖由容器下次冷启动时按 requirements.txt 自动安装。" +
+            (diff.cached_at ? `矩阵缓存于 ${dayjs(diff.cached_at).format("HH:mm:ss")}，` : "") +
+            (diff.class_types.cached_at
+              ? `class 对比缓存于 ${dayjs(diff.class_types.cached_at).format("HH:mm:ss")}（避免重复冷启动），`
+              : "") +
+            "点「重新扫描」强制现算。"
+          }
           action={
             <Space>
-              <Button size="small" onClick={() => refetch()} loading={isFetching}>
+              <Button size="small" onClick={() => hardRefresh(deep)} loading={hardRefreshing}>
                 重新扫描
               </Button>
-              {deep ? (
-                <Button size="small" onClick={() => refetch()} loading={isFetching}>
-                  刷新云端对比
-                </Button>
-              ) : (
+              {!deep && (
                 <Popconfirm
                   title="对比云端 class_type？"
-                  description="需要拉取云端 /object_info；容器未运行时会触发冷启动（数十秒、约 $0.02）。"
+                  description="需要拉取云端 /object_info；无持久缓存时可能触发冷启动（数十秒、约 $0.02）。"
                   onConfirm={() => setDeep(true)}
                 >
                   <Button size="small">对比云端 class_type</Button>
@@ -552,8 +608,8 @@ function DiffMatrix() {
           <Space direction="vertical" size={10} style={{ width: "100%" }}>
             {!clsData.ready ? (
               <EmptyGuide
-                description="尚未对比云端 class_type —— 点击右上角「对比云端 class_type」拉取云端节点注册表（可能触发容器冷启动）"
-                actionLabel="对比云端 class_type"
+                description="尚未对比云端 class_type —— 先点右上角「对比云端 class_type」（会拉取云端 /object_info，可能触发容器冷启动计费）；结果持久缓存，之后进页面不再重拉"
+                actionLabel="立即拉取云端 class_type"
                 onAction={() => setDeep(true)}
               />
             ) : (

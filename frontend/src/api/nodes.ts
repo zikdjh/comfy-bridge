@@ -7,6 +7,10 @@ export interface CustomNodePackage {
   commit: string | null;
   has_requirements: boolean;
   enabled: boolean;
+  /** Manager API 兜底采集补充的字段（可选，仅本地 ComfyUI 装有 ComfyUI-Manager 时出现） */
+  repo_via_manager?: boolean;
+  manager_version?: string;
+  manager_title?: string;
 }
 
 export interface CustomNodeScan {
@@ -23,6 +27,8 @@ export interface LocalNodes {
   total_class_types: number;
   class_types: string[];
   class_types_sample: string[];
+  /** ComfyUI-Manager API 兜底采集状态（本机未装 Manager 或 ComfyUI 离线时 online=false） */
+  manager: { online: boolean; entries: number; matched?: number; error: string | null };
   custom_nodes: CustomNodeScan;
 }
 
@@ -83,12 +89,21 @@ export interface NodeDiff {
   volume: string;
   rows: NodeDiffRow[];
   counts: { synced: number; only_local: number; only_cloud: number };
-  class_types: { local: string[] | null; cloud: string[] | null; error: string | null };
+  /** 矩阵缓存命中标记（cached_at = 缓存生成时刻 ISO） */
+  cached: boolean;
+  cached_at: string | null;
+  class_types: {
+    local: string[] | null;
+    cloud: string[] | null;
+    error: string | null;
+    cached?: boolean;
+    cached_at?: string | null;
+  };
 }
 
 /**
- * deep=true 时同时拉取云端 /object_info 做 class_type 级对比；
- * 容器未运行会触发冷启动（计费），由 UI 按钮显式触发。
+ * deep=true 时同时取两端 class_type 对比；矩阵短 TTL 缓存 + deep class_type 块持久缓存，
+ * force=true 绕过缓存现算（云端 class_type 无缓存时会触发容器冷启动，由 UI 显式触发）。
  */
 export function useNodeDiff(deep: boolean) {
   return useQuery({
@@ -96,6 +111,11 @@ export function useNodeDiff(deep: boolean) {
     queryFn: ({ signal }) => apiGet<NodeDiff>(`/api/v1/nodes/diff${deep ? "?deep=1" : ""}`, signal),
     placeholderData: (prev) => prev,
   });
+}
+
+/** 强制刷新：绕过后端缓存现算矩阵（与 deep class_type 缓存），结果回写缓存后由调用方失效查询。 */
+export async function refreshNodeDiff(deep: boolean) {
+  return apiGet<NodeDiff>(`/api/v1/nodes/diff?deep=${deep ? 1 : 0}&force=1`);
 }
 
 export interface NodeOpResult {

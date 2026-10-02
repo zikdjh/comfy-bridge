@@ -647,3 +647,46 @@
   演示产物已清理（卷 rm + 本地删除），preflight 复位 off。日志页出现独立「预校验拦截」标签
   （截图 tmp/gui-test-screenshots/m3_preflight_setting.png、m3_preflight_logs.png）；设置页四档
   选择器渲染正确。
+
+## 二十、节点清单采集补全：Manager API 兜底 + diff 持久化缓存（M2-1 余项 · 2026-10-02）
+
+### 背景
+M2-1「节点清单采集（本地 custom_nodes 扫描 + Manager API 兜底）与 object_info diff 缓存」的
+两项收尾（本地扫描 + 云端 manifest + 包级差异矩阵 + 单文件哈希对比此前已落地）。
+
+### 实现
+- `nodes_mgr/manager_api.py`（新）：ComfyUI-Manager API 兜底采集。本地 ComfyUI 在线且装有
+  Manager 时抓 `/customnode/getlist`，解析（多形态容错：顶层 dict 包 custom_nodes/nodes 列表、
+  顶层裸列表、repo 取 reference 或 files[] 首个 URL 形态值）出 {归一化匹配键: repo/title/version}，
+  按 cnr_id/归一化名称匹配增强目录扫描结果：非 git 包补 repo（打 repo_via_manager 标记）、
+  git 包补注册表版本与展示名。成功缓存 5 分钟/失败 30 秒 + 单飞。纯增强设计：ComfyUI 离线、
+  未装 Manager、格式不识别一律静默降级（online=false + error），绝不影响主清单。
+- `nodes_mgr/diff_cache.py`（新）：diff 持久化缓存 `~/.comfybridge/nodes_diff_cache.json`
+  两个独立区块——矩阵区块短 TTL 120s（失败结果不缓存、app_state 属运行时状态不进缓存、
+  命中时 app_state 每次现取）；deep class_type 区块无 TTL 长期持久（重启不丢），只有
+  force=1 或缺失才重拉云端 object_info（避免每次进页面重复触发容器冷启动计费）。
+  同步/移除节点后主动失效矩阵区块（deep 块与卷内容无关，保留）。
+- `api/v1/nodes.py`：/nodes/diff 拆出 `_compute_matrix()` + 缓存层，新增 `force` 参数；
+  /nodes/local 接入 Manager 增强（响应新增 manager 块）；sync/remove 失效矩阵缓存。
+- 前端：差异矩阵 Alert 展示「矩阵缓存于 HH:mm:ss / class 对比缓存于 HH:mm:ss（避免重复冷启动）」；
+  「重新扫描」改为强制现算（refreshNodeDiff force=1，结果回写缓存后失效查询回读）；
+  本地清单表格新增版本列与 Manager 标签（repo_via_manager）。
+
+### 验证
+- 单测 18 个（test_node_cache.py）：缓存 roundtrip/TTL 过期/失败不缓存/失效保留 deep 块、
+  Manager 解析多形态/增强匹配/fetch 降级与缓存、端点级缓存命中/force/失败不缓存/deep 持久
+  （重拉只 1 次）/sync/remove 失效/local 增强与离线静默。全套 179 passed。
+- ruff 68 基线持平；tsc/build:embed 干净。
+- 真机：现算 19.2s → 缓存命中 2.1s（app_state 实时）→ force 重算正常；deep 现算 76.9s
+  （云端 966 class）→ **后端重启后 deep 调用 1.5ms 从盘上缓存返回**、矩阵缓存命中 2s；
+  /nodes/local 在 ComfyUI 离线时 manager.online=false + error，主清单完好。
+  截图 tmp/gui-test-screenshots/m2_diff_cache.png。
+
+### 关键发现
+- **直接调用 FastAPI 端点函数时 `Query(False)` 默认值是真值对象**（非 False）——单测直调
+  /nodes/diff 会让 force/deep 恒为真：缓存永不命中 + 意外触发真实云端 object_info 拉取
+  （40s Modal CLI 超时）。端点级测试必须显式传 `deep=False, force=False`。生产路由不受影响。
+- 本机 ComfyUI 未安装 ComfyUI-Manager，Manager 兜底的在线增强路径无法真机实测——解析契约
+  以单测固定的多形态样例为准（防御式解析 + 任何失败静默降级，在线机器上装 Manager 后即生效）。
+- deep class_type 持久缓存是「防重复冷启动计费」的关键：旧版每次 deep 都重拉云端 object_info
+  （本次实测容器已缩容，force 重拉花了约 3 分钟）；缓存后进页面零成本，显式 force 才重付一次。
