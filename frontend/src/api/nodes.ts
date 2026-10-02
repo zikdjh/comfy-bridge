@@ -69,7 +69,10 @@ export interface NodeDiffRow {
   cloud: boolean;
   cloud_size: string | null;
   cloud_commit?: string | null;
+  cloud_repo?: string | null;
   cloud_enabled?: boolean | null;
+  local_hash?: string | null; // 单文件节点内容 sha256 前 12 位（pkg 走 commit 对比，无哈希）
+  cloud_hash?: string | null;
   state?: "missing_cloud" | "missing_local" | "same" | "changed" | "unknown";
 }
 
@@ -146,7 +149,9 @@ export function alignNodeVersion() {
   return apiSend<{ ok: boolean; job: VersionJob }>("/api/v1/nodes/version/align", "POST", {});
 }
 
-/** 镜像固化（M2-2）：生成 nodes.lock.yaml + install_nodes.sh 并重建镜像预装节点依赖。 */
-export function rebuildNodeImage() {
-  return apiSend<{ ok: boolean; job: VersionJob }>("/api/v1/nodes/image/rebuild", "POST", {});
+/** 镜像重建：固化本地节点依赖进镜像；align_version=true 并入库内版本对齐（一次 deploy，失败自动回滚）。 */
+export function rebuildNodeImage(alignVersion: boolean) {
+  return apiSend<{ ok: boolean; job: VersionJob }>("/api/v1/nodes/image/rebuild", "POST", {
+    align_version: alignVersion,
+  });
 }

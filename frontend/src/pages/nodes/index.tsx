@@ -15,6 +15,7 @@ import {
   Table,
   Tabs,
   Tag,
+  Tooltip,
   Typography,
   message,
 } from "antd";
@@ -22,7 +23,6 @@ import { CheckCircleOutlined, CloseCircleOutlined, CloudUploadOutlined, SyncOutl
 import type { ColumnsType } from "antd/es/table";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  alignNodeVersion,
   removeCloudNodes,
   rebuildNodeImage,
   syncCloudNodes,
@@ -267,14 +267,14 @@ function DiffMatrix() {
 
   const rebuildImage = async () => {
     try {
-      const res = await rebuildNodeImage();
+      const res = await rebuildNodeImage(true);
       if (res.ok) {
-        message.success("固化任务已启动：生成 nodes.lock.yaml 并重建镜像（约数分钟）");
+        message.success("重建任务已启动：固化节点依赖 + 版本对齐一次完成（约数分钟）");
       } else {
-        message.error(res.job?.error ?? "固化任务启动失败");
+        message.error(res.job?.error ?? "重建任务启动失败");
       }
     } catch (exc) {
-      message.error(`固化请求失败：${exc instanceof Error ? exc.message : String(exc)}`);
+      message.error(`重建请求失败：${exc instanceof Error ? exc.message : String(exc)}`);
     }
     queryClient.invalidateQueries({ queryKey: ["nodes", "version"] });
   };
@@ -300,11 +300,22 @@ function DiffMatrix() {
       ),
     },
     {
-      title: "commit",
+      title: "commit / hash",
       dataIndex: "commit",
-      width: 110,
+      width: 130,
       render: (v: string | null, r) => {
-        if (r.kind === "single") return "—";
+        if (r.kind === "single") {
+          // 单文件节点无 commit：展示两端内容 hash 前 12 位（对比依据）
+          if (!r.local_hash && !r.cloud_hash) return "—";
+          const same = r.local_hash && r.local_hash === r.cloud_hash;
+          return (
+            <Tooltip title={same ? "内容一致" : "内容 hash（本地 / 云端）"}>
+              <Typography.Text type={same ? "secondary" : undefined} code style={{ fontSize: 12 }}>
+                {`${r.local_hash ?? "—"} / ${r.cloud_hash ?? "—"}`}
+              </Typography.Text>
+            </Tooltip>
+          );
+        }
         if (!r.local) return r.cloud_commit ?? "云端未知";
         if (!r.cloud) return v ?? "非 git 目录";
         return v === r.cloud_commit
@@ -422,16 +433,16 @@ function DiffMatrix() {
                 </Popconfirm>
               )}
               <Popconfirm
-                title="固化到镜像？"
+                title="重建镜像（固化 + 版本对齐）？"
                 description={
                   "按当前本地启用的节点集生成 nodes.lock.yaml + install_nodes.sh，" +
-                  "重建镜像把依赖预装进镜像（约数分钟；失败自动回滚锁文件）。" +
-                  "固化后冷启动不再逐节点 pip 安装；之后新同步的节点仍走冷启动兜底，直到下次固化。"
+                  "并把云端 ComfyUI 版本 pin 对齐到本地版本，一次 modal deploy 完成（约数分钟；失败自动回滚）。" +
+                  "固化后冷启动不再逐节点 pip 安装；之后新同步的节点仍走冷启动兜底，直到下次重建。"
                 }
                 onConfirm={rebuildImage}
               >
                 <Button size="small" icon={<ThunderboltOutlined />}>
-                  固化到镜像
+                  重建镜像
                 </Button>
               </Popconfirm>
             </Space>
@@ -441,6 +452,46 @@ function DiffMatrix() {
       {diff?.class_types.error && (
         <Alert type="warning" showIcon message="云端 class_type 对比失败" description={diff.class_types.error} />
       )}
+      {(() => {
+        // 反向同步提示（M2 收尾）：云端独有节点只给安装线索，不自动改本地环境
+        const cloudOnly = (diff?.rows ?? []).filter((r) => r.cloud && !r.local);
+        if (cloudOnly.length === 0) return null;
+        const shown = cloudOnly.slice(0, 6);
+        return (
+          <Alert
+            type="warning"
+            showIcon
+            message={`反向同步提示：云端有 ${cloudOnly.length} 个本地缺失的节点`}
+            description={
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {shown.map((r) => (
+                  <div key={r.name} style={{ fontSize: 12 }}>
+                    <Typography.Text code>{r.name}</Typography.Text>
+                    {" — "}
+                    {r.cloud_repo ? (
+                      <>
+                        <Typography.Text code style={{ fontSize: 12 }}>
+                          {`git clone ${r.cloud_repo}`}
+                        </Typography.Text>
+                        {r.cloud_commit ? ` @ ${r.cloud_commit.slice(0, 8)}` : ""}
+                      </>
+                    ) : r.kind === "single" ? (
+                      "单文件节点：可经数据卷导出（modal volume get comfyui-data custom_nodes/" + r.name + "）"
+                    ) : (
+                      "来源未知（云端清单无 repo 信息）"
+                    )}
+                  </div>
+                ))}
+                {cloudOnly.length > shown.length && (
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    …等 {cloudOnly.length} 个（切「仅本地缺失」筛选查看全部）
+                  </Typography.Text>
+                )}
+              </div>
+            }
+          />
+        );
+      })()}
 
       <Card
         size="small"
@@ -580,23 +631,23 @@ function VersionBanner() {
 
   const startAlign = () => {
     Modal.confirm({
-      title: `把云端 ComfyUI 对齐到本地 v${data.local_version}？`,
+      title: `重建镜像并对齐到本地 v${data.local_version}？`,
       content:
-        "将改写镜像版本 pin 并执行 modal deploy 重建镜像（约数分钟）。" +
+        "将固化当前节点依赖 + 改写镜像版本 pin，一次 modal deploy 重建（约数分钟）。" +
         "重建期间云端容器会以旧版本继续运行；部署完成后下一次容器启动即用新版本。数据卷不受影响。",
-      okText: "开始对齐",
+      okText: "开始重建",
       cancelText: "取消",
       onOk: async () => {
         setAligning(true);
         try {
-          const res = await alignNodeVersion();
+          const res = await rebuildNodeImage(true);
           if (res.ok) {
-            message.success("对齐任务已启动（镜像重建约需数分钟）");
+            message.success("重建任务已启动（固化 + 版本对齐一次完成，约数分钟）");
           } else {
-            message.error(res.job?.error ?? "对齐任务启动失败");
+            message.error(res.job?.error ?? "重建任务启动失败");
           }
         } catch (exc) {
-          message.error(`对齐请求失败：${exc instanceof Error ? exc.message : String(exc)}`);
+          message.error(`重建请求失败：${exc instanceof Error ? exc.message : String(exc)}`);
         } finally {
           setAligning(false);
         }

@@ -334,7 +334,7 @@ nodes:
       <tbody>
         <tr><td>extra_model_paths.yaml</td><td>桥接器按「本地路径映射表 + Modal 卷布局」<strong>自动生成</strong>远端配置；本地的该文件只读展示不回写</td></tr>
         <tr><td>用户设置（settings）</td><td>通过 <code>/api/settings</code> 拉取两端 diff，UI 预览后单向 推送/拉取（键级勾选）；每次同步留痕</td></tr>
-        <tr><td>工作流（workflows 目录） <span class="badge green">M2-4 已实现 2026-09-30</span></td><td>本地 <code>user/default/workflows/</code> ⇄ Modal 用户卷同名目录，<strong>双向、按文件</strong>；三方变更检测（本地 / 云端 / 基线快照，mtime+size）；冲突时保留双副本 <code>name.conflict-时间戳.json</code> 并在 UI 人工合并。<span class="badge warn">偏差与余项</span> content_hash 内容级检测待做（当前 mtime+size 可能漏判同尺寸改写）；「远端执行成功过的工作流自动回写本地运行统计」未做</td></tr>
+        <tr><td>工作流（workflows 目录） <span class="badge green">M2-4 已实现 2026-09-30</span></td><td>本地 <code>user/default/workflows/</code> ⇄ Modal 用户卷同名目录，<strong>双向、按文件</strong>；三方变更检测（本地 / 云端 / 基线快照，<strong>内容 sha256</strong> 现算，基线存桥接器状态文件）；冲突时保留双副本 <code>name.conflict-时间戳.json</code> 并在 UI 人工合并（冲突行提供双列对比：两端元数据 + 节点类型/模型引用摘要）。<span class="badge warn">余项</span> 「远端执行成功过的工作流自动回写本地运行统计」未做</td></tr>
         <tr><td>自定义节点映射配置</td><td>节点内 <code>node_paths</code> 类配置随设置同步；工作流引用的模型文件名同步时校验两端是否存在并标记</td></tr>
       </tbody>
     </table>

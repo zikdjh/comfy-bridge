@@ -8,9 +8,9 @@
 - POST /nodes/cloud/remove      从云端数据卷移除节点（volume rm）
 - GET  /nodes/version           本地 ComfyUI 版本 vs 云端镜像 pin 对照 + 部署任务状态
 - POST /nodes/version/align     版本对齐（本地为权威）：写 pin 锁文件 → modal deploy 重建镜像
-- POST /nodes/image/rebuild     镜像固化（M2-2）：生成 nodes.lock.yaml + install_nodes.sh
-                                （启用节点依赖预装进镜像）→ modal deploy，失败自动回滚
-                                （部署任务体与互斥见 nodes_mgr.deploy，两者共用单飞通道）
+- POST /nodes/image/rebuild     镜像重建：固化（M2-2，nodes.lock.yaml + install_nodes.sh 依赖预装）
+                                + 可选版本对齐（align_version）合并为一次 modal deploy，失败自动回滚
+                                （部署任务体与互斥见 nodes_mgr.deploy，与 version/align 共用单飞通道）
 
 同步语义：节点文件落卷后立即可见于云端清单；Python 依赖由 runner 在 comfyui 容器
 冷启动时按 requirements.txt 自动安装（install_custom_node_deps），因此同步后需等下次
@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import shutil
 import tempfile
@@ -205,6 +206,63 @@ async def nodes_cloud() -> dict:
     return await _cloud_listing()
 
 
+def _local_file_hash(name: str) -> str | None:
+    """本地单文件节点内容 sha256（文件缺失/不可读返回 None）。"""
+    path = custom_nodes_dir() / name
+    if not path.is_file():
+        return None
+    try:
+        h = hashlib.sha256()
+        with path.open("rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except OSError:
+        return None
+
+
+async def _cloud_file_hash(name: str) -> str | None:
+    """云端单文件内容 sha256（volume get 现算；失败返回 None，diff 退回元数据对比）。"""
+    tmp_root = Path(tempfile.mkdtemp(prefix="cb-node-hash-"))
+    try:
+        dest = tmp_root / name
+        await volume_cli.run(
+            "volume", "get", volume_cli.volume_name(), f"custom_nodes/{name}", str(dest), "--force"
+        )
+        h = hashlib.sha256()
+        with dest.open("rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except (ModalCliError, OSError):
+        return None
+    finally:
+        shutil.rmtree(tmp_root, ignore_errors=True)
+
+
+def _diff_state(
+    lp: dict | None, cp: dict | None, cloud_has: bool,
+    local_hash: str | None, cloud_hash: str | None,
+) -> str:
+    """一致性判定（纯函数）：包级比 commit/启用/形态；单文件无 commit 可比时以内容哈希为准。"""
+    if lp and not cloud_has:
+        return "missing_cloud"
+    if cloud_has and not lp:
+        return "missing_local"
+    if lp and cp and (
+        lp.get("commit") != cp.get("commit")
+        or lp.get("enabled") != cp.get("enabled")
+        or lp.get("kind") != cp.get("kind")
+    ):
+        return "changed"
+    if (
+        lp and cloud_has and lp.get("kind") == "single"
+        and local_hash and cloud_hash and local_hash != cloud_hash
+    ):
+        return "changed"  # 元数据一致但内容不同（单文件无 commit，哈希为准）
+    return "same" if lp and cloud_has else "unknown"
+
+
 @router.get("/nodes/diff")
 async def nodes_diff(deep: bool = Query(False, description="同时拉取云端 class_type（可能触发容器冷启动）")) -> dict:
     scan = await asyncio.to_thread(scan_custom_nodes)
@@ -243,18 +301,12 @@ async def nodes_diff(deep: bool = Query(False, description="同时拉取云端 c
         lp = local.get(name)
         cp = cloud_entries.get(name)
         cloud_has = name in cloud_pkgs or name in cloud_files
-        if lp and not cloud_has:
-            state = "missing_cloud"
-        elif cloud_has and not lp:
-            state = "missing_local"
-        elif lp and cp and (
-            lp.get("commit") != cp.get("commit")
-            or lp.get("enabled") != cp.get("enabled")
-            or lp.get("kind") != cp.get("kind")
-        ):
-            state = "changed"
-        else:
-            state = "same" if lp and cloud_has else "unknown"
+        # 单文件节点没有 commit 可比：两端现算内容 sha256 判漂移（M2 内容哈希检测收尾）
+        local_hash = cloud_hash = None
+        if lp and cloud_has and lp["kind"] == "single":
+            local_hash = _local_file_hash(name)
+            cloud_hash = await _cloud_file_hash(name)
+        state = _diff_state(lp, cp, cloud_has, local_hash, cloud_hash)
         rows.append({
             "name": name,
             "kind": lp["kind"] if lp else ("single" if name in cloud_files else "pkg"),
@@ -269,7 +321,10 @@ async def nodes_diff(deep: bool = Query(False, description="同时拉取云端 c
                 None,
             ),
             "cloud_commit": cp.get("commit") if cp else None,
+            "cloud_repo": cp.get("repo") if cp else None,
             "cloud_enabled": cp.get("enabled") if cp else None,
+            "local_hash": local_hash[:12] if local_hash else None,
+            "cloud_hash": cloud_hash[:12] if cloud_hash else None,
             "state": state,
         })
 
@@ -307,6 +362,11 @@ async def nodes_diff(deep: bool = Query(False, description="同时拉取云端 c
 
 class NamesBody(BaseModel):
     names: list[str]
+
+
+class RebuildBody(BaseModel):
+    # align_version=True：把「版本 pin 对齐」并入同一次镜像重建（一次 deploy，M2 入口合并）
+    align_version: bool = False
 
 
 def _stage_dir(src: Path) -> Path:
@@ -397,7 +457,12 @@ async def nodes_cloud_remove(body: NamesBody) -> dict:
         try:
             await _remove_remote(remote)
             if not name.endswith(DISABLED_SUFFIX):
-                await _remove_remote(f"custom_nodes/{name}{DISABLED_SUFFIX}")
+                # .disabled 变体多数情况下不存在，缺文件不算失败
+                try:
+                    await _remove_remote(f"custom_nodes/{name}{DISABLED_SUFFIX}")
+                except ModalCliError as exc:
+                    if "No such file or directory" not in str(exc):
+                        raise
             results.append({"name": name, "ok": True})
         except ModalCliError as exc:
             results.append({"name": name, "ok": False, "error": str(exc)})
@@ -453,12 +518,12 @@ async def nodes_version_align() -> dict:
 
 
 @router.post("/nodes/image/rebuild")
-async def nodes_image_rebuild() -> dict:
-    """镜像固化（M2-2）：按本地节点集生成 nodes.lock.yaml + install_nodes.sh 并重建镜像。"""
+async def nodes_image_rebuild(body: RebuildBody | None = None) -> dict:
+    """镜像重建：固化本地节点依赖进镜像；align_version=True 时并入库内 ComfyUI 版本对齐（一次 deploy）。"""
     if not modal_configured():
         raise HTTPException(status_code=400, detail="未配置 Modal 凭证（设置 → Modal）")
     try:
-        job = await image_rebuild.start_rebuild()
+        job = await image_rebuild.start_rebuild(align_version=bool(body and body.align_version))
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"ok": job["state"] in ("running", "ok"), "job": job}

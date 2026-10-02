@@ -507,3 +507,48 @@
   对账卡（月份选择器、四指标、资源构成标签、UTC 逐日双列表、口径注释）渲染全部正常；
   截图归档 tmp/gui-test-screenshots/cost_report_{workflow,model}.png（visual-judge 本环境不可用，
   按约定人工查验通过）。仪表盘卡片入口链接在位。
+
+## 十七、M2 收尾（2026-10-01）
+
+### 语义
+- **单文件节点内容哈希检测**：节点 diff 对两端都在的单文件节点现算内容 sha256（本地直读、云端 volume get 到
+  临时目录），元数据一致但内容不同 → changed；哈希不可得（拉取失败）退回元数据对比不误报。包级仍按
+  commit/启用/形态判定（目录树哈希成本高，commit 已覆盖 git 包）。diff 行新增 local_hash/cloud_hash（12 位）
+  与 cloud_repo。
+- **反向同步提示**：云端独有节点（missing_local）在差异矩阵顶部出提示条——git 包给 `git clone <repo>` 可复制
+  命令（含云端 commit），单文件给数据卷导出命令；只提示不自动改本地环境（红线）。
+- **冲突双列对比**：工作流同步矩阵冲突行新增「对比」→ 双列弹窗（本地版/云端版）：大小、hash（12 位）、
+  mtime（云端经卷取回无 mtime）、节点类型计数（仅该端有的类型橙色高亮）、模型引用清单。后端
+  `GET /api/v1/workflows/compare` 现读两端文件解析摘要（UI 格式 nodes/widgets_values 与 API 格式 class_type/
+  inputs 通吃）。
+- **对齐/固化入口合并**：`POST /nodes/image/rebuild` 接受 `align_version`（前端固定 true）——固化节点依赖 +
+  版本 pin 对齐一次 modal deploy 完成（此前两次，还互斥只能排队）；begin_exclusive 成功后才落盘
+  （409 时零变更），回滚同时还原锁/脚本与 pin；本地版本缺失只跳过对齐不阻塞固化；pin 已一致则纯固化。
+  节点页按钮改为「重建镜像」，版本漂移横幅的对齐动作也走同一入口（纯对齐端点 version/align 保留）。
+
+### 关键发现
+- M2-4 工作流同步的变更检测**本来就是内容 sha256**（两端现算 + last-synced 基线），早前 FIXLIST/文档把
+  「changed 内容哈希检测」挂在工作流下是口径误记——真实缺口在**节点 diff 的单文件**（无 commit 可比），
+  本次补上；规划/计划书相应段落已更正（mtime+size → sha256）。
+- `/nodes/cloud/remove` 顺手修复：.disabled 变体多数不存在，`volume rm` 报 "No such file or directory"
+  曾导致整个 remove 返回失败（文件其实已删）；现在缺文件不算失败。
+
+### 改动
+- 后端：api/v1/nodes.py（_local_file_hash/_cloud_file_hash/_diff_state 纯函数 + diff 行字段 + rebuild body +
+  remove 容错）、api/v1/workflows.py（/compare + _summarize_workflow/_side_meta）、nodes_mgr/image_rebuild.py
+  （align_version 合并重建）。
+- 前端：api/nodes.ts、api/workflows.ts、pages/nodes/index.tsx（合并按钮/提示条/commit+hash 列）、
+  pages/workflows/index.tsx（CompareModal + SideCard）。
+- 文档：规划/计划书（检测口径更正 + M2 收尾标注）、README 余项收敛。
+
+### 验证
+- 单测 **141 passed**（+11：_diff_state 全分支含哈希漂移/不可得退元数据、合并重建写 pin/无漂移不写/
+  非对齐不触碰版本函数/409 零落盘 + 双回滚、摘要双格式/坏 JSON、compare 本地侧/422/卷取回云端侧）。
+- ruff 全量 68 = 基线 68（新增 0）；`tsc --noEmit` 0 错；`pnpm build:embed` 成功。
+- 真机验证（dev 8189）：diff 单文件 websocket_image_save.py 两端哈希一致 → same；上传真实 zz-rev-demo.py
+  到卷 → only_cloud=1、提示条给导出命令；构造真实冲突（本地改 + 卷 put 覆盖）→ conflict 行 + compare
+  返回两端不同摘要（本地 3 节点 sd_xl / 云端 2 节点 juggernaut）。浏览器截图归档
+  tmp/gui-test-screenshots/m2_{conflict_compare,nodes_reverse_hash}.png（人工查验通过）。
+- 演示产物已清理（卷上 zz-rev-demo.py / 两端 zz-conflict-demo.json），两端恢复 synced 2/2。
+- 备注：本地 ComfyUI（Desktop）本段验证期间未运行（顶栏显示未连接，不影响上述功能验证）；
+  其嵌入 python 无法直接命令行拉起（缺 torch 路径），需经 Desktop 启动。

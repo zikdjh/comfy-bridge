@@ -82,8 +82,8 @@ M2 同步引擎主体、M3 规则链数据化、M4 护栏与打包分发均已�
   把节点目录/单文件写入数据卷并维护 `custom_nodes/.comfybridge-manifest.json`，云端清单经 `modal volume get`
   免容器读取。「从云端移除」同步清理 manifest。停用节点整目录以 `.disabled` 后缀落卷（云端加载与装依赖均跳过）。
   镜像固化已接入（M2-2）：`nodes.lock.yaml` + `install_nodes.sh` 把启用节点依赖预装进镜像（`modal deploy` 重建，
-  失败自动回滚）；Manager API 兜底采集待做。ComfyUI 版本对齐已接入（M2-5 第一片）：本地版本为权威，
-  云端 pin 追随本地并自动重建镜像，失败回滚 pin。
+  失败自动回滚）；单文件节点一致性按内容 sha256 判定（2026-10-01）；Manager API 兜底采集待做。
+  ComfyUI 版本对齐已接入（M2-5 第一片）：本地版本为权威，云端 pin 追随本地并自动重建镜像，失败回滚 pin。
 - **工作流双向同步已接入**（M2-4）：本地 ⇄ 云端用户卷按文件同步，三方变更检测（本地/云端/基线）+ 冲突双副本
   （`name.conflict-时间戳.json`），修复 `volume ls` 中文双重转义。余项：changed 内容哈希检测、反向同步提示、
   冲突双列对比视图。
@@ -106,6 +106,9 @@ M2 同步引擎主体、M3 规则链数据化、M4 护栏与打包分发均已�
   checkpoint/扩散模型权重引用，历史请求启动时从图快照回填）；`GET /api/v1/cost/report`、
   `GET /api/v1/cost/export`（CSV 导出：逐条流水/聚合，utf-8-sig）；`GET /api/v1/cost/reconciliation`
   逐项账单对账（本地按次估算 vs Modal `billing report` 明细 GPU 资源计量，UTC 月 + UTC 日界，比值持续偏离 1 提示校准单价）。
-- 工作流双向同步（M2-4）余项（changed 内容哈希检测、反向同步提示、冲突对比视图）、版本对齐入口合并（M2-5 余项）待做。
+- **M2 收尾已接入**（2026-10-01）：节点页「重建镜像」合并固化与版本对齐为一次 modal deploy（此前两次）；
+  节点 diff 单文件节点以两端内容 sha256 判漂移，云端独有节点给安装命令线索（反向同步提示，不自动改本地环境）；
+  工作流冲突行新增双列对比（两端大小/hash/节点类型/模型引用摘要，`GET /api/v1/workflows/compare`）。
+  余项：「远端运行统计回写」未做。
 
 里程碑验收标准见计划书 §6–§7。

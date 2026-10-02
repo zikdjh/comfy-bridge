@@ -1,23 +1,33 @@
-"""工作流 API：本地清单 + 双向同步（M2-4）。
+"""工作流 API：本地清单 + 双向同步（M2-4）+ 冲突对比。
 
 - GET  /workflows/local         本地工作流检测（user/default/workflows/ 只读探测）
 - GET  /workflows/sync          同步矩阵：本地⇄数据卷 user/default/workflows/ 三方检测
                                 （last-synced 基线 hash，冲突/变更分类，见 sync/workflows_rules）
 - POST /workflows/sync          执行动作 push/pull/keep_both（keep_both = 冲突双副本）
+- GET  /workflows/compare       冲突双列对比：本地版 vs 云端版元数据 + 内容摘要
+                                （节点类型计数 / 模型引用，UI 格式与 API 格式都能解析）
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import json
+import shutil
 import sqlite3
-from datetime import datetime, timezone
+import tempfile
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ...core.config import get_settings, workflows_dir
+from ...core.constants import MODEL_FILE_EXTS
+from ...modal_volume import client as volume_cli
+from ...modal_volume.client import ModalCliError
 from ...sync import workflows_sync
+from ...sync.workflows_rules import valid_workflow_name
 
 router = APIRouter()
 
@@ -91,3 +101,92 @@ async def workflows_sync_status() -> dict:
 async def workflows_sync_apply(body: SyncActionsBody) -> dict:
     """执行同步动作：[{name, action}]，action ∈ push|pull|keep_both。"""
     return await workflows_sync.apply(body.actions)
+
+
+def _summarize_workflow(data) -> dict:
+    """工作流 JSON → 内容摘要：节点类型计数 + 模型引用（UI 格式 / API 格式通吃）。"""
+    types: dict[str, int] = {}
+    models: set[str] = set()
+
+    def _note_model(val) -> None:
+        if isinstance(val, str) and Path(val).suffix.lower() in MODEL_FILE_EXTS:
+            models.add(val)
+
+    nodes = []
+    if isinstance(data, dict) and isinstance(data.get("nodes"), list):
+        # UI 导出格式：{nodes: [{type, widgets_values…}], links…}
+        for n in data["nodes"]:
+            if isinstance(n, dict):
+                nodes.append(str(n.get("type") or "?"))
+                for w in n.get("widgets_values") or []:
+                    if isinstance(w, str):
+                        _note_model(w)
+                    elif isinstance(w, list):
+                        for sub in w:
+                            if isinstance(sub, str):
+                                _note_model(sub)
+    elif isinstance(data, dict):
+        # API 格式：{id: {class_type, inputs…}}
+        for n in data.values():
+            if isinstance(n, dict):
+                nodes.append(str(n.get("class_type") or "?"))
+                for v in (n.get("inputs") or {}).values():
+                    if isinstance(v, str):
+                        _note_model(v)
+    for t in nodes:
+        types[t] = types.get(t, 0) + 1
+    return {
+        "ok": True,
+        "node_count": len(nodes),
+        "types": sorted(types.items(), key=lambda kv: -kv[1])[:24],
+        "models": sorted(models),
+    }
+
+
+def _side_meta(path: Path, with_mtime: bool) -> dict:
+    meta: dict = {"exists": path.is_file()}
+    if not meta["exists"]:
+        return meta
+    try:
+        stat = path.stat()
+        meta["size_bytes"] = stat.st_size
+        if with_mtime:
+            meta["mtime"] = datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat()
+    except OSError:
+        pass
+    try:
+        meta["hash"] = hashlib.sha256(path.read_bytes()).hexdigest()[:12]
+        meta.update(_summarize_workflow(json.loads(path.read_text(encoding="utf-8", errors="replace"))))
+    except (OSError, ValueError):
+        meta["summary_error"] = "内容读取或 JSON 解析失败"
+    return meta
+
+
+@router.get("/workflows/compare")
+async def workflows_compare(name: str) -> dict:
+    """冲突双列对比数据（name 为文件名）；云端版经 volume get 现读（mtime 不可得，略）。"""
+    if not valid_workflow_name(name):
+        raise HTTPException(status_code=422, detail="非法工作流文件名")
+    root = workflows_dir()
+    local = await asyncio.to_thread(_side_meta, root / name, True)
+    cloud: dict = {"exists": False}
+    if workflows_sync.modal_configured():
+        tmp_root = Path(tempfile.mkdtemp(prefix="cb-wf-cmp-"))
+        try:
+            dest = tmp_root / name
+            await volume_cli.run(
+                "volume", "get", volume_cli.volume_name(), f"{workflows_sync.CLOUD_DIR}/{name}", str(dest), "--force"
+            )
+            cloud = await asyncio.to_thread(_side_meta, dest, False)
+        except ModalCliError as exc:
+            cloud = {"exists": False, "error": str(exc)[:300]}
+        finally:
+            shutil.rmtree(tmp_root, ignore_errors=True)
+    else:
+        cloud = {"exists": False, "error": "未配置 Modal 凭证"}
+    return {
+        "name": name,
+        "local": local,
+        "cloud": cloud,
+        "identical": bool(local.get("hash") and local.get("hash") == cloud.get("hash")),
+    }

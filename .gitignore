@@ -28,3 +28,4 @@ backend/pkg_assets/
 
 # 运行杂物
 tmp/
+tmp-*.log

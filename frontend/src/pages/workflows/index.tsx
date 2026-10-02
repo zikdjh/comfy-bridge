@@ -1,13 +1,16 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Alert, Button, Card, Modal, Space, Spin, Table, Tabs, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   applyWorkflowSync,
+  fetchWorkflowCompare,
   useLocalWorkflows,
   useWorkflowSync,
   type LocalWorkflow,
+  type WfCompare,
+  type WfCompareSide,
   type WfSyncAction,
   type WfSyncRow,
 } from "../../api/workflows";
@@ -87,9 +90,113 @@ const stateMeta: Record<WfState, { color: string; text: string }> = {
 
 const shortHash = (h: string | null) => (h ? h.slice(0, 8) : "—");
 
+/* ---------------- 冲突双列对比（M2 收尾）：本地版 vs 云端版元数据 + 内容摘要 ---------------- */
+
+function SideCard({ title, side, onlyTypes }: { title: string; side: WfCompareSide; onlyTypes: Set<string> }) {
+  return (
+    <Card
+      size="small"
+      title={title}
+      style={{ flex: 1, minWidth: 320 }}
+      styles={{ body: { paddingInline: 16 } }}
+    >
+      {!side.exists ? (
+        <Typography.Text type="secondary">{side.error ?? "该端不存在此文件"}</Typography.Text>
+      ) : (
+        <Space direction="vertical" size={6} style={{ width: "100%" }}>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            大小 {side.size_bytes != null ? fmtSize(side.size_bytes) : "—"}
+            {" · hash "}
+            <Typography.Text code>{side.hash ?? "—"}</Typography.Text>
+            {side.mtime ? ` · 修改 ${dayjs(side.mtime).format("MM-DD HH:mm")}` : ""}
+          </Typography.Text>
+          {side.summary_error ? (
+            <Typography.Text type="warning" style={{ fontSize: 12 }}>{side.summary_error}</Typography.Text>
+          ) : (
+            <>
+              <div>
+                <span style={{ fontSize: 12, color: "#8a90a2", marginRight: 8 }}>节点 {side.node_count ?? 0} 个：</span>
+                {(side.types ?? []).slice(0, 10).map(([t, c]) => (
+                  <Tag
+                    key={t}
+                    color={onlyTypes.has(t) ? "orange" : undefined}
+                    style={{ marginInlineEnd: 4, fontSize: 12 }}
+                  >
+                    {t}{c > 1 ? ` ×${c}` : ""}
+                  </Tag>
+                ))}
+                {(side.types?.length ?? 0) > 10 && (
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    等 {side.types!.length} 类
+                  </Typography.Text>
+                )}
+              </div>
+              {(side.models?.length ?? 0) > 0 && (
+                <div>
+                  <span style={{ fontSize: 12, color: "#8a90a2", marginRight: 8 }}>模型引用：</span>
+                  {side.models!.slice(0, 8).map((m) => (
+                    <Tag key={m} style={{ marginInlineEnd: 4, fontSize: 12 }}>{m}</Tag>
+                  ))}
+                  {side.models!.length > 8 && (
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>等 {side.models!.length} 个</Typography.Text>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </Space>
+      )}
+    </Card>
+  );
+}
+
+function CompareModal({ name, onClose }: { name: string | null; onClose: () => void }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["workflows", "compare", name],
+    queryFn: ({ signal }) => fetchWorkflowCompare(name!, signal),
+    enabled: !!name,
+  });
+
+  const onlySets = useMemo(() => {
+    const lt = new Set((data?.local.types ?? []).map(([t]) => t));
+    const ct = new Set((data?.cloud.types ?? []).map(([t]) => t));
+    const onlyLocal = new Set([...lt].filter((t) => !ct.has(t)));
+    const onlyCloud = new Set([...ct].filter((t) => !lt.has(t)));
+    return { onlyLocal, onlyCloud };
+  }, [data]);
+
+  return (
+    <Modal
+      title={`冲突对比：${name ?? ""}`}
+      open={!!name}
+      onCancel={onClose}
+      footer={null}
+      width={960}
+    >
+      {isLoading || !data ? (
+        <Spin style={{ display: "block", margin: "40px auto" }} />
+      ) : (
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          {data.identical && (
+            <Alert type="success" showIcon message="两端内容一致（hash 相同）——可直接选「推本地版」或「推云端版」任一收口" />
+          )}
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            橙色标签 = 仅该端有的节点类型；「保留双副本」会把云端版留为 ×.conflict-时间.json 后推本地版上云。
+          </Typography.Text>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <SideCard title="本地版" side={data.local} onlyTypes={onlySets.onlyLocal} />
+            <SideCard title="云端版（数据卷）" side={data.cloud} onlyTypes={onlySets.onlyCloud} />
+          </div>
+        </Space>
+      )}
+    </Modal>
+  );
+}
+
 function SyncMatrix() {
   const queryClient = useQueryClient();
   const [operating, setOperating] = useState(false);
+  const [compareName, setCompareName] = useState<string | null>(null);
   const { data, isLoading, refetch, isFetching } = useWorkflowSync();
 
   const refresh = () => {
@@ -167,6 +274,9 @@ function SyncMatrix() {
         if (r.state === "conflict") {
           return (
             <Space size={0} wrap>
+              <Button size="small" type="link" disabled={operating} onClick={() => setCompareName(r.name)}>
+                对比
+              </Button>
               <Button size="small" type="link" disabled={operating}
                 onClick={() => run([{ name: r.name, action: "push" }], `已用本地版覆盖云端：${r.name}`)}>
                 推本地版
@@ -227,6 +337,7 @@ function SyncMatrix() {
           <Table<WfSyncRow> columns={columns} dataSource={data.rows} pagination={false} size="small" rowKey="name" />
         )}
       </Card>
+      <CompareModal name={compareName} onClose={() => setCompareName(null)} />
     </Space>
   );
 }
