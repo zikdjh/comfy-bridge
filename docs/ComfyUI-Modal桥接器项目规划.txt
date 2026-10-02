@@ -144,8 +144,8 @@ def comfyui():
       并发：@modal.concurrent 复用容器跑多次生成；scaledown_window 控制保活时长（计费敏感项）。
     3.3 节点同步引擎
        |  | 环节 | 设计
-         | 节点清单采集（已实现 2026-09-28） | 本地：扫描 custom_nodes/，目录型包取 git remote URL + HEAD commit、requirements.txt 与启停状态，单文件节点单独登记；云端以数据卷 custom_nodes/.comfybridge-manifest.json 为权威清单（同步/移除时维护），经 modal volume get 免容器读取。待做：ComfyUI-Manager API 兜底（镜像锁文件采集已由 M2-2 落地，见下）
-         | 能力差异对比（已实现 2026-09-28） | GET /api/v1/nodes/diff 按节点包/单文件求并集，逐行给出 same|changed|missing_cloud|missing_local（含 commit 与启用状态一致性）；deep=1 时额外拉云端 /object_info 做 class_type 级差异，由 UI 显式触发（会冷启动容器）。路由引擎所需的 class 两端在场缓存已由 node_presence 落地（M3-2，见 3.1）；diff 结果本身的持久化缓存仍待做
+         | 节点清单采集（已实现 2026-09-28） | 本地：扫描 custom_nodes/，目录型包取 git remote URL + HEAD commit、requirements.txt 与启停状态，单文件节点单独登记；云端以数据卷 custom_nodes/.comfybridge-manifest.json 为权威清单（同步/移除时维护），经 modal volume get 免容器读取。Manager API 兜底已于 2026-10-02 落地：在线且装有 ComfyUI-Manager 时抓 /customnode/getlist 增强目录扫描（非 git 包补 repo、git 包补注册表版本与展示名；离线/未装/格式不识别静默降级，纯增强不影响主清单）
+         | 能力差异对比（已实现 2026-09-28） | GET /api/v1/nodes/diff 按节点包/单文件求并集，逐行给出 same|changed|missing_cloud|missing_local（含 commit 与启用状态一致性）；deep=1 时额外拉云端 /object_info 做 class_type 级差异，由 UI 显式触发（会冷启动容器）。路由引擎所需的 class 两端在场缓存已由 node_presence 落地（M3-2，见 3.1）；diff 结果持久化缓存已于 2026-10-02 落地（矩阵 120s TTL + deep class_type 块长期落盘重启不丢，防重复冷启动计费；同步/移除后失效，force=1 强制现算，缓存时刻在差异矩阵 UI 标注）
          | 同步（本地 → Modal）（卷模式 + 镜像固化均已实现） | 卷模式：POST /api/v1/nodes/sync 把本地节点目录/单文件（排除 __pycache__/.git 等）写入数据卷 custom_nodes/，随后更新 manifest；停用节点整目录按实际名（.disabled 后缀）落卷，云端加载与装依赖均跳过。镜像固化（M2-2 已实现 2026-09-30）：nodes.lock.yaml + install_nodes.sh 预装依赖进镜像 → modal deploy 重建，失败自动回滚上一版 Tag
          | 快速试装（卷模式）（已实现 2026-09-28） | 同步即写卷，免镜像重建；容器下次冷启动（或管理台「停止容器 + 预热」）安装启用节点依赖，已停用节点跳过安装。实现上采用本地目录整包上传（_stage_dir 过滤），非云端 git clone
          | 反向（Modal → 本地） | 仅提示本地缺失清单与安装命令（桥接器不直接改本地环境，避免污染用户 Python 环境）
@@ -252,6 +252,7 @@ nodes:
 │  │  │  ├─ registry.py              # 端点接管清单与匹配器
 │  │  │  ├─ passthrough.py           # 其余请求流式透传（httpx）
 │  │  │  ├─ prompt_submit.py         # /prompt 解析、prompt_id 改写、路由分发
+│  │  │  ├─ precheck.py             # 提交前预校验（复刻 validate_prompt，strict/ask/auto 供给）
 │  │  │  ├─ object_info.py           # 两端并集合并（模型 combo 输入取并集）
 │  │  │  ├─ history.py               # /history /queue 本地+远端合并视图
 │  │  │  ├─ view.py                  # /view 回源（modal/ 前缀落盘文件）
@@ -268,7 +269,6 @@ nodes:
 │  │  ├─ runner/                     # Modal 执行通道
 │  │  │  ├─ modal_client.py          # SDK 封装：deploy / 状态 / 预热 / 卷操作
 │  │  │  ├─ remote_session.py        # 一次远端运行编排（预检→预上传→提交→中继→回传）
-│  │  │  ├─ precheck.py              # 提交前预校验（复刻 validate_prompt，strict/ask/auto）
 │  │  │  ├─ inputs.py                # 输入文件预上传与哈希去重
 │  │  │  ├─ outputs.py               # /view 输出拉取落盘 output/modal/
 │  │  │  └─ history_synth.py         # 远端运行 → 合成等价 history 结构
@@ -351,9 +351,11 @@ nodes:
          | 成本预算护栏与告警、预热按钮、打包分发（pipx 单包内嵌前端）、兼容性矩阵测试、文档与 e2e
          | 全新机器 30 分钟内完成安装到云端首图；e2e 全绿
   总工期约 7–8 周（单人、按正常投入估算）。M1 结束即可自用，此后每个里程碑交付独立可用能力。
-  进度（2026-10-01）：M0–M3 主体与 M4 的护栏/打包/成本报表均已落地并真机验证（逐项记录见 FIXLIST 与 README 里程碑节）；
-  余项：ComfyUI-Manager API 兜底采集、节点 diff 结果持久化缓存、工作流 content_hash 检测 / 反向同步提示 / 冲突双列对比视图、
-  版本对齐与节点固化的重建入口合并（+ 对齐历史留痕）、兼容性矩阵测试与 e2e 自动化。
+  进度（2026-10-02）：M0–M3 主体与 M4 的护栏/打包/成本报表均已落地并真机验证（逐项记录见 FIXLIST 与 README 里程碑节）；
+  提交前预校验框架（M3-5 余项：strict/ask/auto 供给策略 + preflight 独立拦截状态）与节点清单采集补全（M2-1 余项：
+  Manager API 兜底 + diff 持久化缓存）均已落地；工作流 content_hash 检测、反向同步提示、冲突双列对比视图、
+  版本对齐与节点固化的重建入口合并此前已收尾；
+  余项：同步任务 JobDrawer、对齐历史留痕、兼容性矩阵测试与 e2e 自动化。
   9 风险与对策
      |  | 风险 | 等级 | 对策
        | 远端冷启动延迟（数十秒～分钟级，镜像 + 卷首读） | 高 | UI 明示状态与进度；预热按钮 / min_containers 策略；镜像层精简；路由规则可按「即时性要求」回流本地

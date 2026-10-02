@@ -256,7 +256,7 @@
     <table>
       <thead><tr><th style="width:14%">编号</th><th style="width:52%">任务</th><th style="width:20%">产出</th><th>估时</th></tr></thead>
       <tbody>
-        <tr><td>M2-1</td><td>节点清单采集（本地 custom_nodes 扫描 + Manager API 兜底）与 object_info diff 缓存 <span class="badge green">部分完成 2026-09-28</span>：本地扫描 + 云端 manifest + 包级差异矩阵 + 可选 class_type 深度对比已落地；Manager API 兜底与 diff 持久化缓存待做</td><td>节点矩阵数据</td><td>2d</td></tr>
+        <tr><td>M2-1</td><td>节点清单采集（本地 custom_nodes 扫描 + Manager API 兜底）与 object_info diff 缓存 <span class="badge green">已完成 2026-10-02</span>：本地扫描 + 云端 manifest + 包级差异矩阵 + 单文件内容哈希对比分片落地（2026-09-28 起）；Manager API 兜底——本地 ComfyUI 在线且装有 ComfyUI-Manager 时抓 /customnode/getlist 增强目录扫描（非 git 包补 repo、git 包补注册表版本与展示名，多形态容错解析，离线/未装/不识别一律静默降级）；diff 持久化缓存——矩阵 120s TTL（失败不缓存、同步/移除后失效、app_state 恒现取）+ deep class_type 块长期落盘重启不丢（防重复冷启动计费），force=1 强制现算</td><td>节点矩阵数据</td><td>2d</td></tr>
         <tr><td>M2-2</td><td><code>nodes.lock.yaml</code> 生成、镜像重建（<code>modal deploy</code>）与失败回滚 <span class="badge green">已完成 2026-09-30</span>：JSON 文本锁文件 + <code>install_nodes.sh</code> 预装依赖进镜像，deploy 失败自动回滚锁文件与上一版 Tag；与版本对齐共用单飞 deploy 通道</td><td>镜像固化模式</td><td>1.5d</td></tr>
         <tr><td>M2-3</td><td>节点卷模式试装（本地目录整包写入卷 + 冷启动装依赖） <span class="badge green">已完成 2026-09-28</span>：同步/移除维护数据卷 <code>custom_nodes/.comfybridge-manifest.json</code>，停用节点整目录以 <code>.disabled</code> 后缀落卷，云端加载与装依赖均跳过</td><td>快速试装</td><td>1d</td></tr>
         <tr><td>M2-4</td><td>工作流双向同步（mtime+hash 状态机）与冲突双副本处理 <span class="badge green">已完成 2026-09-30</span>：三方变更检测基于<strong>内容 sha256</strong>（两端现算 + last-synced 基线）+ 冲突双副本 <code>name.conflict-时间戳.json</code>；冲突行双列对比视图已于 2026-10-01 落地；<span class="badge green">运行统计回写已完成 2026-10-02</span>——requests 表按工作流 <strong>SQL 现算聚合</strong>（次数/成败/本地·云端拆分/平均与最大耗时/估算成本/最近运行，遵循成本记账口径 ADR，不建回写表），工作流页「运行统计」Tab 呈现真实数据</td><td>工作流同步</td><td>2d</td></tr>
@@ -274,7 +274,7 @@
         <tr><td>M3-2</td><td>本地上传：分块 + 断点续传 + MD5 校验</td><td>上传通道</td><td>1.5d</td></tr>
         <tr><td>M3-3</td><td>HF 云端直下（复用 <code>download_model</code>，接入同步任务队列）</td><td>导入通道</td><td>1d</td></tr>
         <tr><td>M3-4</td><td>删除保护（引用检查）与软删除</td><td>安全删除</td><td>0.5d</td></tr>
-        <tr><td>M3-5</td><td>node_presence / model_presence 路由接入；提交前预校验框架（strict / ask / auto 供给策略）<span class="badge green">presence 两规则已完成 2026-09-30</span>——node_presence 走节点 class 两端在场缓存（持久化 + TTL 单飞），模型引用按 MODEL_INPUT_CATEGORIES 分类判归属；<span class="badge warn">待做</span> 预校验框架</td><td>路由联动</td><td>2d</td></tr>
+        <tr><td>M3-5</td><td>node_presence / model_presence 路由接入；提交前预校验框架（strict / ask / auto 供给策略）<span class="badge green">presence 两规则已完成 2026-09-30</span>——node_presence 走节点 class 两端在场缓存（持久化 + TTL 单飞），模型引用按 MODEL_INPUT_CATEGORIES 分类判归属；<span class="badge green">预校验框架已完成 2026-10-02</span>——/prompt 按目标端复刻缺节点/缺模型检查提前拦截（零执行零费用，索引不可用降级放行），bridge.preflight 四档 off/strict/ask/auto（auto 缺模型且本地有副本时自动上传云端卷后放行、剩余缺节点按 ask 拦截，供给留痕进 rule_trace），拦截落库独立 preflight 状态（日志页标签 + 筛选），设置页桥接 Tab 策略选择器</td><td>路由联动</td><td>2d</td></tr>
         <tr><td>M3-6</td><td>模型卷 UI（浏览/上传/导入/删除/用量）</td><td>模型页</td><td>1.5d</td></tr>
       </tbody>
     </table>
