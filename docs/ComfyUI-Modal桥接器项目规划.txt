@@ -39,7 +39,7 @@ ComfyUI × Modal 桥接器 · 项目规划文档
          | 节点镜像固化（M2-2 落地 2026-09-30） | 本地扫描为权威渲染 nodes.lock.yaml（JSON 文本，YAML 1.2 子集）+ install_nodes.sh，镜像构建时 add_local_file 执行把启用节点依赖预装进镜像 → modal deploy 重建；失败自动回滚锁文件与上一版 Tag；与版本对齐共用单飞 deploy 通道，后端主进程不 import modal | 冷启动免逐节点 pip 安装。备选：仅卷模式（已保留为兜底：覆盖卷上新装/未固化节点）
          | Runner 端点鉴权（P0 安全落地 2026-09-30） | runner web_server 开启 requires_proxy_auth；桥接侧 HTTP/WS 统一注入 Modal-Key/Secret 代理凭证（凭证只存 ~/.comfybridge/config.toml 或环境变量，API 响应掩码） | 云端出图端点不鉴权等于公网裸奔。备选：无鉴权 + 仅靠 URL 隐匿（不可接受）
          | 路由规则链数据化（M3-1/2 落地 2026-09-30） | 固定链 manual → tag → cloud_model → default；自定义规则链存 [bridge.rules]（workflow_tag / gen_type / min_pixels / node_missing_local / node_missing_cloud），路由页 CRUD 排序，非空时插在 cloud_model 与 default 之间并替换内置 gen_type/size 两步；node_presence 依赖节点 class 两端在场缓存（持久化 + TTL 单飞 + 强制刷新端点）；决策全程留痕 rule_trace | 规则顺序与阈值随工作负载调优，不应改代码。备选：硬编码规则顺序（原设计）
-         | 成本记账口径（M4-1 落地 2026-09-30，报表 v2 2026-10-01） | 单价 × 请求墙钟秒数（提交→终态，含冷启动等待）按次入账 requests 表；并发复用容器按请求直加 = 保守上限，scaledown 保活窗口不计入；聚合读取时 SQL 现算，不设 cost_daily 表与夜间重算任务。报表 v2：工作流/主模型聚合 + CSV 导出 + 逐项对账（本地估算 vs modal billing report 明细 GPU 计量，UTC 月） | 原设计「含 scaledown_window 保活」无法归属到请求，修订为请求墙钟口径；夜间重算任务对单机 SQLite 属过度设计。备选：维持原设计（成本口径失真）
+         | 成本记账口径（M4-1 落地 2026-09-30，报表 v2 2026-10-01） | 单价 × 请求墙钟秒数（提交→终态，含冷启动等待）按次入账 requests 表；并发复用容器按请求直加 = 保守上限，scaledown 保活窗口不计入；聚合读取时 SQL 现算（工作流运行统计 2026-10-02 同口径落地），不设 cost_daily 表与夜间重算任务。报表 v2：工作流/主模型聚合 + CSV 导出 + 逐项对账（本地估算 vs modal billing report 明细 GPU 计量，UTC 月） | 原设计「含 scaledown_window 保活」无法归属到请求，修订为请求墙钟口径；夜间重算任务对单机 SQLite 属过度设计。备选：维持原设计（成本口径失真）
   2 总体架构
   ┌──────────────────────────────── 本地机器 ────────────────────────────────┐
 │                                                                          │
@@ -166,7 +166,7 @@ nodes:
        |  | 对象 | 同步设计
          | extra_model_paths.yaml | 桥接器按「本地路径映射表 + Modal 卷布局」自动生成远端配置；本地的该文件只读展示不回写
          | 用户设置（settings） | 通过 /api/settings 拉取两端 diff，UI 预览后单向 推送/拉取（键级勾选）；每次同步留痕
-         | 工作流（workflows 目录）（M2-4 已实现 2026-09-30） | 本地 user/default/workflows/ ⇄ Modal 用户卷同名目录，双向、按文件；三方变更检测（本地 / 云端 / 基线快照，内容 sha256 现算，基线存桥接器状态文件）；冲突时保留双副本 name.conflict-时间戳.json 并在 UI 人工合并（冲突行提供双列对比：两端元数据 + 节点类型/模型引用摘要）。余项：「远端执行成功过的工作流自动回写本地运行统计」未做
+         | 工作流（workflows 目录）（M2-4 已实现 2026-09-30） | 本地 user/default/workflows/ ⇄ Modal 用户卷同名目录，双向、按文件；三方变更检测（本地 / 云端 / 基线快照，内容 sha256 现算，基线存桥接器状态文件）；冲突时保留双副本 name.conflict-时间戳.json 并在 UI 人工合并（冲突行提供双列对比：两端元数据 + 节点类型/模型引用摘要）。运行统计已于 2026-10-02 实现（M2-4 余项闭环）：requests 表按工作流聚合——SQL 现算、无回写表（与成本记账口径 ADR 一致），工作流页「运行统计」Tab 呈现次数/成败/本地·云端/平均与最大耗时/估算成本/最近运行，近 7/30/90 天切换
          | 自定义节点映射配置 | 节点内 node_paths 类配置随设置同步；工作流引用的模型文件名同步时校验两端是否存在并标记
     3.5 模型数据卷管理（不做自动同步）
       浏览：按 ComfyUI 分类目录（checkpoints / loras / vae / controlnet / upscale_models / …）列出卷内模型：名称、大小、mtime、引用计数（被哪些工作流用到，由日志统计）。
@@ -201,6 +201,7 @@ nodes:
        | POST /api/v1/nodes/sync · POST /api/v1/nodes/cloud/remove （已实现 2026-09-28，卷模式；镜像重建 2026-09-30 M2-2） | {names[]} → 同步本地节点到卷 / 从卷移除，并维护 manifest。镜像固化与版本对齐共用单飞 deploy 通道
        | GET /api/v1/nodes/presence/refresh （已实现 2026-09-30，M3-2） | 强制刷新节点 class 两端在场缓存（node_presence 规则数据源）
        | GET /api/v1/workflows · POST /api/v1/workflows/sync （已实现 2026-09-30，M2-4） | 工作流清单与同步状态（三方变更检测）；按方向发起双向同步，冲突落双副本
+       | GET /api/v1/workflows/run-stats · GET /api/v1/launch/modal/containers （已实现 2026-10-02） | 运行统计（requests 按工作流聚合，SQL 现算，近 N 天窗口）· 云端容器清单（modal container list 归属过滤 + 45s 缓存，M4-2 容器面板数据源）
        | GET /api/v1/settings-sync · POST /api/v1/settings-sync/apply （已实现 2026-09-27） | 两端 comfy.settings.json 键级 diff（凭证键掩码）与按方向（push/pull/逐键）批量执行；本地原子写 + volume get/put 落卷
        | GET /api/models?side=&category= | 模型清单（本地 / Modal 卷）
        | POST /api/models/upload | multipart 流式上传（支持分块续传头）
@@ -225,7 +226,7 @@ nodes:
          | 仪表盘 | 两端健康状态、今日生成数/成本、运行中队列、最近请求
          | 路由规则 | 规则列表拖拽排序、条件编辑器、干跑预览器（粘贴/选择工作流 → 展示决策路径）
          | 节点管理 | 差异矩阵（本地✓/云端✗…）、勾选同步、镜像重建进度与日志、ComfyUI 版本对齐提示
-         | 工作流 | 双列对比（本地 vs 云端）、同步按钮、冲突人工处理、运行统计
+         | 工作流 | 双列对比（本地 vs 云端）、同步按钮、冲突人工处理、运行统计（真实聚合数据 2026-10-02）
          | 配置同步 | extra_model_paths.yaml 生成预览、settings 键级 diff 勾选推送
          | 模型卷 | 分类浏览、上传（进度/续传）、HF 导入表单、删除保护、用量饼图
          | 数据卷（已实现） | 数据卷直连管理：卷内文件浏览、URL 下载作业（云端直下）、卷内移动作业（服务端复制 + 删源）、用量
@@ -406,4 +407,4 @@ per_run_timeout_s = 1800
       本目录姊妹文档：ComfyUI 启动命令与参数参考（Runner 启动参数）、Modal 云平台与 SDK / CLI 参考（Runner App、Volume、web_server、计费）
       ComfyUI 官方仓库：github.com/comfyanonymous/ComfyUI（server.py 为 API 行为权威来源）
       Modal 文档：web-endpoints · volumes · gpu · sandboxes
-  ComfyUI × Modal 桥接器 · 项目规划 v0.1 · 2026-09-25 · 滚动修订至 2026-10-01（M2-2/4/5、P0 鉴权、M3 规则链、M4 护栏/打包/成本报表 v2 落地；已实现标注与偏差见 ADR 及各节）
+  ComfyUI × Modal 桥接器 · 项目规划 v0.1 · 2026-09-25 · 滚动修订至 2026-10-02（M2-2/4/5、P0 鉴权、M3 规则链、M4 护栏/打包/成本报表 v2、运行统计/容器面板/配置向导落地；已实现标注与偏差见 ADR 及各节）
