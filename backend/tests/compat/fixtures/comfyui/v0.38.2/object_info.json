@@ -1,0 +1,41 @@
+{
+  "KSampler": {
+    "input": {
+      "required": {
+        "model": ["MODEL"],
+        "seed": ["INT", { "default": 0 }],
+        "steps": ["INT", { "default": 20 }]
+      },
+      "optional": {}
+    },
+    "input_required": {
+      "model": ["MODEL"],
+      "seed": ["INT", { "default": 0 }],
+      "steps": ["INT", { "default": 20 }]
+    },
+    "input_optional": {},
+    "output": ["LATENT"],
+    "output_name": ["LATENT"],
+    "name": "KSampler",
+    "category": "sampling",
+    "output_node": false
+  },
+  "SaveImage": {
+    "input": {
+      "required": {
+        "images": ["IMAGE"],
+        "filename_prefix": ["STRING", { "default": "ComfyUI" }]
+      }
+    },
+    "input_required": {
+      "images": ["IMAGE"],
+      "filename_prefix": ["STRING", { "default": "ComfyUI" }]
+    },
+    "input_optional": {},
+    "output": [],
+    "output_name": [],
+    "name": "SaveImage",
+    "category": "image",
+    "output_node": true
+  }
+}

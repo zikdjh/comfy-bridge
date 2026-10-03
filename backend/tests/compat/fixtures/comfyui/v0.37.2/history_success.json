@@ -1,0 +1,39 @@
+{
+  "0f0e0d0c-1111-2222-3333-444455556666": {
+    "prompt": [
+      7,
+      "0f0e0d0c-1111-2222-3333-444455556666",
+      { "6": { "class_type": "KSampler", "inputs": { "seed": 1 } } },
+      { "client_id": "sess-compat" },
+      ["9"]
+    ],
+    "outputs": {
+      "9": { "images": [{ "filename": "ComfyUI_00001_.png", "subfolder": "", "type": "output" }] },
+      "10": { "gifs": [{ "filename": "anim_00001_.gif", "subfolder": "", "type": "output" }] },
+      "11": { "video": [{ "filename": "clip_00001.mp4", "subfolder": "sub/dir", "type": "output" }] },
+      "12": { "audio": [{ "filename": "take_00001_.flac", "subfolder": "", "type": "audio" }] }
+    },
+    "status": {
+      "status_str": "success",
+      "completed": true,
+      "messages": [
+        ["execution_start", { "prompt_id": "0f0e0d0c-1111-2222-3333-444455556666" }],
+        ["executing", { "node": "6", "display_node": "6", "prompt_id": "0f0e0d0c-1111-2222-3333-444455556666" }],
+        ["progress", { "value": 20, "max": 20, "prompt_id": "0f0e0d0c-1111-2222-3333-444455556666", "node": "9" }],
+        [
+          "executed",
+          {
+            "node": "9",
+            "display_node": "9",
+            "output": { "images": [{ "filename": "ComfyUI_00001_.png", "subfolder": "", "type": "output" }] },
+            "prompt_id": "0f0e0d0c-1111-2222-3333-444455556666"
+          }
+        ],
+        ["execution_success", { "prompt_id": "0f0e0d0c-1111-2222-3333-444455556666" }]
+      ]
+    },
+    "meta": {
+      "9": { "node_id": "9", "display_node": "9", "parent_node": null, "real_node_id": "9" }
+    }
+  }
+}

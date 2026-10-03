@@ -731,3 +731,46 @@ M2-1「节点清单采集（本地 custom_nodes 扫描 + Manager API 兜底）�
   startWorkflowSync resolve 后调用 openJobDrawer 一行直连。刷新为轮询（SSE 留作规划增强）。
 - useJob 直接返回 job 本体（解包 {job}），页面 effect 以「离开 running 态且未处理过」为完成信号，
   快任务首拍即终态也能正确回调（jobHandled ref 去重）。
+
+## 二十二、兼容性矩阵测试（M4 余项 · 2026-10-03）
+
+### 背景
+规划 §10 测试策略：兼容性矩阵 = 远端 ComfyUI 锁定 2 个版本组合跑核心链路，防止上游协议漂移破坏桥接
+（§9 对应风险：「ComfyUI API/前端协议快速演进」高等级）。落地为 `backend/tests/compat/` 离线夹具矩阵。
+
+### 改动
+- `tests/compat/fixtures/comfyui/{v0.37.2,v0.38.0,v0.38.2}/`（新）：10 个协议夹具/版本——POST /prompt
+  应答与 400 拒绝、WS 事件三态序列（success 含 status/execution_start/executing/progress/
+  execution_cached/executed/execution_success/executing{node:null} + 他任务帧）、history 三态条目
+  （success 覆盖 images/gifs/video/audio 四桶 + 子目录 + meta 平铺）、/internal/logs/raw、
+  object_info 顶面。v0.37.2 = M0-3 参照版、v0.38.0 = 当前云端 pin、v0.38.2 = 本地权威版。
+- `tests/compat/manifest.json`（新）：每版本核心协议源码 sha256 指纹 + 每夹具的提取点
+  （server.py post_prompt / execution.py task_done / main.py hijack_progress 与 task_done 调用点 /
+  internal_routes.py /logs/raw / app/logger.py entry{t,m}）；升版 SOP：复制夹具目录 → 更新指纹 →
+  跑矩阵，失败项即漂移点。
+- `tests/compat/test_compat_matrix.py`（新，40 用例 = 13 面 × 3 版本参数化）：runner/client.post_prompt
+  （ack 透传 + 400 上浮）、executor._ws_pump（转发集 + prompt_id 映射 + 终态捕捉 + 他任务过滤 +
+  二进制/非 JSON 容错）、get_history 解包（空/404/断连 → None）、_classify_entry 三态 + 空 status 兜底、
+  _download_outputs 四桶/子目录/越界拒绝、fetch_container_logs 归一（\r 与 [ERROR] 行 + 失败返回空）、
+  fetch_object_info 顶层键集（diff 矩阵 class_types 唯一消费面）、ws_relay._tap_event 本地状态映射、
+  _track 双通道（WS 快路径终态先行 / history 权威带回条目）。
+
+### 验证
+- 矩阵 40 passed（0.8s，离线无网络）；全套 228 passed（188 + 40）。
+- 负向验证（有牙）：改坏夹具键名 exception_message → 仅对应版本分类用例红（1 failed）；还原 → 40 绿。
+- ruff：全量 69 = stash 实测基线 69（新增 0；此前 FIXLIST 记录的 68 与本次 concise 口径差 1，以
+  stash 对照实测为准）；改动文件初稿 2 处（RET501/PLR1711）当场消除。
+- 本切片纯测试基建，无运行时代码改动，无需重启服务/真机回归。
+
+### 关键发现
+- **三版本核心协议文件逐字节相同**：execution.py 三版 sha256 一致，server.py 仅差资产导入守卫
+  （v0.37.2 vs v0.38.x）→ 当代（0.37–0.38）协议面稳定，矩阵当前价值是回归钉子 + 升版 SOP，
+  未来 pin 追随本地升版时自动捕获漂移。
+- **上游 completed 语义**（main.py task_done 调用点）：`completed=e.success` —— 错误/中断 history
+  条目 completed=false、status_str="error"；夹具初稿误写 completed=true 会被 _classify_entry 判成
+  success，据源码修正。桥接器判据（completed or status_str=="success"）与上游真相吻合。
+- **云端 executed 帧被泵丢弃是设计使然**：_ws_pump 转发集不含 executed；桥接器在输出落盘后从
+  history 权威重建 executed 事件（保证浏览器收到即请求 /view 时文件已就位）。
+- WS 快路径 kind 走桥接器状态词汇表（execution_interrupted → cancelled，与日志页 queued/running/
+  done/error/cancelled 对齐）；history 路径 _classify_entry 返回 "interrupted"，_finish 再归一。
+- 「进 CI」落点：仓库无 remote，矩阵以 pytest 全量承载（18.7s），接 CI 后直接纳管 tests/compat。

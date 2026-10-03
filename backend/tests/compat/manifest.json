@@ -1,0 +1,40 @@
+{
+  "_comment": [
+    "兼容性矩阵夹具（规划 §10）：自上游 ComfyUI 源码（raw.githubusercontent.com）逐条提取协议形状，",
+    "桥接器协议消费代码对每个锁定版本逐夹具断言。版本 pin 升版（nodes_mgr/version_align 追随本地）时：",
+    "复制任一夹具目录到新版本号 → 核对/更新本 manifest 的源码指纹 → 跑 tests/compat/test_compat_matrix.py，",
+    "失败项即上游协议漂移点（对照指纹定位改动文件）。",
+    "提取来源：POST /prompt 与 /history/{pid} ← server.py post_prompt/get_history(prompt_queue)；",
+    "WS 事件 ← execution.py send_sync/add_message + main.py hijack_progress + server.py status；",
+    "history 条目结构 ← execution.py task_done（outputs 为纯 UI 字典，meta 平铺顶层，",
+    "messages 为 [event, data] 对）；/view 参数 ← server.py view_image（filename/subfolder/type）；",
+    "/internal/logs/raw ← api_server/routes/internal/internal_routes.py + app/logger.py entry{t,m}；",
+    "/object_info 顶面 ← server.py（桥接只消费顶层键集 = class_type 名）。"
+  ],
+  "facets": {
+    "prompt_ack.json": "POST /prompt 200：{prompt_id, number, node_errors}",
+    "prompt_reject_400.json": "POST /prompt 400：{error: str, node_errors}",
+    "ws_events_success.json": "status{status.exec_info.queue_remaining,sid} / execution_start / executing{node,display_node} / progress{value,max} / execution_cached{nodes} / executed{output} / execution_success / executing{node:null}（main.py 任务收尾帧）；末尾含他任务事件（应被过滤）。注：云端 executed 帧会被桥接器泵丢弃（输出落盘后从 history 重建）",
+    "ws_events_error.json": "execution_error{exception_message,exception_type,traceback,current_inputs,current_outputs,executed}",
+    "ws_events_interrupted.json": "execution_interrupted{node_id,node_type,executed}（无 exception_message 字段）",
+    "history_success.json": "/history/{pid} 应答体：{pid:{prompt,outputs{bucket:[{filename,subfolder,type}]},status{status_str,completed,messages},meta}}；completed=e.success（main.py task_done 调用点，错误/中断条目为 false）；覆盖 images/gifs/video/audio 四桶与子目录",
+    "history_error.json": "status_str=error + messages 含 execution_error 明细",
+    "history_interrupted.json": "messages 含 execution_interrupted（status_str=error）",
+    "logs_raw.json": "/internal/logs/raw：{entries:[{t,m}]}（含 ANSI 之外的 \\r 进度行与 [ERROR] 级别行）",
+    "object_info.json": "/object_info 顶面：class_type 名 → schema（input/input_required/output/name/category…）"
+  },
+  "versions": {
+    "v0.37.2": {
+      "server.py": "2118a18b95583869491fbf1ae33b3a279d92d64af23a244ec254ee5f2150957c",
+      "execution.py": "c9ef8ea11b8cb7aa80d05f670ca457211869d27623991b66d0014fb9b33fb246"
+    },
+    "v0.38.0": {
+      "server.py": "12545dbc44f56ce4c8ae696832925baedf0eecd2879c4e23bae3469411d7593c",
+      "execution.py": "c9ef8ea11b8cb7aa80d05f670ca457211869d27623991b66d0014fb9b33fb246"
+    },
+    "v0.38.2": {
+      "server.py": "12545dbc44f56ce4c8ae696832925baedf0eecd2879c4e23bae3469411d7593c",
+      "execution.py": "c9ef8ea11b8cb7aa80d05f670ca457211869d27623991b66d0014fb9b33fb246"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "0f0e0d0c-1111-2222-3333-444455556666": {
+    "prompt": [
+      9,
+      "0f0e0d0c-1111-2222-3333-444455556666",
+      { "3": { "class_type": "KSampler", "inputs": { "seed": 3 } } },
+      { "client_id": "sess-compat" },
+      ["9"]
+    ],
+    "outputs": {},
+    "status": {
+      "status_str": "error",
+      "completed": false,
+      "messages": [
+        ["execution_start", { "prompt_id": "0f0e0d0c-1111-2222-3333-444455556666" }],
+        [
+          "execution_interrupted",
+          {
+            "prompt_id": "0f0e0d0c-1111-2222-3333-444455556666",
+            "node_id": "3",
+            "node_type": "KSampler",
+            "executed": ["6", "7"]
+          }
+        ]
+      ]
+    },
+    "meta": {}
+  }
+}

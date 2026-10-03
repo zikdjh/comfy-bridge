@@ -1,0 +1,51 @@
+[
+  {
+    "type": "status",
+    "data": { "status": { "exec_info": { "queue_remaining": 1 } }, "sid": "sess-compat" }
+  },
+  {
+    "type": "execution_start",
+    "data": { "prompt_id": "0f0e0d0c-1111-2222-3333-444455556666" }
+  },
+  {
+    "type": "executing",
+    "data": { "node": "6", "display_node": "6", "prompt_id": "0f0e0d0c-1111-2222-3333-444455556666" }
+  },
+  {
+    "type": "progress",
+    "data": { "value": 5, "max": 20, "prompt_id": "0f0e0d0c-1111-2222-3333-444455556666", "node": "3" }
+  },
+  {
+    "type": "execution_cached",
+    "data": { "nodes": ["4", "5"], "prompt_id": "0f0e0d0c-1111-2222-3333-444455556666" }
+  },
+  {
+    "type": "progress",
+    "data": { "value": 20, "max": 20, "prompt_id": "0f0e0d0c-1111-2222-3333-444455556666", "node": "9" }
+  },
+  {
+    "type": "executed",
+    "data": {
+      "node": "9",
+      "display_node": "9",
+      "output": { "images": [{ "filename": "ComfyUI_00001_.png", "subfolder": "", "type": "output" }] },
+      "prompt_id": "0f0e0d0c-1111-2222-3333-444455556666"
+    }
+  },
+  {
+    "type": "execution_success",
+    "data": { "prompt_id": "0f0e0d0c-1111-2222-3333-444455556666" }
+  },
+  {
+    "type": "executing",
+    "data": { "node": null, "prompt_id": "0f0e0d0c-1111-2222-3333-444455556666" }
+  },
+  {
+    "type": "executing",
+    "data": { "node": "88", "display_node": "88", "prompt_id": "aaaaaaaa-bbbb-cccc-dddd-9999other9999" }
+  },
+  {
+    "type": "execution_start",
+    "data": { "prompt_id": "aaaaaaaa-bbbb-cccc-dddd-9999other9999" }
+  }
+]

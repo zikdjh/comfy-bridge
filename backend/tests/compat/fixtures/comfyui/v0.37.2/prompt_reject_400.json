@@ -1,0 +1,13 @@
+{
+  "error": "Prompt is invalid: required input is missing",
+  "node_errors": {
+    "6": [
+      {
+        "type": "required_input_missing",
+        "message": "Required input is missing",
+        "details": "seed",
+        "extra_info": { "input_name": "seed" }
+      }
+    ]
+  }
+}
