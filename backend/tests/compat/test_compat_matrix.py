@@ -326,6 +326,59 @@ async def test_track_ws_terminal_fast_path(monkeypatch, version):
 
 
 @pytest.mark.parametrize("version", VERSIONS)
+async def test_track_ws_success_race_waits_for_history(monkeypatch, version):
+    """回归：WS execution_success 先于 history 落库时，success 必须宽限轮询到条目出现。
+
+    缺陷现场（2026-10-03 真机）：WS 终态在 2.5s 轮询间隙到达 → entry=None 被当成功
+    收尾 → 0 文件回传却标 done。修复后 success 竞态必须在宽限窗内拿到权威条目。
+    """
+    body = _fx(version, "history_success.json")
+    monkeypatch.setattr(
+        ex_mod.websockets, "connect", lambda *a, **k: _FakeConn(_frames_of(version, "ws_events_success.json")),
+    )
+    monkeypatch.setattr(ex_mod, "send_event", lambda cid, ev: None)
+    monkeypatch.setattr(ex_mod.config, "get_settings", lambda: _settings(task_timeout=30))
+
+    calls = {"n": 0}
+
+    async def fake_history(pid):
+        calls["n"] += 1
+        if calls["n"] < 3:  # 前两拍未入库，模拟 WS 终态抢先
+            return None
+        return body.get(pid)
+
+    async def fake_logs():
+        return []
+
+    monkeypatch.setattr(ex_mod.runner_client, "get_history", fake_history)
+    monkeypatch.setattr(ex_mod.runner_client, "fetch_container_logs", fake_logs)
+    kind, entry, detail = await ex_mod._track(BRIDGE_PID, {"client_id": "cid", "modal_pid": CLOUD_PID})
+    assert (kind, entry, detail) == ("success", body[CLOUD_PID], "")  # 宽限到条目后与权威路径同款分类
+
+
+@pytest.mark.parametrize("version", VERSIONS)
+async def test_track_ws_success_without_outputs_entry(monkeypatch, version):
+    """success 竞态宽限到期仍无 history 条目：无输出节点的工作流属合法情形，返回 entry=None。"""
+    monkeypatch.setattr(
+        ex_mod.websockets, "connect", lambda *a, **k: _FakeConn(_frames_of(version, "ws_events_success.json")),
+    )
+    monkeypatch.setattr(ex_mod, "send_event", lambda cid, ev: None)
+    monkeypatch.setattr(ex_mod, "_SUCCESS_GRACE_S", 1.5)  # 压短宽限窗，保持套件速度
+    monkeypatch.setattr(ex_mod.config, "get_settings", lambda: _settings(task_timeout=30))
+
+    async def fake_history(pid):
+        return None
+
+    async def fake_logs():
+        return []
+
+    monkeypatch.setattr(ex_mod.runner_client, "get_history", fake_history)
+    monkeypatch.setattr(ex_mod.runner_client, "fetch_container_logs", fake_logs)
+    kind, entry, detail = await ex_mod._track(BRIDGE_PID, {"client_id": "cid", "modal_pid": CLOUD_PID})
+    assert (kind, entry, detail) == ("success", None, "")  # 无输出工作流合法情形
+
+
+@pytest.mark.parametrize("version", VERSIONS)
 async def test_track_history_authoritative(monkeypatch, version):
     """history 权威路径：无 WS 连接（client_id 空）也以 history 条目收敛并带回条目供输出回传。"""
     body = _fx(version, "history_success.json")

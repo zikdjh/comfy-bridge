@@ -115,11 +115,16 @@ async def post_prompt(payload: dict) -> dict:
 
 
 async def get_history(prompt_id: str) -> dict | None:
-    """拉取云端 /history/<pid> 条目；未入历史返回 None。"""
+    """拉取云端 /history/<pid> 条目；未入历史返回 None。
+
+    读超时 8s：真机实测（2026-10-03，Modal web_server × ComfyUI v0.38.0）执行期间
+    /history 会挂起直到执行结束才恢复响应，30s 读超时会把轮询节奏拖垮；快速失败
+    交还调用方重试。
+    """
     url = web_url()
     try:
         async with _client() as cli:
-            resp = await cli.get(f"{url}/history/{prompt_id}", timeout=httpx.Timeout(30.0, connect=15.0))
+            resp = await cli.get(f"{url}/history/{prompt_id}", timeout=httpx.Timeout(8.0, connect=15.0))
     except httpx.HTTPError:
         return None
     if resp.status_code != 200:

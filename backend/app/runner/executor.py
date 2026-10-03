@@ -48,6 +48,12 @@ _MEDIA_EXTS = {
 # history 输出条目里的文件桶（图片/视频/音频节点命名不一）
 _OUTPUT_BUCKETS = ("images", "gifs", "video", "audio")
 
+# WS success 终态后等待 history 条目落库的宽限窗（秒）。
+# 真机实测（2026-10-03）：执行期间云端 /history 挂起、执行结束才恢复响应，且
+# 恢复前的轮询会一直挂到读超时；宽限窗必须扛过至少一次挂起轮询 + 余量，
+# 取 120s（读超时 8s × 若干拍 + 执行收尾），到期仍无条目按无输出工作流收尾。
+_SUCCESS_GRACE_S = 120.0
+
 # bridge_prompt_id → 任务态（client_id / modal_pid / task）
 _TASKS: dict[str, dict] = {}
 
@@ -194,6 +200,23 @@ async def _track(prompt_id: str, state: dict) -> tuple[str, dict | None, str]:
                 return kind, entry, detail
             _drain_container_logs(state, logs)  # 云端 stdout → 控制台（轮询差分）
             if done.is_set():
+                # 真机实测（2026-10-03，Modal web_server）：云端 WS 泵存活期间，新的
+                # /history 请求会持续挂死（读超时也不返回），执行期间与终态后皆然；
+                # 关闭泵后轮询立即恢复。终态已定就先关泵再宽限轮询，outputs 只在
+                # history 条目里，entry=None 收尾会导致 0 文件回传却标 done。
+                if ws_task is not None:
+                    ws_task.cancel()
+                    ws_task = None
+                if terminal["kind"] == _TERMINAL_STATUS["execution_success"]:
+                    grace_end = asyncio.get_running_loop().time() + _SUCCESS_GRACE_S
+                    while True:
+                        entry = await runner_client.get_history(modal_pid)
+                        if entry is not None:
+                            kind, detail = _classify_entry(entry)  # 与权威路径同款分类
+                            return kind, entry, detail
+                        if asyncio.get_running_loop().time() >= grace_end:
+                            return "success", None, ""
+                        await asyncio.sleep(2.5)
                 return terminal["kind"], None, terminal.get("detail") or ""
             if asyncio.get_running_loop().time() >= deadline:
                 raise TimeoutError(f"云端执行超时（> {config.get_settings().modal.task_timeout}s）")
