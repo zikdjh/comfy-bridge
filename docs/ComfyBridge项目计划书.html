@@ -237,7 +237,7 @@
       <tbody>
         <tr><td>M0-1</td><td>Runner 版本锁定：镜像改为克隆 <code>v0.37.2</code>（与本地一致），版本写入部署参数</td><td>锁版本镜像</td><td>0.5d</td></tr>
         <tr><td>M0-2</td><td>Runner 端点安全加固：Modal 代理 Token（Modal-Key/Secret）接入，桥接器持 Token 转发</td><td>非公开端点</td><td>0.5d</td></tr>
-        <tr><td>M0-3</td><td>兼容性验证：客户端指定 <code>prompt_id</code>、WS 事件结构、history 格式（对照 v0.37.2 server.py）</td><td>兼容性矩阵初版</td><td>1d</td></tr>
+        <tr><td>M0-3</td><td>兼容性验证：客户端指定 <code>prompt_id</code>、WS 事件结构、history 格式（对照 v0.37.2 server.py）</td><td>兼容性矩阵初版（已落地为 tests/compat 夹具矩阵 2026-10-03，见 M4-4）</td><td>1d</td></tr>
         <tr><td>M0-4</td><td>桥接器骨架 PoC：FastAPI 反代透传 + WS 双向泵，浏览器经 8189 跑通一次本地生成</td><td>PoC 代码</td><td>1d</td></tr>
       </tbody>
     </table>
@@ -260,8 +260,8 @@
         <tr><td>M2-2</td><td><code>nodes.lock.yaml</code> 生成、镜像重建（<code>modal deploy</code>）与失败回滚 <span class="badge green">已完成 2026-09-30</span>：JSON 文本锁文件 + <code>install_nodes.sh</code> 预装依赖进镜像，deploy 失败自动回滚锁文件与上一版 Tag；与版本对齐共用单飞 deploy 通道</td><td>镜像固化模式</td><td>1.5d</td></tr>
         <tr><td>M2-3</td><td>节点卷模式试装（本地目录整包写入卷 + 冷启动装依赖） <span class="badge green">已完成 2026-09-28</span>：同步/移除维护数据卷 <code>custom_nodes/.comfybridge-manifest.json</code>，停用节点整目录以 <code>.disabled</code> 后缀落卷，云端加载与装依赖均跳过</td><td>快速试装</td><td>1d</td></tr>
         <tr><td>M2-4</td><td>工作流双向同步（mtime+hash 状态机）与冲突双副本处理 <span class="badge green">已完成 2026-09-30</span>：三方变更检测基于<strong>内容 sha256</strong>（两端现算 + last-synced 基线）+ 冲突双副本 <code>name.conflict-时间戳.json</code>；冲突行双列对比视图已于 2026-10-01 落地；<span class="badge green">运行统计回写已完成 2026-10-02</span>——requests 表按工作流 <strong>SQL 现算聚合</strong>（次数/成败/本地·云端拆分/平均与最大耗时/估算成本/最近运行，遵循成本记账口径 ADR，不建回写表），工作流页「运行统计」Tab 呈现真实数据</td><td>工作流同步</td><td>2d</td></tr>
-        <tr><td>M2-5</td><td>settings 键级推拉；extra_model_paths 自动生成；<strong>版本对齐作业</strong>（检测 Desktop 自动更新导致的本地漂移并提示对齐远端） <span class="badge green">settings 推拉已完成 2026-09-27；版本对齐第一片已完成 2026-09-30</span>——本地版本为权威、云端 pin 追随并自动重建镜像，失败回滚 pin；<span class="badge warn">余项</span> 对齐历史留痕、与节点固化入口合并</td><td>配置同步</td><td>2d</td></tr>
-        <tr><td>M2-6</td><td>节点矩阵 / 同步任务 / 冲突处理 UI <span class="badge green">部分完成 2026-09-28</span>：节点管理页差异矩阵（含一致性列、批量安装/移除）已落地；镜像固化与版本对齐入口已于 2026-09-30 随节点管理页落地；<span class="badge warn">待做</span> 同步任务 JobDrawer 与冲突对比视图</td><td>同步控制台</td><td>1.5d</td></tr>
+        <tr><td>M2-5</td><td>settings 键级推拉；extra_model_paths 自动生成；<strong>版本对齐作业</strong>（检测 Desktop 自动更新导致的本地漂移并提示对齐远端） <span class="badge green">settings 推拉已完成 2026-09-27；版本对齐第一片已完成 2026-09-30</span>——本地版本为权威、云端 pin 追随并自动重建镜像，失败回滚 pin（入口合并已完成 M2 收尾）；<span class="badge green">对齐历史留痕已完成 2026-10-03</span>——deploy 一次性收尾回调直取真实结局，JSONL 历史 noop 也留痕，节点页「对齐历史」面板</td><td>配置同步</td><td>2d</td></tr>
+        <tr><td>M2-6</td><td>节点矩阵 / 同步任务 / 冲突处理 UI <span class="badge green">部分完成 2026-09-28</span>：节点管理页差异矩阵（含一致性列、批量安装/移除）已落地；镜像固化与版本对齐入口已于 2026-09-30 随节点管理页落地；冲突双列对比视图已完成 M2 收尾；<span class="badge green">同步任务 JobDrawer 已完成 2026-10-03</span>——通用内存作业注册表（进度/日志/协作式取消/容量修剪）+ /api/v1/jobs 查询取消 + 统一任务抽屉与顶栏角标</td><td>同步控制台</td><td>1.5d</td></tr>
       </tbody>
     </table>
     <p class="note"><strong>M2 节点线进度（2026-09-28）</strong>：卷模式节点清单、差异对比与同步已端到端落地并随「节点管理」页发布（单测 29 passed、前端构建通过）；镜像固化（M2-2）与 ComfyUI 版本对齐仍属待做。真实 Modal 卷同步验证受 CLI 网络阻断（<code>Could not connect to the Modal server</code>），以隔离回放验证同步与 manifest 写入路径。</p>
@@ -285,7 +285,7 @@
         <tr><td>M4-1</td><td>成本聚合（次/日/月）、预算护栏、超限自动回落本地 + 通知 <span class="badge green">已完成 2026-09-30～10-01</span>：按次入账 + 今日/本月/逐日聚合、预算护栏（回落/拒绝 + 告警）、云端最大并发护栏、Modal 账单实时查询；成本报表 v2——工作流/主模型聚合、CSV 导出、逐项账单对账（billing report 明细 GPU 计量，UTC 月）已落地</td><td>预算护栏</td><td>2d</td></tr>
         <tr><td>M4-2</td><td>预热按钮、Runner 状态/容器数面板 <span class="badge green">已完成 2026-10-02</span>：预热按钮先前已随仪表盘/设置落地；容器数面板——<code>GET /api/v1/launch/modal/containers</code>（modal container list 归属过滤，45s 进程内缓存、停止容器后失效），设置·启动命令控制条「运行中容器 N」+ 刷新、仪表盘 Modal 通道卡片副标展示；Runner 状态在仪表盘顶栏与卡片呈现</td><td>运维面板</td><td>0.5d</td></tr>
         <tr><td>M4-3</td><td>打包分发（pip 安装包内嵌前端）+ 首次配置向导 <span class="badge green">打包分发已完成 2026-10-01</span>：hatchling wheel——GUI 嵌入 <code>/bridge</code> 挂载 + SPA 回退、modal-runner 包内副本双布局解析、<code>comfy-bridge</code> 启动命令、一键打包脚本、pipx 即装即用 + modal 1.6 系统代理补 python-socks；<span class="badge green">首次配置向导已完成 2026-10-02</span>：五步向导（检测 → Modal 凭证 → 本地 ComfyUI → 云端 Runner → 完成，逐步可跳过，复用 <code>PUT /config</code> 热生效保存与 validate-comfy 校验），Shell 在凭证缺失且本浏览器未完成过向导时自动弹一次 + 顶部提示条（localStorage 记忆），设置页入口可随时重跑</td><td>可安装产物</td><td>1.5d</td></tr>
-        <tr><td>M4-4</td><td>Playwright e2e + 兼容矩阵（远端对 2 个 ComfyUI 版本跑核心链路）</td><td>测试基线</td><td>2d</td></tr>
+        <tr><td>M4-4</td><td>Playwright e2e + 兼容矩阵（远端对 2 个 ComfyUI 版本跑核心链路）<span class="badge green">兼容矩阵部分已完成 2026-10-03</span>：backend/tests/compat 离线夹具矩阵——v0.37.2/v0.38.0/v0.38.2 三版本上游源码 sha256 指纹溯源 × 13 协议面 × 40 用例，负向验证漂移可捕获，升版 SOP 复制夹具目录→更新指纹→跑矩阵；e2e 待做（仓库无 remote 暂低优先）</td><td>测试基线</td><td>2d</td></tr>
         <tr><td>M4-5</td><td>文档：README、安装手册、故障排查、兼容性矩阵发布</td><td>文档集</td><td>1d</td></tr>
       </tbody>
     </table>

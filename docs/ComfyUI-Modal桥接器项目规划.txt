@@ -149,7 +149,7 @@ def comfyui():
          | 同步（本地 → Modal）（卷模式 + 镜像固化均已实现） | 卷模式：POST /api/v1/nodes/sync 把本地节点目录/单文件（排除 __pycache__/.git 等）写入数据卷 custom_nodes/，随后更新 manifest；停用节点整目录按实际名（.disabled 后缀）落卷，云端加载与装依赖均跳过。镜像固化（M2-2 已实现 2026-09-30）：nodes.lock.yaml + install_nodes.sh 预装依赖进镜像 → modal deploy 重建，失败自动回滚上一版 Tag
          | 快速试装（卷模式）（已实现 2026-09-28） | 同步即写卷，免镜像重建；容器下次冷启动（或管理台「停止容器 + 预热」）安装启用节点依赖，已停用节点跳过安装。实现上采用本地目录整包上传（_stage_dir 过滤），非云端 git clone
          | 反向（Modal → 本地） | 仅提示本地缺失清单与安装命令（桥接器不直接改本地环境，避免污染用户 Python 环境）
-         | 卸载 / 版本对齐（均已实现） | POST /api/v1/nodes/cloud/remove 删除卷上节点并同步清理 manifest 条目。版本对齐（M2-5 第一片已实现 2026-09-30）：本地 ComfyUI 版本为权威，写 pin 至 modal-runner/lock/comfyui_version.txt → 子进程 modal deploy 重建镜像，失败自动回滚 pin；余项：对齐历史留痕、与节点固化的重建入口合并为一次 deploy
+         | 卸载 / 版本对齐（均已实现） | POST /api/v1/nodes/cloud/remove 删除卷上节点并同步清理 manifest 条目。版本对齐（M2-5 第一片已实现 2026-09-30）：本地 ComfyUI 版本为权威，写 pin 至 modal-runner/lock/comfyui_version.txt → 子进程 modal deploy 重建镜像，失败自动回滚 pin（入口合并已于 M2 收尾完成）；对齐历史留痕已完成 2026-10-03：显式对齐与随镜像重建的 pin 变更均经 deploy 一次性收尾回调追加 JSONL 历史（~/.comfybridge/version_align_history.jsonl，结局 ok/已回滚/超时/无需变更 + 耗时/错误，noop 也留痕，留痕失败静默），GET /nodes/version 带最近 20 条，节点页「对齐历史」折叠面板
     # modal-runner/lock/nodes.lock.yaml（M2-2 已实现 2026-09-30：实际为 JSON 文本——YAML 1.2 子集，工具可直接读；
 # 由本地扫描渲染，随 install_nodes.sh 一并 add_local_file 进镜像执行预装；卷模式 manifest 仍为独立权威清单）
 comfyui_version: v0.7.x-pinned
@@ -189,7 +189,7 @@ nodes:
        | routing_rules | id, priority, type, condition_json, target, enabled | 路由策略
        | node_snapshots | id, side(local/modal), taken_at, class_count, payload_file | object_info 快照
        | node_registry | side, class_type, node_dir, repo, commit, version | 节点清单（锁文件同构）
-       | sync_jobs | id, kind(nodes/settings/workflows/models), direction, payload_json, status, log_file, created_at, finished_at | 同步任务（含 modal deploy 重建）
+       | sync_jobs | id, kind(nodes/settings/workflows/models), direction, payload_json, status, log_file, created_at, finished_at | 同步任务（含 modal deploy 重建）。实现口径（2026-10-03）：未建 DB 表，改为通用内存作业注册表 sync/jobs.py（进度条目/日志/协作式取消/容量修剪，重启即清空与 comfy_scan 同口径，符合「实时但可降级」），工作流同步与节点同步已任务化，GET /api/v1/jobs 查询 / POST /api/v1/jobs/{id}/cancel 取消
        | workflow_index | name, local_hash, remote_hash, local_mtime, remote_mtime, last_backend, last_run_at, run_count | 工作流同步状态机
        | model_files | side, category, filename, size_bytes, mtime, hash, ref_count | 两端模型清单（本地为扫描，云端为卷清单）
        | cost_daily（未采用） | — | 聚合改为读取时 SQL 现算（cost_totals/cost_daily/cost_breakdown），无夜间重算任务；详见 ADR 成本记账口径
@@ -202,6 +202,7 @@ nodes:
        | GET /api/v1/nodes/presence/refresh （已实现 2026-09-30，M3-2） | 强制刷新节点 class 两端在场缓存（node_presence 规则数据源）
        | GET /api/v1/workflows · POST /api/v1/workflows/sync （已实现 2026-09-30，M2-4） | 工作流清单与同步状态（三方变更检测）；按方向发起双向同步，冲突落双副本
        | GET /api/v1/workflows/run-stats · GET /api/v1/launch/modal/containers （已实现 2026-10-02） | 运行统计（requests 按工作流聚合，SQL 现算，近 N 天窗口）· 云端容器清单（modal container list 归属过滤 + 45s 缓存，M4-2 容器面板数据源）
+       | GET /api/v1/jobs · GET /api/v1/jobs/{id} · POST /api/v1/jobs/{id}/cancel （已实现 2026-10-03，M2-6） | 通用同步任务查询与取消（内存作业注册表：进度条目/日志/协作式取消/容量修剪；工作流同步与节点同步任务化，预检失败不开作业直接返错误）
        | GET /api/v1/settings-sync · POST /api/v1/settings-sync/apply （已实现 2026-09-27） | 两端 comfy.settings.json 键级 diff（凭证键掩码）与按方向（push/pull/逐键）批量执行；本地原子写 + volume get/put 落卷
        | GET /api/models?side=&category= | 模型清单（本地 / Modal 卷）
        | POST /api/models/upload | multipart 流式上传（支持分块续传头）
@@ -281,7 +282,8 @@ nodes:
 │  │  │  ├─ workflows.py             # 工作流双向同步状态机（mtime+size+hash、冲突双副本）
 │  │  │  ├─ settings_sync.py         # /api/settings 键级推拉
 │  │  │  ├─ paths_config.py          # extra_model_paths.yaml 自动生成
-│  │  │  └─ version_align.py         # 版本对齐作业（检测 Desktop 自动更新漂移）
+│  │  │  ├─ version_align.py         # 版本对齐（本地权威 pin 追随 + 失败回滚 + 历史留痕）
+│  │  │  └─ jobs.py                  # 通用内存作业注册表（进度/日志/协作取消/修剪，2026-10-03）
 │  │  ├─ models_mgr/
 │  │  │  ├─ volume.py                # 卷清单 / 分类浏览 / 用量
 │  │  │  ├─ uploader.py              # 分块续传上传 + MD5 校验
@@ -295,11 +297,12 @@ nodes:
 │  │  ├─ api/
 │  │  │  ├─ deps.py                  # 公共依赖（DB 会话、配置、服务实例）
 │  │  │  └─ v1/                      # health/routing/nodes/sync/workflows/settings/
-│  │  │                              # models/requests/cost/modal/config/events 路由
+│  │  │                              # models/requests/cost/modal/config/events/jobs 路由
 │  │  └─ static/                     # 前端嵌入产物（pnpm build:embed 直建于此，gitignore；wheel 打包经 hatch artifacts 收入）
 │  ├─ migrations/                    # Alembic 迁移
 │  └─ tests/
 │     ├─ unit/                       # 路由求值 / 锁文件 / 合并 / 成本（目录镜像 app/）
+│     ├─ compat/                     # 兼容性矩阵：上游源码指纹夹具 × 逐版本协议断言（2026-10-03）
 │     ├─ integration/                # mocks/comfyui_fake.py 全端点行为矩阵 + 同步冲突
 │     └─ live/                       # @pytest.mark.live 真实两端联调冒烟
 ├─ frontend/                         # React 控制台（pnpm + Vite + TS + AntD 5）
@@ -313,7 +316,7 @@ nodes:
 │     ├─ hooks/
 │     ├─ components/
 │     │  ├─ layout/                  # Shell / Sidebar / Header / StatusPill
-│     │  └─ common/                  # GraphViewer / TimelineGantt / JsonViewer / UploadDropzone...
+│     │  └─ common/                  # JobDrawer（同步任务抽屉）/ GraphViewer / TimelineGantt / JsonViewer...
 │     └─ pages/
 │        ├─ dashboard/               # 总览 + 成本曲线
 │        ├─ routing/                 # 规则编辑 + 干跑预览器
@@ -348,18 +351,18 @@ nodes:
          | 卷浏览/用量、分块续传上传、HF 导入、删除保护；model_presence 路由规则接入；node_presence 规则接入
          | 从本地/从 HF 各导一个模型进卷 → 引用它的路由自动命中 Modal
          | M4 打磨发布 | 1 周
-         | 成本预算护栏与告警、预热按钮、打包分发（pipx 单包内嵌前端）、兼容性矩阵测试、文档与 e2e
+         | 成本预算护栏与告警、预热按钮、打包分发（pipx 单包内嵌前端）、兼容性矩阵测试（已完成 2026-10-03，tests/compat）、文档与 e2e
          | 全新机器 30 分钟内完成安装到云端首图；e2e 全绿
   总工期约 7–8 周（单人、按正常投入估算）。M1 结束即可自用，此后每个里程碑交付独立可用能力。
-  进度（2026-10-02）：M0–M3 主体与 M4 的护栏/打包/成本报表均已落地并真机验证（逐项记录见 FIXLIST 与 README 里程碑节）；
-  提交前预校验框架（M3-5 余项：strict/ask/auto 供给策略 + preflight 独立拦截状态）与节点清单采集补全（M2-1 余项：
-  Manager API 兜底 + diff 持久化缓存）均已落地；工作流 content_hash 检测、反向同步提示、冲突双列对比视图、
-  版本对齐与节点固化的重建入口合并此前已收尾；
-  余项：同步任务 JobDrawer、对齐历史留痕、兼容性矩阵测试与 e2e 自动化。
+  进度（2026-10-03）：M0–M3 主体与 M4 的护栏/打包/成本报表均已落地并真机验证（逐项记录见 FIXLIST 与 README 里程碑节）；
+  提交前预校验框架（M3-5 余项）与节点清单采集补全（M2-1 余项）均已落地；同步任务 JobDrawer（M2-6 余项：通用内存
+  作业注册表 + /api/v1/jobs + 统一任务抽屉/顶栏角标）、版本对齐历史留痕（M2-5 收尾）、兼容性矩阵测试（tests/compat
+  三版本源码指纹夹具 × 逐版本协议断言，负向验证可捕获漂移）均已收尾；
+  余项：e2e 自动化（仓库无 git remote，暂低优先）。
   9 风险与对策
      |  | 风险 | 等级 | 对策
        | 远端冷启动延迟（数十秒～分钟级，镜像 + 卷首读） | 高 | UI 明示状态与进度；预热按钮 / min_containers 策略；镜像层精简；路由规则可按「即时性要求」回流本地
-       | ComfyUI API/前端协议快速演进（/prompt、history 结构、WS 事件） | 高 | 兼容层集中隔离所有端点假设；版本锁定 + 对齐提示；兼容性矩阵进 CI（对 2 个近期版本跑集成测试）
+       | ComfyUI API/前端协议快速演进（/prompt、history 结构、WS 事件） | 高 | 兼容层集中隔离所有端点假设；版本锁定 + 对齐提示；兼容性矩阵已落地（tests/compat 夹具矩阵 2026-10-03，对 v0.37.2/v0.38.0/v0.38.2 逐版本跑协议断言；进 CI 待仓库有 remote）
        | 节点依赖地狱（同一节点两端环境不同；节点间依赖冲突） | 高 | 锁文件精确到 commit；镜像重建失败自动回滚；卷模式先行试装；依赖冲突检测在重建前预跑 pip resolve
        | Modal 计费失控（忘关 scaledown、预热常驻） | 中 | 月度预算 + 双向告警（Modal Dashboard 预算告警 + 桥接器本地硬切回）；每次运行成本入日志；默认 min_containers=0
        | 大文件上传慢（本地 → 卷，家庭带宽） | 中 | 分块 + 断点续传 + MD5；主推 HF 导入（云端直下）；文档引导用 modal volume put 批量导入
@@ -371,7 +374,7 @@ nodes:
     集成：mock 两端 ComfyUI（respx + Fake WS）覆盖拦截端点全部行为矩阵（透传/改写/合并/回源）；同步引擎对 fixture 目录树的双向同步与冲突用例。
     联调（打标 live）：真实 Modal + 真实本地 ComfyUI 的冒烟集：文生图、图生图（输入预上传）、带独占节点工作流、中断、断网重连。
     e2e：Playwright 驱动浏览器走桥接器出图并断言回显与日志。
-    兼容性矩阵：远端 ComfyUI 锁定 2 个版本组合跑核心链路，防止上游协议漂移破坏桥接。
+    兼容性矩阵：远端 ComfyUI 锁定 2 个版本组合跑核心链路，防止上游协议漂移破坏桥接。已实现 2026-10-03（backend/tests/compat：上游源码 sha256 指纹溯源夹具 × 13 协议面 × 3 版本，0.8s 离线跑完，负向验证漂移可捕获；升版 SOP：复制夹具目录 → 更新指纹 → 跑矩阵）。
   11 未来扩展（v2 备选）
     多远端后端：RunPod / 自有 VLLM 服务器 / 多个 Modal workspace，路由引擎天然支持扩展 target。
     成本报表升级（已于 v1 提前落地 2026-10-01）：按工作流/模型维度聚合、导出 CSV、对接 Modal 账单（billing report 明细）对账——见 §3.6 报表 v2。
