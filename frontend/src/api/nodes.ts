@@ -148,6 +148,19 @@ export interface VersionJob {
   log_tail: string[];
 }
 
+/** 对齐历史一条记录（version_align.HISTORY_FILE JSONL，新的在前）。 */
+export interface VersionHistoryRecord {
+  ts_ms: number;
+  time: string;
+  trigger: "align" | "rebuild";
+  from_pin: string;
+  to_tag: string;
+  outcome: "ok" | "rolled_back" | "timeout" | "noop";
+  error?: string | null;
+  duration_ms?: number | null;
+  local_commit?: string | null;
+}
+
 export interface NodeVersionStatus {
   local_version: string | null;
   local_commit: string | null;
@@ -157,6 +170,7 @@ export interface NodeVersionStatus {
   runner_file: string;
   app_name: string;
   job: VersionJob;
+  history: VersionHistoryRecord[];
 }
 
 export function useNodeVersion() {

@@ -560,11 +560,12 @@ async def _remove_remote(remote: str) -> None:
 
 @router.get("/nodes/version")
 async def nodes_version() -> dict:
-    """本地 ComfyUI 版本 vs 云端镜像 pin 对照 + 部署任务状态（纯文件读，可轮询）。"""
+    """本地 ComfyUI 版本 vs 云端镜像 pin 对照 + 部署任务状态 + 对齐历史（纯文件读，可轮询）。"""
     return {
         **version_align.status(get_settings().local.comfy_root),
         "app_name": get_settings().modal.app_name,
         "job": deploy.job_state(),
+        "history": version_align.read_history(20),
     }
 
 

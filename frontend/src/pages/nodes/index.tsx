@@ -4,7 +4,9 @@ import {
   Alert,
   Button,
   Card,
+  Collapse,
   Input,
+  List,
   Modal,
   Popconfirm,
   Segmented,
@@ -777,10 +779,73 @@ function VersionBanner() {
   return null;
 }
 
+const ALIGN_OUTCOME: Record<string, { color: string; label: string }> = {
+  ok: { color: "success", label: "成功" },
+  rolled_back: { color: "warning", label: "已回滚" },
+  timeout: { color: "error", label: "超时·不确定" },
+  noop: { color: "default", label: "无需变更" },
+};
+
+function VersionHistory() {
+  const { data } = useNodeVersion();
+  const history = data?.history ?? [];
+  if (!history.length) return null;
+  return (
+    <Collapse
+      ghost
+      size="small"
+      items={[
+        {
+          key: "history",
+          label: <span style={{ fontSize: 13 }}>对齐历史（{history.length}）</span>,
+          children: (
+            <List
+              size="small"
+              dataSource={history}
+              renderItem={(rec) => {
+                const meta = ALIGN_OUTCOME[rec.outcome] ?? { color: "default", label: rec.outcome };
+                return (
+                  <List.Item style={{ paddingBlock: 4 }}>
+                    <Space size={8} wrap>
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        {dayjs(rec.time).format("MM-DD HH:mm")}
+                      </Typography.Text>
+                      <Typography.Text style={{ fontSize: 12 }}>
+                        {rec.from_pin} → {rec.to_tag}
+                      </Typography.Text>
+                      <Tag color={meta.color} style={{ marginInlineEnd: 0 }}>
+                        {meta.label}
+                      </Tag>
+                      {rec.trigger === "rebuild" && <Tag style={{ marginInlineEnd: 0 }}>随镜像重建</Tag>}
+                      {rec.duration_ms != null && rec.outcome !== "noop" && (
+                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                          {(rec.duration_ms / 1000).toFixed(0)}s
+                        </Typography.Text>
+                      )}
+                      {rec.error && (
+                        <Tooltip title={rec.error}>
+                          <Typography.Text type="warning" style={{ fontSize: 12 }}>
+                            错误详情
+                          </Typography.Text>
+                        </Tooltip>
+                      )}
+                    </Space>
+                  </List.Item>
+                );
+              }}
+            />
+          ),
+        },
+      ]}
+    />
+  );
+}
+
 export default function NodesPage() {
   return (
     <Card size="small">
       <VersionBanner />
+      <VersionHistory />
       <Tabs
         defaultActiveKey="local"
         items={[

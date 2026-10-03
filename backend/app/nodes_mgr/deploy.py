@@ -9,9 +9,11 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import shutil
 import time
+from collections.abc import Callable
 
 from .. import runner_assets
 from ..modal_volume.client import auth_env
@@ -33,6 +35,24 @@ _JOB: dict = {
 _JOB_LOCK = asyncio.Lock()
 _TASK: asyncio.Task | None = None
 
+# 一次性收尾回调：调用方（版本对齐/镜像重建）在 begin_exclusive 后注册，run_deploy
+# 收尾时以 (outcome, error) 回调一次——outcome ∈ ok / rolled_back / timeout。用于
+# 版本对齐历史留痕（version_align.sink_for），fire 后即清除。
+_SINK: Callable[[str, str | None], None] | None = None
+
+
+def set_finish_sink(fn: Callable[[str, str | None], None] | None) -> None:
+    global _SINK
+    _SINK = fn
+
+
+def _fire_sink(outcome: str, error: str | None) -> None:
+    global _SINK
+    fn, _SINK = _SINK, None
+    if fn is not None:
+        with contextlib.suppress(Exception):  # 留痕失败不影响部署任务状态
+            fn(outcome, error)
+
 
 def _now_ms() -> int:
     return int(time.time() * 1000)
@@ -48,9 +68,11 @@ def running() -> bool:
 
 async def begin_exclusive(label: str) -> dict:
     """置 running 并返回快照；已有部署在跑抛 RuntimeError（API 层转 409）。"""
+    global _SINK
     async with _JOB_LOCK:
         if _JOB["state"] == "running":
             raise RuntimeError("已有镜像部署任务在进行中")
+        _SINK = None  # 防御：清掉上一次未触发的注册，避免串到本次部署
         _JOB.update(
             state="running", started_ms=_now_ms(), finished_ms=None,
             label=label, error=None,
@@ -89,31 +111,37 @@ async def run_deploy(rollback) -> None:
     except (FileNotFoundError, OSError) as exc:
         if rollback:
             rollback()
-        _JOB.update(state="error", finished_ms=_now_ms(),
-                    error=f"无法启动 modal CLI：{exc}", log_tail=[])
+        error = f"无法启动 modal CLI：{exc}"
+        _JOB.update(state="error", finished_ms=_now_ms(), error=error, log_tail=[])
+        _fire_sink("rolled_back", error)
         return
     try:
         out, err = await asyncio.wait_for(proc.communicate(), timeout=_DEPLOY_TIMEOUT)
     except TimeoutError:
         proc.kill()
+        error = (f"modal deploy 超时（>{_DEPLOY_TIMEOUT:g}s）已终止；远端镜像可能仍在构建，"
+                 "新文件已保留，可稍后重新发起或手动 `modal app list` 核对")
         _JOB.update(
             state="error", finished_ms=_now_ms(),
-            error=(f"modal deploy 超时（>{_DEPLOY_TIMEOUT:g}s）已终止；远端镜像可能仍在构建，"
-                   "新文件已保留，可稍后重新发起或手动 `modal app list` 核对"),
+            error=error,
             log_tail=["[超时终止]"],
         )
+        _fire_sink("timeout", error)
         return
     tail = _output_tail(out, err)
     if proc.returncode != 0:
         if rollback:
             rollback()
+        error = f"modal deploy 失败（退出码 {proc.returncode}），已回滚本次变更"
         _JOB.update(
             state="error", finished_ms=_now_ms(),
-            error=f"modal deploy 失败（退出码 {proc.returncode}），已回滚本次变更",
+            error=error,
             log_tail=tail,
         )
+        _fire_sink("rolled_back", error)
         return
     _JOB.update(state="ok", finished_ms=_now_ms(), error=None, log_tail=tail)
+    _fire_sink("ok", None)
 
 
 def spawn(rollback) -> None:

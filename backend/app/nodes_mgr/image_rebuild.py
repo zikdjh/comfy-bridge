@@ -9,6 +9,7 @@
 重建（每次数十秒～数分钟）。流程：扫描本地 → 生成锁+脚本（备份旧内容）→
 begin_exclusive（409 互斥，此后才动文件）→ 覆盖写入（+写 pin）→ deploy；
 deploy 非零退出/CLI 缺失时回滚锁与脚本与 pin；超时不回滚（镜像可能已建成）。
+版本 pin 实际变更时挂 deploy 收尾回调，对齐历史（version_align.HISTORY_FILE）留痕。
 """
 
 from __future__ import annotations
@@ -31,8 +32,10 @@ async def start_rebuild(align_version: bool = False) -> dict:
     backup = lockfile.backup_current()
 
     pin_change: tuple[str, str] | None = None  # (旧 pin, 新 tag)，begin_exclusive 成功后才落盘
+    local_commit: str | None = None
+    started_ms = version_align.now_ms()
     if align_version:
-        version, _ = version_align.local_version(get_settings().local.comfy_root)
+        version, local_commit = version_align.local_version(get_settings().local.comfy_root)
         if version:
             tag = version_align.tag_for(version)
             pin = version_align.read_pin()
@@ -46,6 +49,9 @@ async def start_rebuild(align_version: bool = False) -> dict:
     lockfile.write_outputs(lock, script)
     if pin_change:
         version_align.write_pin(pin_change[1])
+        # 随镜像重建的版本对齐同样留痕（deploy 收尾回调拿到真实结局）
+        deploy.set_finish_sink(version_align.sink_for(
+            "rebuild", pin_change[0], pin_change[1], started_ms, local_commit))
 
     def rollback() -> None:
         lockfile.restore(*backup)

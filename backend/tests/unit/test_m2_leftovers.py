@@ -79,6 +79,7 @@ def rebuild_env(monkeypatch):
 def reset_deploy_job():
     yield
     ir.deploy._JOB.update(state="idle", started_ms=None, finished_ms=None, label=None, error=None, log_tail=[])
+    ir.deploy.set_finish_sink(None)  # 清一次性收尾回调，防串测试
 
 
 async def test_rebuild_with_align_writes_pin_and_rolls_back_both(rebuild_env, reset_deploy_job, monkeypatch):
@@ -125,6 +126,54 @@ async def test_rebuild_exclusive_conflict_mutates_nothing(rebuild_env, monkeypat
     with pytest.raises(RuntimeError):
         await ir.start_rebuild(align_version=True)
     assert rebuild_env["written"] == [] and rebuild_env["pins"] == []  # 互斥拒绝时不落盘
+
+
+async def test_rebuild_with_pin_change_registers_history_sink(
+    rebuild_env, reset_deploy_job, monkeypatch, tmp_path
+):
+    """随镜像重建的版本对齐也留痕：deploy 收尾回调 fire 后写入 rebuild 历史。"""
+    hist_file = tmp_path / "align_history.jsonl"
+    monkeypatch.setattr(va, "HISTORY_FILE", hist_file)
+    monkeypatch.setattr(va, "local_version", lambda root: ("v0.39.0", "cafe"))
+    monkeypatch.setattr(va, "read_pin", lambda: "v0.38.0")
+    monkeypatch.setattr(va, "write_pin", lambda tag: rebuild_env["pins"].append(tag))
+
+    await ir.start_rebuild(align_version=True)
+    assert rebuild_env["pins"] == ["v0.39.0"]
+    assert ir.deploy._SINK is not None  # 注册了一次性收尾回调
+    ir.deploy._SINK("ok", None)  # 模拟 deploy 成功收尾
+    hist = va.read_history()
+    assert len(hist) == 1
+    assert hist[0]["trigger"] == "rebuild"
+    assert hist[0]["from_pin"] == "v0.38.0" and hist[0]["to_tag"] == "v0.39.0"
+    assert hist[0]["outcome"] == "ok" and hist[0]["local_commit"] == "cafe"
+
+
+async def test_rebuild_without_pin_change_no_history_sink(
+    rebuild_env, reset_deploy_job, monkeypatch, tmp_path
+):
+    hist_file = tmp_path / "align_history.jsonl"
+    monkeypatch.setattr(va, "HISTORY_FILE", hist_file)
+    monkeypatch.setattr(va, "local_version", lambda root: ("v0.38.0", None))
+    monkeypatch.setattr(va, "read_pin", lambda: "v0.38.0")
+    monkeypatch.setattr(va, "write_pin", lambda tag: rebuild_env["pins"].append(tag))
+
+    await ir.start_rebuild(align_version=True)  # pin 已一致：只固化不对齐
+    assert ir.deploy._SINK is None
+    assert not hist_file.exists()  # 版本无变更不产生对齐历史
+
+
+async def test_rebuild_without_align_no_history(rebuild_env, reset_deploy_job, monkeypatch, tmp_path):
+    hist_file = tmp_path / "align_history.jsonl"
+    monkeypatch.setattr(va, "HISTORY_FILE", hist_file)
+
+    def _no(*args, **kwargs):
+        raise AssertionError("align_version=False 不应触碰版本函数")
+
+    monkeypatch.setattr(va, "local_version", _no)
+    await ir.start_rebuild(align_version=False)
+    assert ir.deploy._SINK is None
+    assert not hist_file.exists()
 
 
 # ---------------------------------------------------------------- 工作流冲突对比

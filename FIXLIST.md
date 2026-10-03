@@ -774,3 +774,44 @@ M2-1「节点清单采集（本地 custom_nodes 扫描 + Manager API 兜底）�
 - WS 快路径 kind 走桥接器状态词汇表（execution_interrupted → cancelled，与日志页 queued/running/
   done/error/cancelled 对齐）；history 路径 _classify_entry 返回 "interrupted"，_finish 再归一。
 - 「进 CI」落点：仓库无 remote，矩阵以 pytest 全量承载（18.7s），接 CI 后直接纳管 tests/compat。
+
+## 二十三、版本对齐历史留痕（M2-5 余项 · 2026-10-03）
+
+### 背景
+规划 §3.3 版本对齐行（M2-5 第一片 2026-09-30）标注的余项之一（另一项「与节点固化的重建入口合并」
+已于 M2 收尾完成）：对齐操作此前只有瞬时 job 状态，重启即丢，无「何时/从哪版/到哪版/结局如何」的
+留痕。本片补齐。
+
+### 改动
+- `nodes_mgr/deploy.py`：新增一次性收尾回调 `set_finish_sink/_fire_sink`——run_deploy 四个收尾点
+  （CLI 缺失/非零退出→rolled_back、超时→timeout、成功→ok）各 fire 一次即清除，回调异常吞掉不影响
+  部署任务状态；`begin_exclusive` 清除上一次未触发的注册（防串）。共享部署任务保持单飞语义不变。
+- `nodes_mgr/version_align.py`：历史写入器——JSONL 追加到 `~/.comfybridge/version_align_history.jsonl`
+  （记录 ts_ms/time/trigger/from_pin/to_tag/outcome/error/duration_ms/local_commit；留痕失败静默）；
+  `read_history(limit)` 新的在前、坏行跳过；`sink_for()` 把 deploy 收尾口径直译为历史 outcome；
+  `start_align` 挂 sink（含本地 commit），pin 已一致的 noop 也留一条（不经 deploy，直接记）。
+- `nodes_mgr/image_rebuild.py`：align_version=True 且 pin 实际变更时同样挂 sink（trigger=rebuild）；
+  pin 无变更只固化时不产生对齐历史。
+- API：GET /nodes/version 响应新增 `history`（最近 20 条）。
+- 前端：节点页 VersionBanner 下新增「对齐历史（N）」折叠面板（Collapse+List）：时间 · from→to ·
+  结局 Tag（成功/已回滚/超时·不确定/无需变更）· 随镜像重建标记 · 耗时 · 错误详情 Tooltip；无历史不渲染。
+
+### 验证
+- 单测 +9（全 237 passed）：align ok/回滚/超时/noop 四结局留痕 + sink 一次性清除、坏行跳过与新在先、
+  留痕失败静默；rebuild 带 pin_change 注册 sink 并写 rebuild 记录、不带变更/不带对齐不产生历史
+  （reset_deploy_job fixture 顺带清 sink 防泄漏）。
+- ruff 新增 0（全量 69 = stash 基线 69；deploy 新增 S110 改 contextlib.suppress 消除）；
+  tsc 0 错；pnpm build:embed 成功。
+- 真机（零成本路径）：重启 ：8189 → GET /nodes/version 返回 history:[] → 临时把 pin 文件设为本地版本
+  v0.38.2 → POST /nodes/version/align 真实端点返回 ok（「无需重建」）→ 真实历史记录落盘
+  ~/.comfybridge/version_align_history.jsonl（noop，时间戳/trigger 齐全）→ pin 还原 v0.38.0（git 无 diff）。
+- UI（浏览器 DOM 断言 + 截图）：节点页版本告警下方出现「对齐历史（1）」，展开后记录行完整渲染
+  （10-03 19:00 · v0.38.2 → v0.38.2 · 无需变更 Tag），截图存档 tmp/gui-test-screenshots/m2_align_history.png。
+
+### 关键发现
+- deploy 的 ok/rolled_back/timeout 三结局均真实发生过（此前切片），本片用一次性 sink 把结局接给
+  历史而非轮询 _JOB——收尾即写，无竞态窗口；noop 路径不经 deploy，单独直记。
+- 「pin 已一致」的对齐尝试也留痕（outcome=noop）：审计视角「用户试过对齐」与「什么都没发生」
+  都值得记；noop 不记 duration/error。
+- 真实 full deploy 的 ok/rolled_back/timeout 记录未现场重演（避免一次真实镜像重建计费与 Modal 网络
+  抖动窗口），三结局由 _FakeProc 单测路径覆盖，落盘代码与 noop 为同一条 append_history 通路。
