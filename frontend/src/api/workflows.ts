@@ -60,19 +60,6 @@ export function useWorkflowSync() {
   });
 }
 
-export interface WfSyncResult {
-  name: string;
-  ok: boolean;
-  action?: string;
-  conflict_copy?: string;
-  error?: string;
-}
-
-/** 执行同步动作：push 本地覆盖云端 / pull 云端覆盖本地 / keep_both 冲突双副本。 */
-export function applyWorkflowSync(actions: { name: string; action: WfSyncAction }[]) {
-  return apiSend<{ ok: boolean; results: WfSyncResult[] }>("/api/v1/workflows/sync", "POST", { actions });
-}
-
 /* ---------------- 冲突双列对比（M2 收尾） ---------------- */
 
 export interface WfCompareSide {

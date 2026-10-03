@@ -102,8 +102,9 @@ async def workflows_sync_status() -> dict:
 
 @router.post("/workflows/sync")
 async def workflows_sync_apply(body: SyncActionsBody) -> dict:
-    """执行同步动作：[{name, action}]，action ∈ push|pull|keep_both。"""
-    return await workflows_sync.apply(body.actions)
+    """执行同步动作 [{name, action}]（action ∈ push|pull|keep_both）——M2-6 任务化：
+    预检失败返回 {ok: false, error}；否则立即返回 job，进度经 GET /jobs 轮询。"""
+    return await workflows_sync.apply_as_job(body.actions)
 
 
 @router.get("/workflows/run-stats")

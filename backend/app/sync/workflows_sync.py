@@ -21,6 +21,7 @@ from pathlib import Path
 from ..core.config import modal_configured, workflows_dir
 from ..modal_volume import client as volume_cli
 from ..modal_volume.client import ModalCliError
+from . import jobs
 from . import workflows_rules as rules
 
 CLOUD_DIR = "user/default/workflows"
@@ -130,63 +131,76 @@ async def _pull_to(name: str, dest: Path) -> None:
     await volume_cli.run("volume", "get", volume_cli.volume_name(), f"{CLOUD_DIR}/{name}", str(dest), "--force")
 
 
-async def apply(actions: list[dict]) -> dict:
-    """执行 UI 选定的动作（push/pull/keep_both），返回逐项结果；基线随成功项推进。"""
+async def apply_as_job(actions: list[dict]) -> dict:
+    """同步动作任务化（M2-6）：预检失败直接返回错误不开作业；否则立即返回 job，
+    逐条执行进度经 JobHandle 汇报（前端 JobDrawer 轮询跟踪，可中途取消）。"""
     if not modal_configured():
         return {"ok": False, "error": "未配置 Modal 凭证（设置 → Modal）", "results": []}
     root = workflows_dir()
     if not root.is_dir():
         return {"ok": False, "error": f"本地工作流目录不存在：{root}", "results": []}
+    if not actions:
+        return {"ok": False, "error": "没有要执行的动作", "results": []}
+    job = jobs.start_job(
+        "workflow_sync", f"工作流同步（{len(actions)} 项）", len(actions),
+        lambda handle: _apply_body(handle, actions), cancellable=True,
+    )
+    return {"ok": True, "job": job}
+
+
+async def _apply_body(handle, actions: list[dict]) -> None:
+    """作业体：逐条执行 push/pull/keep_both 并推进作业条目；基线随成功项推进。"""
+    root = workflows_dir()
     async with _APPLY_LOCK:
         local = await asyncio.to_thread(local_hashes)
         cloud, error = await cloud_hashes()
         if error:
-            return {"ok": False, "error": error, "results": []}
+            raise RuntimeError(f"云端清单读取失败：{error}")
         state = await asyncio.to_thread(read_state)
-        results: list[dict] = []
         for action in actions:
+            handle.check_cancel()
             name, op = str(action.get("name", "")), str(action.get("action", ""))
             if not rules.valid_workflow_name(name):
-                results.append({"name": name, "ok": False, "error": "非法文件名"})
-                continue
-            lh, ch = local.get(name), cloud.get(name)
-            result: dict = {"name": name, "ok": False, "action": op}
-            try:
-                if op == rules.PUSH:
-                    if lh is None:
-                        result["error"] = "本地不存在"
+                result: dict = {"name": name, "ok": False, "action": op, "error": "非法文件名"}
+            else:
+                lh, ch = local.get(name), cloud.get(name)
+                result = {"name": name, "ok": False, "action": op}
+                try:
+                    if op == rules.PUSH:
+                        if lh is None:
+                            result["error"] = "本地不存在"
+                        else:
+                            await _volume_put(root / name, f"{CLOUD_DIR}/{name}")
+                            state[name] = lh
+                            result["ok"] = True
+                    elif op == rules.PULL:
+                        if ch is None:
+                            result["error"] = "云端不存在"
+                        else:
+                            await _pull_to(name, root / name)
+                            state[name] = ch
+                            result["ok"] = True
+                    elif op == rules.KEEP_BOTH:
+                        if ch is None or lh is None:
+                            result["error"] = "冲突双副本需要两端都有文件"
+                        else:
+                            ts = time.strftime("%Y%m%d-%H%M%S")
+                            copy_name = rules.conflict_copy_name(name, ts)
+                            tmp_root = Path(tempfile.mkdtemp(prefix="cb-wf-conflict-"))
+                            try:
+                                cloud_copy = tmp_root / copy_name
+                                await _pull_to(name, cloud_copy)
+                                shutil.move(str(cloud_copy), str(root / copy_name))
+                            finally:
+                                shutil.rmtree(tmp_root, ignore_errors=True)
+                            await _volume_put(root / name, f"{CLOUD_DIR}/{name}")
+                            state[name] = lh
+                            result["ok"] = True
+                            result["conflict_copy"] = copy_name
                     else:
-                        await _volume_put(root / name, f"{CLOUD_DIR}/{name}")
-                        state[name] = lh
-                        result["ok"] = True
-                elif op == rules.PULL:
-                    if ch is None:
-                        result["error"] = "云端不存在"
-                    else:
-                        await _pull_to(name, root / name)
-                        state[name] = ch
-                        result["ok"] = True
-                elif op == rules.KEEP_BOTH:
-                    if ch is None or lh is None:
-                        result["error"] = "冲突双副本需要两端都有文件"
-                    else:
-                        ts = time.strftime("%Y%m%d-%H%M%S")
-                        copy_name = rules.conflict_copy_name(name, ts)
-                        tmp_root = Path(tempfile.mkdtemp(prefix="cb-wf-conflict-"))
-                        try:
-                            cloud_copy = tmp_root / copy_name
-                            await _pull_to(name, cloud_copy)
-                            shutil.move(str(cloud_copy), str(root / copy_name))
-                        finally:
-                            shutil.rmtree(tmp_root, ignore_errors=True)
-                        await _volume_put(root / name, f"{CLOUD_DIR}/{name}")
-                        state[name] = lh
-                        result["ok"] = True
-                        result["conflict_copy"] = copy_name
-                else:
-                    result["error"] = f"未知动作 {op!r}"
-            except ModalCliError as exc:
-                result["error"] = str(exc)[:300]
-            results.append(result)
+                        result["error"] = f"未知动作 {op!r}"
+                except ModalCliError as exc:
+                    result["error"] = str(exc)[:300]
+            handle.advance(result)
+            handle.log(f"{op} {name} → {'完成' if result['ok'] else result.get('error', '失败')}")
         await asyncio.to_thread(write_state, state)
-    return {"ok": all(r.get("ok") for r in results), "results": results}

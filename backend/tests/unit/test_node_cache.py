@@ -290,7 +290,8 @@ async def test_sync_invalidates_matrix(diff_env, tmp_path, monkeypatch):
     monkeypatch.setattr(nodes_api, "_write_cloud_manifest", fake_write_manifest)
 
     res = await nodes_api.nodes_sync(nodes_api.NamesBody(names=["new_pkg"]))
-    assert res["ok"] is True
+    job = await nodes_api.jobs.wait_job(res["job"]["id"])
+    assert job["state"] == "ok" and job["items"][0]["ok"] is True
     assert puts == ["custom_nodes/new_pkg"]
     assert writes and writes[0]["schema"] == 1
     assert diff_cache.load_matrix() is None  # 缓存已失效

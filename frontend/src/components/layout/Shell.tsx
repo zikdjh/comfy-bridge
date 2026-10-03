@@ -20,6 +20,8 @@ import { useCostSummary } from "../../api/cost";
 import { useConfig } from "../../api/config";
 import { LOCAL_COMFY_URL } from "../../theme";
 import { ConfigWizard, WIZARD_DONE_KEY } from "../../pages/settings/ConfigWizard";
+import { JobDrawer } from "../common/JobDrawer";
+import { JOB_DRAWER_EVENT, useJobs } from "../../api/jobs";
 
 const { Sider, Header, Content } = Layout;
 
@@ -69,6 +71,21 @@ export function Shell() {
     }
   });
   const needSetup = !!config && !config.modal.token_id;
+
+  // —— 全局任务抽屉（M2-6）：顶栏角标显示进行中任务数，页面经 openJobDrawer() 唤起 ——
+  const { data: jobsData } = useJobs();
+  const [jobsOpen, setJobsOpen] = useState(false);
+  const [jobFocusId, setJobFocusId] = useState<string | null>(null);
+  useEffect(() => {
+    const onOpen = (ev: Event) => {
+      const jobId = (ev as CustomEvent<{ jobId?: string }>).detail?.jobId ?? null;
+      setJobFocusId(jobId);
+      setJobsOpen(true);
+    };
+    window.addEventListener(JOB_DRAWER_EVENT, onOpen);
+    return () => window.removeEventListener(JOB_DRAWER_EVENT, onOpen);
+  }, []);
+  const runningJobs = jobsData?.running ?? 0;
   useEffect(() => {
     if (!needSetup || wizardDismissed) return;
     const timer = window.setTimeout(() => setWizardOpen(true), 600);
@@ -187,6 +204,11 @@ export function Shell() {
             <Tooltip title={budgetTooltip + modalLine} placement="bottom">
               {budgetTag}
             </Tooltip>
+            <Badge count={runningJobs} size="small" offset={[-2, 2]}>
+              <Button icon={<UnorderedListOutlined />} onClick={() => { setJobFocusId(null); setJobsOpen(true); }}>
+                任务
+              </Button>
+            </Badge>
             <Tooltip title={`经桥接器 ${bridgeUrl}（生成请求将被拦截路由）`} placement="bottom">
               <Button type="primary" ghost icon={<PictureOutlined />} href={bridgeUrl} target="_blank">
                 前往出图界面
@@ -217,6 +239,12 @@ export function Shell() {
         </Content>
       </Layout>
       <ConfigWizard open={wizardOpen} onClose={closeWizard} />
+      <JobDrawer
+        open={jobsOpen}
+        onClose={() => setJobsOpen(false)}
+        focusId={jobFocusId}
+        onFocusHandled={() => setJobFocusId(null)}
+      />
     </Layout>
   );
 }

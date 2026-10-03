@@ -33,6 +33,7 @@ import {
 } from "../../api/nodes";
 import type { NodeDiffRow, VersionJob } from "../../api/nodes";
 import { stopModalContainers } from "../../api/launch";
+import { openJobDrawer, useJob } from "../../api/jobs";
 import { warmupModal } from "../../api/health";
 import { EmptyGuide } from "../../components/common/EmptyGuide";
 import dayjs from "dayjs";
@@ -247,27 +248,37 @@ function DiffMatrix() {
     }
   };
 
-  const install = async (names: string[]) => {
-    setOperating(true);
-    try {
-      const res = await syncCloudNodes(names);
-      invalidate();
-      setSelectedKeys([]);
-      const failed = res.results.filter((r) => !r.ok);
-      if (failed.length > 0) {
-        Modal.error({
-          title: "部分节点同步失败",
-          content: (
-            <pre style={{ maxHeight: 240, overflow: "auto", whiteSpace: "pre-wrap" }}>
-              {failed.map((f) => `${f.name}: ${f.error ?? "未知错误"}`).join("\n")}
-            </pre>
-          ),
-        });
-        return;
-      }
+// 节点同步任务化（M2-6）：提交即返回 job → 打开任务抽屉；完成后弹「重启容器生效」确认
+  const [syncJobId, setSyncJobId] = useState<string | null>(null);
+  const { data: syncJob } = useJob(syncJobId);
+  const jobHandled = useRef(false);
+  useEffect(() => {
+    if (!syncJob) return;
+    if (syncJob.state === "running") {
+      jobHandled.current = false;
+      return;
+    }
+    if (jobHandled.current) return;
+    jobHandled.current = true;
+    invalidate();
+    const failed = syncJob.items.filter((it) => !it.ok);
+    if (syncJob.state === "cancelled") {
+      message.warning("节点同步任务已取消（已完成条目保留）");
+    } else if (syncJob.items.length === 0) {
+      message.error(`节点同步任务失败：${syncJob.error ?? "未知错误"}`);
+    } else if (failed.length > 0) {
+      Modal.error({
+        title: "部分节点同步失败",
+        content: (
+          <pre style={{ maxHeight: 240, overflow: "auto", whiteSpace: "pre-wrap" }}>
+            {failed.map((f) => `${f.name}: ${f.error ?? "未知错误"}`).join("\n")}
+          </pre>
+        ),
+      });
+    } else {
       Modal.confirm({
-        title: `已同步 ${res.results.length} 个节点到云端数据卷`,
-        content: res.note,
+        title: `已同步 ${syncJob.items.length} 个节点到云端数据卷`,
+        content: "节点文件已写入云端数据卷；Python 依赖由云端容器下次冷启动时按 requirements.txt 自动安装。卷清单有 1~2 分钟最终一致性延迟，差异矩阵可能稍后才显示「已同步」。",
         okText: "立即重启云端容器生效",
         cancelText: "稍后（下次冷启动自动生效）",
         onOk: async () => {
@@ -287,6 +298,22 @@ function DiffMatrix() {
           queryClient.invalidateQueries({ queryKey: ["health"] });
         },
       });
+    }
+  }, [syncJob]);
+
+  const install = async (names: string[]) => {
+    setOperating(true);
+    try {
+      const res = await syncCloudNodes(names);
+      if (!res.ok || !res.job) {
+        message.error(res.error ?? "同步任务提交失败");
+        return;
+      }
+      setSelectedKeys([]);
+      jobHandled.current = false;
+      setSyncJobId(res.job.id);
+      message.info(`同步任务已提交（${names.length} 项），进度见任务抽屉`);
+      openJobDrawer(res.job.id);
     } catch (exc) {
       message.error(`同步请求失败：${exc instanceof Error ? exc.message : String(exc)}`);
     } finally {

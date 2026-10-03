@@ -43,6 +43,7 @@ from ...models_mgr import node_presence
 from ...nodes_mgr import deploy, diff_cache, image_rebuild, manager_api, version_align
 from ...nodes_mgr.scan import DISABLED_SUFFIX, scan_custom_nodes
 from ...runner import client as runner_client
+from ...sync import jobs
 
 router = APIRouter()
 
@@ -427,66 +428,86 @@ async def _volume_put(local_path: Path, remote: str) -> None:
     await volume_cli.run("volume", "put", volume_cli.volume_name(), str(local_path), remote, "-f")
 
 
-@router.post("/nodes/sync")
-async def nodes_sync(body: NamesBody) -> dict:
+_SYNC_LOCK = asyncio.Lock()  # 串行化同步作业：manifest 合并与卷写入不并发交错
+
+
+async def _sync_body(handle, names: list[str]) -> None:
+    """同步作业体：逐个上传节点并推进作业条目，成功后合并 manifest + 失效矩阵缓存。"""
     root = custom_nodes_dir()
     results: list[dict] = []
-    for name in body.names:
-        if not _safe_name(name):
-            results.append({"name": name, "ok": False, "error": "非法节点名"})
-            continue
-        src = root / name
-        if not src.exists():
-            results.append({"name": name, "ok": False, "error": "本地不存在"})
-            continue
-        try:
-            # 停用节点（ComfyUI-Manager 约定：目录名追加 .disabled）按实际目录名整包落卷，
-            # ComfyUI 核心加载 custom_nodes 时跳过 .disabled 目录，冷启动装依赖时同样跳过
-            remote = f"custom_nodes/{name}"
-            if src.is_dir():
-                staged = _stage_dir(src)
-                try:
-                    await _volume_put(staged, remote)
-                finally:
-                    shutil.rmtree(staged.parent, ignore_errors=True)
+    async with _SYNC_LOCK:
+        for name in names:
+            handle.check_cancel()
+            if not _safe_name(name):
+                result = {"name": name, "ok": False, "error": "非法节点名"}
             else:
-                await _volume_put(src, remote)
-            results.append({
-                "name": name, "ok": True, "remote": remote,
-                "enabled": not name.endswith(DISABLED_SUFFIX),
+                src = root / name
+                if not src.exists():
+                    result = {"name": name, "ok": False, "error": "本地不存在"}
+                else:
+                    try:
+                        # 停用节点（ComfyUI-Manager 约定：目录名追加 .disabled）按实际目录名整包落卷，
+                        # ComfyUI 核心加载 custom_nodes 时跳过 .disabled 目录，冷启动装依赖时同样跳过
+                        remote = f"custom_nodes/{name}"
+                        if src.is_dir():
+                            handle.log(f"打包上传 {name} …")
+                            staged = _stage_dir(src)
+                            try:
+                                await _volume_put(staged, remote)
+                            finally:
+                                shutil.rmtree(staged.parent, ignore_errors=True)
+                        else:
+                            await _volume_put(src, remote)
+                        result = {
+                            "name": name, "ok": True, "remote": remote,
+                            "enabled": not name.endswith(DISABLED_SUFFIX),
+                        }
+                    except ModalCliError as exc:
+                        result = {"name": name, "ok": False, "error": str(exc)}
+            results.append(result)
+            handle.advance(result)
+            handle.log(f"{name} → {'已写入数据卷' if result['ok'] else result.get('error', '失败')}")
+        if any(r["ok"] for r in results):
+            current = _manifest(await asyncio.to_thread(scan_custom_nodes))
+            local_entries = _manifest_entries(current)
+            existing = await _read_cloud_manifest() or {
+                "schema": 0, "packages": [], "single_files": []
+            }
+            combined = _manifest_entries(existing)
+            for result in (r for r in results if r["ok"]):
+                if result["name"] in local_entries:
+                    combined[result["name"]] = {
+                        **local_entries[result["name"]],
+                        "enabled": result.get("enabled", True),
+                    }
+            await _write_cloud_manifest({
+                "schema": 1,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "packages": sorted(
+                    (v for v in combined.values() if v["kind"] == "pkg"),
+                    key=lambda p: p["name"],
+                ),
+                "single_files": sorted(
+                    (v for v in combined.values() if v["kind"] == "single"),
+                    key=lambda p: p["name"],
+                ),
             })
-        except ModalCliError as exc:
-            results.append({"name": name, "ok": False, "error": str(exc)})
-    if any(r["ok"] for r in results):
-        current = _manifest(await asyncio.to_thread(scan_custom_nodes))
-        local_entries = _manifest_entries(current)
-        existing = await _read_cloud_manifest() or {
-            "schema": 0, "packages": [], "single_files": []
-        }
-        combined = _manifest_entries(existing)
-        for result in (r for r in results if r["ok"]):
-            if result["name"] in local_entries:
-                combined[result["name"]] = {
-                    **local_entries[result["name"]],
-                    "enabled": result.get("enabled", True),
-                }
-        await _write_cloud_manifest({
-            "schema": 1,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "packages": sorted(
-                (v for v in combined.values() if v["kind"] == "pkg"),
-                key=lambda p: p["name"],
-            ),
-            "single_files": sorted(
-                (v for v in combined.values() if v["kind"] == "single"),
-                key=lambda p: p["name"],
-            ),
-        })
-        diff_cache.invalidate_matrix()  # 卷上节点已变，矩阵缓存失效，下次请求现算
+            diff_cache.invalidate_matrix()  # 卷上节点已变，矩阵缓存失效，下次请求现算
+
+
+@router.post("/nodes/sync")
+async def nodes_sync(body: NamesBody) -> dict:
+    """同步节点到云端数据卷（M2-6 任务化）：立即返回 job，进度经 GET /jobs 轮询。"""
+    if not body.names:
+        return {"ok": False, "error": "没有要同步的节点", "job": None}
+    job = jobs.start_job(
+        "node_sync", f"节点同步（{len(body.names)} 项）", len(body.names),
+        lambda handle: _sync_body(handle, body.names), cancellable=True,
+    )
     return {
-        "ok": bool(results) and all(r["ok"] for r in results),
-        "results": results,
-        "note": "节点文件已写入云端数据卷；Python 依赖会在云端容器下次冷启动时按 requirements.txt 自动安装（可立即「停止容器 + 预热」使其生效）。注意：卷清单有 1~2 分钟最终一致性延迟，差异矩阵可能稍后才显示「已同步」。",
+        "ok": True,
+        "job": job,
+        "note": "同步任务已提交，进度见顶部「任务」抽屉；Python 依赖会在云端容器下次冷启动时按 requirements.txt 自动安装（可立即「停止容器 + 预热」使其生效）。卷清单有 1~2 分钟最终一致性延迟，差异矩阵可能稍后才显示「已同步」。",
     }
 
 

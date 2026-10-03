@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, apiSend } from "./client";
+import type { SyncJob } from "./jobs";
 
 export interface CustomNodePackage {
   name: string;
@@ -124,9 +125,11 @@ export interface NodeOpResult {
   note?: string;
 }
 
-/** 安装本地节点包/单文件到云端数据卷（依赖在云端容器下次冷启动时自动安装）。 */
+/** 安装本地节点包/单文件到云端数据卷（M2-6 任务化）：立即返回 job，进度经任务抽屉轮询。 */
 export function syncCloudNodes(names: string[]) {
-  return apiSend<NodeOpResult>("/api/v1/nodes/sync", "POST", { names });
+  return apiSend<{ ok: boolean; error?: string; job?: SyncJob; note?: string }>(
+    "/api/v1/nodes/sync", "POST", { names },
+  );
 }
 
 /** 从云端数据卷移除节点。 */

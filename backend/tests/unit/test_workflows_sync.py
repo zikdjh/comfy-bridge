@@ -120,19 +120,29 @@ def wf_env(tmp_path, monkeypatch):
     return ws, local_dir, fake
 
 
+def run_actions(ws_mod, actions):
+    """任务化契约 helper：提交作业并等待结束，返回作业视图（预检失败直接返回错误响应）。"""
+    async def _run():
+        res = await ws_mod.apply_as_job(actions)
+        if not res.get("ok"):
+            return res
+        return await ws_mod.jobs.wait_job(res["job"]["id"])
+    return asyncio.run(_run())
+
+
 def test_apply_push_pull_and_state(wf_env, tmp_path):
     ws, local_dir, fake = wf_env
     (local_dir / "a.json").write_text('{"local": 1}', encoding="utf-8")
 
-    res = asyncio.run(ws.apply([{"name": "a.json", "action": "push"}]))
-    assert res["ok"] and res["results"][0]["ok"]
+    res = run_actions(ws, [{"name": "a.json", "action": "push"}])
+    assert res["state"] == "ok" and res["items"][0]["ok"]
     assert "a.json" in fake.cloud  # 已上卷
     assert ws.read_state()["a.json"] == ws.local_hashes()["a.json"]  # 基线推进
 
     # 云端被第三方修改 → pull 覆盖本地，基线记云端 hash
     fake.cloud["a.json"] = b'{"cloud": 2}'
-    res = asyncio.run(ws.apply([{"name": "a.json", "action": "pull"}]))
-    assert res["ok"]
+    res = run_actions(ws, [{"name": "a.json", "action": "pull"}])
+    assert res["state"] == "ok"
     assert (local_dir / "a.json").read_text(encoding="utf-8") == '{"cloud": 2}'
     assert ws.read_state()["a.json"] == ws.local_hashes()["a.json"]
 
@@ -143,9 +153,9 @@ def test_apply_keep_both_creates_conflict_copy(wf_env):
     (local_dir / "x.json").write_bytes(local_bytes)
     fake.cloud["x.json"] = b'{"v": "cloud"}'
 
-    res = asyncio.run(ws.apply([{"name": "x.json", "action": "keep_both"}]))
-    assert res["ok"]
-    copy_name = res["results"][0]["conflict_copy"]
+    res = run_actions(ws, [{"name": "x.json", "action": "keep_both"}])
+    assert res["state"] == "ok"
+    copy_name = res["items"][0]["conflict_copy"]
     assert "conflict-" in copy_name and copy_name.endswith(".json")
     assert (local_dir / copy_name).read_bytes() == b'{"v": "cloud"}'  # 云端版留本地
     assert (local_dir / "x.json").read_bytes() == local_bytes  # 本地版不动
@@ -155,14 +165,14 @@ def test_apply_keep_both_creates_conflict_copy(wf_env):
 
 def test_apply_validates_names_and_missing_files(wf_env):
     ws, _local_dir, _fake = wf_env
-    res = asyncio.run(ws.apply([
+    res = run_actions(ws, [
         {"name": "../evil.json", "action": "push"},
         {"name": "no-local.json", "action": "push"},
         {"name": "no-cloud.json", "action": "pull"},
         {"name": "a.json", "action": "explode"},
-    ]))
-    assert not res["ok"]
-    errors = {r["name"]: r["error"] for r in res["results"]}
+    ])
+    assert res["state"] == "error"
+    errors = {r["name"]: r["error"] for r in res["items"]}
     assert errors["../evil.json"] == "非法文件名"
     assert errors["no-local.json"] == "本地不存在"
     assert errors["no-cloud.json"] == "云端不存在"
@@ -171,9 +181,9 @@ def test_apply_validates_names_and_missing_files(wf_env):
 
 def test_apply_pull_cloud_missing(wf_env):
     ws, _local_dir, _fake = wf_env
-    res = asyncio.run(ws.apply([{"name": "nope.json", "action": "pull"}]))
-    assert not res["ok"]
-    assert res["results"][0]["error"] == "云端不存在"
+    res = run_actions(ws, [{"name": "nope.json", "action": "pull"}])
+    assert res["state"] == "error"
+    assert res["items"][0]["error"] == "云端不存在"
 
 
 def test_status_counts_and_baseline_refresh(wf_env, monkeypatch):

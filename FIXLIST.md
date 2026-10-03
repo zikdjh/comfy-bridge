@@ -690,3 +690,44 @@ M2-1「节点清单采集（本地 custom_nodes 扫描 + Manager API 兜底）�
   以单测固定的多形态样例为准（防御式解析 + 任何失败静默降级，在线机器上装 Manager 后即生效）。
 - deep class_type 持久缓存是「防重复冷启动计费」的关键：旧版每次 deep 都重拉云端 object_info
   （本次实测容器已缩容，force 重拉花了约 3 分钟）；缓存后进页面零成本，显式 force 才重付一次。
+
+## 二十一、同步任务 JobDrawer（M2-6 余项 · 2026-10-03）
+
+### 背景
+前端界面规划 §5.2「长任务提交后立即返回 job_id → 自动打开 JobDrawer → 用户可离开页面，顶栏出现全局任务角标」。
+此前工作流同步（POST /workflows/sync）与节点同步（POST /nodes/sync）是阻塞式 HTTP——批量动作要挂住请求
+直到全部 volume put/get 完成，页面无中间反馈；镜像重建/卷移动/URL 直下各自已有作业面不动。
+
+### 实现
+- `sync/jobs.py`（新）：内存态通用作业注册表。job = {id, kind, label, state(running|ok|error|cancelled),
+  total, done, items[], logs[], error, cancellable, created_ms, finished_ms}；runner 为 async 函数，
+  经 JobHandle（log/advance/check_cancel）汇报；协作式取消（条目间检查点），任何异常兜底落到作业状态；
+  保留最近 100 个（运行中永不清理）。全部条目失败/无条目 → error 态（区别于部分失败）。
+- `api/v1/jobs.py`（新）：GET /jobs（列表+运行中计数）、GET /jobs/{id}、POST /jobs/{id}/cancel。
+- 工作流同步与节点同步任务化：预检失败（未配凭证/目录缺失/空清单）直接返回 {ok:false,error} 不开作业；
+  否则立即返回 {ok:true, job}，原 apply/同步逻辑原样搬进作业体（逐条 advance + log，节点同步经
+  _SYNC_LOCK 串行化避免并发作业交错写 manifest；工作流同步沿用 _APPLY_LOCK）。
+- 前端：`common/JobDrawer`（焦点视图：kind/state 标签、进度条 done/total、逐条结果、最近 12 条日志、
+  取消按钮；列表视图：其余作业概览）；Shell 顶栏「任务」按钮 + Badge 运行中计数（useJobs 15s 空闲/3s
+  运行中轮询，与页面 useJob 共享 react-query 缓存零额外请求）；页面经 CustomEvent（JOB_DRAWER_EVENT）
+  唤起抽屉。工作流页与节点页改为：提交 → 打开抽屉 → useJob 轮询完成态 → 统一回调（失效查询 + 原有
+  结果弹窗/「重启容器生效」确认保留）。
+
+### 验证
+- 单测 9 个（test_sync_jobs.py）：生命周期/异常兜底/全失败/空条目/协作取消/不可取消守卫/容量修剪
+  （运行中保留）/API 面（404/已结束不可取消）；test_workflows_sync 的 apply 测试迁移到任务化契约
+  （提交+wait_job，断言 items）；test_node_cache 的 sync 失效测试同步迁移。全套 188 passed。
+- ruff 68 基线持平；tsc/build:embed 干净。
+- 真机：临时工作流 cb-job-test.json → POST /workflows/sync 即返 job（running 1/1）→ 真实 volume put
+  完成（state ok、log「push cb-job-test.json → 完成」）、同步矩阵变 synced；websocket_image_save.py
+  重推经 /nodes/sync 同样 ok（item ok + manifest 合并后收尾）；临时文件与卷副本已清理。
+- UI：顶栏「任务」按钮 + Badge；抽屉列表与焦点视图（进度条/条目/日志/其他任务）截图
+  tmp/gui-test-screenshots/m2_job_drawer.png；openJobDrawer 事件自动弹出 + 焦点视图 DOM 断言通过。
+
+### 关键发现
+- **验证期间 Modal CLI 网络持续抖动**（同步矩阵 GET 长期挂起、health 探测转未接入，同 §十八 43s 模式），
+  「页面点击发起同步」的完整点击链路无法在抖动窗口内演示——自动弹出改经与页面完全相同的
+  openJobDrawer CustomEvent 路径验证（真 job id + 焦点视图 DOM 断言）；页面代码路径仅剩
+  startWorkflowSync resolve 后调用 openJobDrawer 一行直连。刷新为轮询（SSE 留作规划增强）。
+- useJob 直接返回 job 本体（解包 {job}），页面 effect 以「离开 running 态且未处理过」为完成信号，
+  快任务首拍即终态也能正确回调（jobHandled ref 去重）。

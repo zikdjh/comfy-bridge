@@ -1,10 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button, Card, Modal, Segmented, Space, Spin, Table, Tabs, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  applyWorkflowSync,
   fetchWorkflowCompare,
   useLocalWorkflows,
   useWorkflowRunStats,
@@ -17,6 +16,7 @@ import {
   type WfSyncRow,
 } from "../../api/workflows";
 import { EmptyGuide } from "../../components/common/EmptyGuide";
+import { openJobDrawer, startWorkflowSync, useJob } from "../../api/jobs";
 
 /* ---------------- 本地清单（真实数据） ---------------- */
 
@@ -204,27 +204,54 @@ function SyncMatrix() {
     queryClient.invalidateQueries({ queryKey: ["workflows"] });
   };
 
-  const run = async (actions: { name: string; action: WfSyncAction }[], done: string) => {
+  // 同步任务化（M2-6）：提交即返回 job → 打开任务抽屉；完成态经 useJob 轮询感知
+  const [syncJobId, setSyncJobId] = useState<string | null>(null);
+  const { data: syncJob } = useJob(syncJobId);
+  const jobHandled = useRef(false);
+  useEffect(() => {
+    if (!syncJob) return;
+    if (syncJob.state === "running") {
+      jobHandled.current = false;
+      return;
+    }
+    if (jobHandled.current) return;
+    jobHandled.current = true;
+    refresh();
+    const failed = syncJob.items.filter((it) => !it.ok);
+    const copies = syncJob.items.filter((it) => it.conflict_copy);
+    if (syncJob.state === "cancelled") {
+      message.warning("同步任务已取消（已完成条目保留）");
+    } else if (syncJob.items.length === 0) {
+      message.error(`同步任务失败：${syncJob.error ?? "未知错误"}`);
+    } else if (failed.length > 0) {
+      Modal.error({
+        title: "部分同步动作失败",
+        content: (
+          <pre style={{ maxHeight: 240, overflow: "auto", whiteSpace: "pre-wrap" }}>
+            {failed.map((f) => `${f.name}: ${f.error ?? "未知错误"}`).join("\n")}
+          </pre>
+        ),
+      });
+    } else {
+      message.success(
+        `已同步 ${syncJob.items.length} 个工作流` +
+          (copies.length > 0 ? `；冲突已留双副本：${copies.map((c) => c.conflict_copy).join("、")}` : ""),
+      );
+    }
+  }, [syncJob]);
+
+  const run = async (actions: { name: string; action: WfSyncAction }[]) => {
     setOperating(true);
     try {
-      const res = await applyWorkflowSync(actions);
-      const failed = res.results.filter((r) => !r.ok);
-      const copies = res.results.filter((r) => r.conflict_copy);
-      if (failed.length > 0) {
-        Modal.error({
-          title: "部分同步动作失败",
-          content: (
-            <pre style={{ maxHeight: 240, overflow: "auto", whiteSpace: "pre-wrap" }}>
-              {failed.map((f) => `${f.name}: ${f.error ?? "未知错误"}`).join("\n")}
-            </pre>
-          ),
-        });
-      } else {
-        message.success(
-          done + (copies.length > 0 ? `；冲突已留双副本：${copies.map((c) => c.conflict_copy).join("、")}` : ""),
-        );
+      const res = await startWorkflowSync(actions);
+      if (!res.ok || !res.job) {
+        message.error(res.error ?? "同步任务提交失败");
+        return;
       }
-      refresh();
+      jobHandled.current = false;
+      setSyncJobId(res.job.id);
+      message.info(`同步任务已提交（${actions.length} 项），进度见任务抽屉`);
+      openJobDrawer(res.job.id);
     } catch (exc) {
       message.error(`同步请求失败：${exc instanceof Error ? exc.message : String(exc)}`);
     } finally {
@@ -239,7 +266,7 @@ function SyncMatrix() {
       title: `同步 ${pending.length} 个工作流？`,
       content: "仅本地/本地已改 → 推送到云端；仅云端/云端已改 → 拉取到本地。冲突行不动（需人工处理）。",
       okText: "执行同步",
-      onOk: () => run(pending.map((r) => ({ name: r.name, action: r.suggested! })), `已同步 ${pending.length} 个工作流`),
+      onOk: () => run(pending.map((r) => ({ name: r.name, action: r.suggested! }))),
     });
   };
 
@@ -279,15 +306,15 @@ function SyncMatrix() {
                 对比
               </Button>
               <Button size="small" type="link" disabled={operating}
-                onClick={() => run([{ name: r.name, action: "push" }], `已用本地版覆盖云端：${r.name}`)}>
+                onClick={() => run([{ name: r.name, action: "push" }])}>
                 推本地版
               </Button>
               <Button size="small" type="link" disabled={operating}
-                onClick={() => run([{ name: r.name, action: "pull" }], `已用云端版覆盖本地：${r.name}`)}>
+                onClick={() => run([{ name: r.name, action: "pull" }])}>
                 推云端版
               </Button>
               <Button size="small" type="link" disabled={operating}
-                onClick={() => run([{ name: r.name, action: "keep_both" }], `已保留双副本：${r.name}`)}>
+                onClick={() => run([{ name: r.name, action: "keep_both" }])}>
                 保留双副本
               </Button>
             </Space>
@@ -296,7 +323,7 @@ function SyncMatrix() {
         const label = r.suggested === "push" ? "推送到云端" : "拉取到本地";
         return (
           <Button size="small" type="link" disabled={operating}
-            onClick={() => run([{ name: r.name, action: r.suggested! }], `已同步：${r.name}`)}>
+            onClick={() => run([{ name: r.name, action: r.suggested! }])}>
             {label}
           </Button>
         );
