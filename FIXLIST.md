@@ -843,3 +843,31 @@ executed/无图，媒体库不落盘。自 M1 起每次真实云端生成均命�
   因桥接重启跟踪丢失（cancelled，按设计）、#45 为冷启动窗口的云端瞬时 400
   拒绝（重试即成功），其余均 done。 execution.py 三版本同哈希、main.py 两版本
   task_done 调用点一致，均已逐一排除后定位到泵串扰。
+
+## 二十五、e2e 自动化 + CI（M4-4 e2e 余项 · 2026-10-03）
+
+仓库有 remote 后补齐规划最后一项：Playwright 全栈 e2e + GitHub Actions。
+
+- **架构**：真实后端 + 真实嵌入构建产物，零 mock。webServer 由 playwright 配置自动
+  拉起（默认 ../backend/.venv 的 Python，CI 里 uv sync 生成同一路径；E2E_PYTHON 可
+  覆盖），就绪探测 /api/v1/health，端口 8199 避开开发实例；浏览器用系统 Edge
+  （本地与 Windows runner 都预装，免 Chromium 下载，E2E_BROWSER 可覆盖）。
+- **配置隔离（新增 CB_CONFIG_DIR）**：config.toml/进程状态/对齐历史/节点缓存等 7 处
+  Path.home()/.comfybridge 收口到 core.config.config_dir()，环境变量整体重定向。
+  e2e 后端跑在 frontend/e2e/.tmp-config 空目录上，离线空态完全确定（对齐历史
+  折叠面板不渲染、无任务、无请求）。未设置时行为不变，243 项单测全绿。
+- **用例（frontend/e2e/flows.spec.ts，5 条）**：首次配置向导契约（空配置 600ms 自动
+  弹、X 关闭、localStorage 跳过本会话不再弹）、仪表盘核心元素、全页面遍历（9 页
+  有内容且无错误边界，等 main 文本稳定再断言）、节点管理空态与双 Tab、设置六
+  Tab + 设置同步 + JobDrawer 空态。
+- **踩坑**：① 空配置会自动弹配置向导，ant-modal-wrap 拦截一切点击——先关弹窗再
+  断言（Esc 关不掉，向导 keyboard 禁用，用 .ant-modal-close）；② getByText 重名
+  文案要 scope 到 banner；③ 节点页数据异步加载，过早采样只有 9 字符 Tab 文案，
+  等「长度>20 且连续两次采样一致」才算稳定。
+- **CI（.github/workflows/ci.yml，windows-latest 双 job）**：backend-tests（uv sync →
+  ruff 基线门禁「允许存量 68、拦截新增」→ pytest）+ e2e（build:embed → uv sync →
+  playwright test，失败上传 test-results 现场）。推送 main / PR 触发，可手动
+  dispatch。
+- **诚实记录**：e2e 在本机跑绿（5/5，两轮），CI 尚未实际触发验证（推送后首次
+  run 才见真章）；后端 data/ 目录为仓库相对路径，e2e 与真实请求库共享（只读流
+  断言不依赖记录数），CI 上该目录为空即天然空态。

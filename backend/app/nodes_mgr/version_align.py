@@ -22,12 +22,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .. import runner_assets
+from ..core.config import config_dir
 from ..modal_volume.client import auth_env  # noqa: F401 —— 保留引用便于测试断言同边界
 from . import deploy
 
 RUNNER_FILE = deploy.RUNNER_FILE
 LOCK_FILE = runner_assets.runner_file("lock", "comfyui_version.txt")
-HISTORY_FILE = Path.home() / ".comfybridge" / "version_align_history.jsonl"
+HISTORY_FILE = config_dir() / "version_align_history.jsonl"
 DEFAULT_PIN = "v0.37.4"
 
 _VERSION_RE = re.compile(r'__version__\s*=\s*"([^"]+)"')

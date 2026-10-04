@@ -27,13 +27,13 @@ from pathlib import Path
 
 import httpx
 
-from .config import get_settings
+from .config import config_dir, get_settings
 
 logger = logging.getLogger(__name__)
 
 LOCAL_PORT = 8188
-_STATE_FILE = Path.home() / ".comfybridge" / "local_process.json"
-_LOG_FILE = Path.home() / ".comfybridge" / "local_comfyui.log"
+_STATE_FILE = config_dir() / "local_process.json"
+_LOG_FILE = config_dir() / "local_comfyui.log"
 # start/stop/restart 全程串行（API 层经 to_thread 并发调用；restart 内部再调 stop/start，
 # 用可重入锁避免自锁）
 _PROC_LOCK = threading.RLock()

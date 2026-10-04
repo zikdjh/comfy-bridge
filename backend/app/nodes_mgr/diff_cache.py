@@ -18,6 +18,8 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+from ..core.config import config_dir
+
 logger = logging.getLogger(__name__)
 
 _TTL_MS = 120_000
@@ -26,7 +28,7 @@ _doc: dict | None = None
 
 
 def _path() -> Path:
-    return Path.home() / ".comfybridge" / "nodes_diff_cache.json"
+    return config_dir() / "nodes_diff_cache.json"
 
 
 def _load() -> dict:

@@ -29,3 +29,8 @@ backend/pkg_assets/
 # 运行杂物
 tmp/
 tmp-*.log
+
+# Playwright E2E
+frontend/test-results/
+frontend/playwright-report/
+frontend/e2e/.tmp-config/

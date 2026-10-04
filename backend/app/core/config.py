@@ -6,13 +6,25 @@
 
 from __future__ import annotations
 
+import os
 import tomllib
 from functools import lru_cache
 from pathlib import Path
 
 from pydantic import BaseModel
 
-CONFIG_PATH = Path.home() / ".comfybridge" / "config.toml"
+
+def config_dir() -> Path:
+    """配置目录（默认 ~/.comfybridge）。
+
+    CB_CONFIG_DIR 环境变量可整体重定向（e2e/多实例隔离：config.toml、进程状态、
+    对齐历史、节点差异缓存等全部落这里），未设置时行为不变。
+    """
+    override = os.environ.get("CB_CONFIG_DIR", "").strip()
+    return Path(override) if override else Path.home() / ".comfybridge"
+
+
+CONFIG_PATH = config_dir() / "config.toml"
 
 
 class LocalConfig(BaseModel):

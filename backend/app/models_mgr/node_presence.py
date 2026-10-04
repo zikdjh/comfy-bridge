@@ -18,7 +18,7 @@ from pathlib import Path
 
 import httpx
 
-from ..core.config import get_settings
+from ..core.config import config_dir, get_settings
 from ..runner import client as runner_client
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ _lock = asyncio.Lock()
 
 
 def _state_path() -> Path:
-    return Path.home() / ".comfybridge" / "node_presence.json"
+    return config_dir() / "node_presence.json"
 
 
 def _load_from_disk() -> None:

@@ -18,14 +18,14 @@ import tempfile
 import time
 from pathlib import Path
 
-from ..core.config import modal_configured, workflows_dir
+from ..core.config import config_dir, modal_configured, workflows_dir
 from ..modal_volume import client as volume_cli
 from ..modal_volume.client import ModalCliError
 from . import jobs
 from . import workflows_rules as rules
 
 CLOUD_DIR = "user/default/workflows"
-STATE_FILE = Path.home() / ".comfybridge" / "workflows_state.json"
+STATE_FILE = config_dir() / "workflows_state.json"
 
 _APPLY_LOCK = asyncio.Lock()
 
