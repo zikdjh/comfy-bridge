@@ -871,3 +871,9 @@ executed/无图，媒体库不落盘。自 M1 起每次真实云端生成均命�
 - **诚实记录**：e2e 在本机跑绿（5/5，两轮），CI 尚未实际触发验证（推送后首次
   run 才见真章）；后端 data/ 目录为仓库相对路径，e2e 与真实请求库共享（只读流
   断言不依赖记录数），CI 上该目录为空即天然空态。
+- **CI 首轮抓到的测试卫生问题（已修）**：① ruff 门禁步骤被 pwsh 透传 ruff 的
+  exit 1 而误判失败——脚本尾部显式 exit，门禁只拦新增；② 6 个 WS 泵/跟踪用例
+  未隔离 get_settings，本机靠真实 config.toml 侥幸通过（无配置环境下 ws_url 会
+  静默炸掉泵、零帧）——补 rc_mod.get_settings 打桩；③ runner_auth 的
+  _patch_settings 漏了 runner.get_settings 与 modal_configured 两个消费方——补齐。
+  修复后以「假 USERPROFILE」（等价 CI 无配置环境）+ 真实环境双跑 243 全绿。

@@ -12,7 +12,12 @@ from app.runner import client as runner
 
 
 def _patch_settings(monkeypatch, **modal_kwargs) -> None:
-    monkeypatch.setattr(mv, "get_settings", lambda: AppConfig(modal=ModalConfig(**modal_kwargs)))
+    """三处消费方全部打桩：mv 与 runner 各持一份 get_settings 绑定，modal_configured
+    在 runner 侧按名导入；漏掉任何一个，测试就会在无真实配置的环境（CI）下失真。"""
+    cfg = AppConfig(modal=ModalConfig(**modal_kwargs))
+    monkeypatch.setattr(mv, "get_settings", lambda: cfg)
+    monkeypatch.setattr(runner, "get_settings", lambda: cfg)
+    monkeypatch.setattr(runner, "modal_configured", lambda: bool(cfg.modal.token_id and cfg.modal.token_secret))
 
 
 # 凭证哨兵约定：夹具假值的前缀一律运行时拼接，源码不出现凭证形状字面量（pre-commit grep 须 0 命中）

@@ -131,6 +131,7 @@ async def test_ws_pump_success_forward_and_terminal(monkeypatch, version):
         ex_mod.websockets, "connect",
         lambda *a, **k: _FakeConn(_frames_of(version, "ws_events_success.json", with_binary=True)),
     )
+    monkeypatch.setattr(rc_mod, "get_settings", lambda: _settings())  # 无配置环境下 web_url() 为 None，ws_url 会静默炸掉泵
     await ex_mod._ws_pump("cid", CLOUD_PID, BRIDGE_PID, lambda t, d: term.append((t, d)))
 
     types = [e["type"] for e in sent]
@@ -156,6 +157,7 @@ async def test_ws_pump_error_terminal(monkeypatch, version):
     monkeypatch.setattr(
         ex_mod.websockets, "connect", lambda *a, **k: _FakeConn(_frames_of(version, "ws_events_error.json")),
     )
+    monkeypatch.setattr(rc_mod, "get_settings", lambda: _settings())  # 无配置环境下 web_url() 为 None，ws_url 会静默炸掉泵
     await ex_mod._ws_pump("cid", CLOUD_PID, BRIDGE_PID, lambda t, d: term.append((t, d)))
     assert len(term) == 1
     etype, data = term[0]
@@ -172,6 +174,7 @@ async def test_ws_pump_interrupted_terminal(monkeypatch, version):
     monkeypatch.setattr(
         ex_mod.websockets, "connect", lambda *a, **k: _FakeConn(_frames_of(version, "ws_events_interrupted.json")),
     )
+    monkeypatch.setattr(rc_mod, "get_settings", lambda: _settings())  # 无配置环境下 web_url() 为 None，ws_url 会静默炸掉泵
     await ex_mod._ws_pump("cid", CLOUD_PID, BRIDGE_PID, lambda t, d: term.append((t, d)))
     etype, data = term[0]
     assert etype == "execution_interrupted"
@@ -311,6 +314,7 @@ async def test_track_ws_terminal_fast_path(monkeypatch, version):
     )
     monkeypatch.setattr(ex_mod, "send_event", lambda cid, ev: None)
     monkeypatch.setattr(ex_mod.config, "get_settings", lambda: _settings(task_timeout=30))
+    monkeypatch.setattr(rc_mod, "get_settings", lambda: _settings())  # 无配置环境下 web_url() 为 None，ws_url 会静默炸掉泵
 
     async def fake_history(pid):
         await asyncio.sleep(0.05)  # 给 WS 泵让出调度窗口（history 未入）
@@ -338,6 +342,7 @@ async def test_track_ws_success_race_waits_for_history(monkeypatch, version):
     )
     monkeypatch.setattr(ex_mod, "send_event", lambda cid, ev: None)
     monkeypatch.setattr(ex_mod.config, "get_settings", lambda: _settings(task_timeout=30))
+    monkeypatch.setattr(rc_mod, "get_settings", lambda: _settings())  # 无配置环境下 web_url() 为 None，ws_url 会静默炸掉泵
 
     calls = {"n": 0}
 
@@ -365,6 +370,7 @@ async def test_track_ws_success_without_outputs_entry(monkeypatch, version):
     monkeypatch.setattr(ex_mod, "send_event", lambda cid, ev: None)
     monkeypatch.setattr(ex_mod, "_SUCCESS_GRACE_S", 1.5)  # 压短宽限窗，保持套件速度
     monkeypatch.setattr(ex_mod.config, "get_settings", lambda: _settings(task_timeout=30))
+    monkeypatch.setattr(rc_mod, "get_settings", lambda: _settings())  # 无配置环境下 web_url() 为 None，ws_url 会静默炸掉泵
 
     async def fake_history(pid):
         return None
