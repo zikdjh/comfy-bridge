@@ -22,10 +22,14 @@ jobs:
       - name: Ruff（基线 68：允许存量，拦截新增）
         shell: pwsh
         run: |
-          uv run ruff check . --output-format=concise | Tee-Object -Variable out | Out-Host
+          uv run ruff check . --output-format=concise 2>&1 | Tee-Object -Variable out | Out-Host
           $count = ($out | Where-Object { $_ -match '\.py:\d+:\d+: [A-Z]+\d+' }).Count
           Write-Host "ruff 违规 $count（基线 68）"
-          if ($count -gt 68) { Write-Error "存在新增 ruff 违规"; exit 1 }
+          # ruff 发现存量违规时 exit 1 属预期；pwsh 会把 $LASTEXITCODE 透传为步骤
+          # 退出码，必须显式 exit，门禁只拦"新增"（>68）与 ruff 自身异常（>1）
+          if ($LASTEXITCODE -gt 1) { Write-Host "::error::ruff 自身异常 exit=$LASTEXITCODE"; exit $LASTEXITCODE }
+          if ($count -gt 68) { Write-Host "::error::存在新增 ruff 违规"; exit 1 }
+          exit 0
       - name: Pytest
         run: uv run pytest -q
 
