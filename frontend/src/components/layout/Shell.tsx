@@ -10,6 +10,7 @@ import {
   PartitionOutlined,
   PictureOutlined,
   PieChartOutlined,
+  SafetyCertificateOutlined,
   SettingOutlined,
   UnorderedListOutlined,
 } from "@ant-design/icons";
@@ -37,6 +38,7 @@ const NAV_ITEMS: MenuProps["items"] = [
   { key: "/media", icon: <FileImageOutlined />, label: "媒体库" },
   { key: "/cost", icon: <PieChartOutlined />, label: "成本报表" },
   { key: "/logs", icon: <UnorderedListOutlined />, label: "日志" },
+  { key: "/status", icon: <SafetyCertificateOutlined />, label: "系统状态" },
   { key: "/settings", icon: <SettingOutlined />, label: "设置" },
 ];
 
