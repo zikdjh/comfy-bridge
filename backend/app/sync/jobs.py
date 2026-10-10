@@ -5,7 +5,7 @@
 - runner 是 async 函数，接收 JobHandle（log/advance/check_cancel），注册表负责 spawn 与兜底异常
 - 取消为协作式：runner 在条目间调用 check_cancel()，取消后 state=cancelled、已完成的条目保留
 - 保留最近 MAX_JOBS 个作业（新作业挤出最老的已结束作业）；运行中作业永不清理
-- 刷新走轮询（GET /api/v1/jobs），与部署作业/移动/下载作业的既有轮询模式一致（SSE 属增强，见规划）
+- 刷新以统一事件流为主、GET /api/v1/jobs 轮询为断线兜底（P1-5）
 
 现状：工作流同步与节点同步接入本注册表；镜像重建/卷移动/URL 直下保持各自既有作业面不动。
 """
@@ -16,11 +16,30 @@ import asyncio
 import time
 import uuid
 
+from ..events import publish
+
 MAX_JOBS = 100
 _LOG_LIMIT = 400
 
 _jobs: dict[str, dict] = {}
 _tasks: dict[str, asyncio.Task] = {}
+
+
+def _job_view(job: dict) -> dict:
+    return {
+        k: (list(v) if isinstance(v, list) else v)
+        for k, v in job.items()
+        if k != "cancel_requested"
+    }
+
+
+def _emit_job(job: dict, action: str) -> None:
+    """广播统一任务事件；节点同步额外保留 node_sync 领域事件名。"""
+    view = _job_view(job)
+    payload = {"action": action, "job": view}
+    publish("job", payload)
+    if job["kind"] == "node_sync":
+        publish("node_sync", payload)
 
 
 class JobCancelled(Exception):
@@ -38,6 +57,7 @@ class JobHandle:
         if job is not None:
             job["logs"].append(f"{time.strftime('%H:%M:%S')} {message}")
             del job["logs"][:-_LOG_LIMIT]
+            _emit_job(job, "log")
 
     def advance(self, item: dict) -> None:
         """推进一个条目（{name, ok, ...}）；item 原样入 items 列表供前端逐项展示。"""
@@ -46,6 +66,7 @@ class JobHandle:
             return
         job["items"].append(item)
         job["done"] = len(job["items"])
+        _emit_job(job, "advance")
 
     def check_cancel(self) -> None:
         job = _jobs.get(self._id)
@@ -106,10 +127,12 @@ def start_job(kind: str, label: str, total: int, runner, cancellable: bool = Fal
             job["error"] = str(exc) or type(exc).__name__
         finally:
             job["finished_ms"] = time.time() * 1000
+            _emit_job(job, "finished")
 
     _tasks[job_id] = asyncio.get_running_loop().create_task(_run())
     _prune()
-    return {k: (list(v) if isinstance(v, list) else v) for k, v in job.items() if k != "cancel_requested"}
+    _emit_job(job, "started")
+    return _job_view(job)
 
 
 def request_cancel(job_id: str) -> bool:
@@ -119,6 +142,7 @@ def request_cancel(job_id: str) -> bool:
         return False
     job["cancel_requested"] = True
     job["logs"].append(f"{time.strftime('%H:%M:%S')} 已请求取消，当前条目完成后停止")
+    _emit_job(job, "cancel_requested")
     return True
 
 
@@ -126,12 +150,12 @@ def get_job(job_id: str) -> dict | None:
     job = _jobs.get(job_id)
     if job is None:
         return None
-    return {k: (list(v) if isinstance(v, list) else v) for k, v in job.items() if k != "cancel_requested"}
+    return _job_view(job)
 
 
 def list_jobs(limit: int = 50) -> list[dict]:
     rows = sorted(_jobs.values(), key=lambda j: j["created_ms"], reverse=True)[:limit]
-    return [{k: (list(v) if isinstance(v, list) else v) for k, v in j.items() if k != "cancel_requested"} for j in rows]
+    return [_job_view(j) for j in rows]
 
 
 def running_count() -> int:

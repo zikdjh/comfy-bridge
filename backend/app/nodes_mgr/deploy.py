@@ -16,6 +16,7 @@ import time
 from collections.abc import Callable
 
 from .. import runner_assets
+from ..events import publish
 from ..modal_volume.client import auth_env
 
 RUNNER_FILE = runner_assets.runner_file("runner.py")
@@ -62,6 +63,10 @@ def job_state() -> dict:
     return dict(_JOB, log_tail=list(_JOB["log_tail"]))
 
 
+def _publish_job(action: str) -> None:
+    publish("deploy", {"action": action, "job": job_state()})
+
+
 def running() -> bool:
     return _JOB["state"] == "running"
 
@@ -78,12 +83,14 @@ async def begin_exclusive(label: str) -> dict:
             label=label, error=None,
             log_tail=[f"部署目标：{label}"],
         )
+        _publish_job("started")
         return job_state()
 
 
 def finish_noop(message: str) -> dict:
     """无需真正 deploy 时把任务置为 ok（如版本 pin 已一致）。"""
     _JOB.update(state="ok", finished_ms=_now_ms(), error=None, log_tail=[message])
+    _publish_job("finished")
     return job_state()
 
 
@@ -113,6 +120,7 @@ async def run_deploy(rollback) -> None:
             rollback()
         error = f"无法启动 modal CLI：{exc}"
         _JOB.update(state="error", finished_ms=_now_ms(), error=error, log_tail=[])
+        _publish_job("finished")
         _fire_sink("rolled_back", error)
         return
     try:
@@ -130,6 +138,7 @@ async def run_deploy(rollback) -> None:
             error=error,
             log_tail=["[超时终止]"],
         )
+        _publish_job("finished")
         _fire_sink("timeout", error)
         return
     tail = _output_tail(out, err)
@@ -142,9 +151,11 @@ async def run_deploy(rollback) -> None:
             error=error,
             log_tail=tail,
         )
+        _publish_job("finished")
         _fire_sink("rolled_back", error)
         return
     _JOB.update(state="ok", finished_ms=_now_ms(), error=None, log_tail=tail)
+    _publish_job("finished")
     _fire_sink("ok", None)
 
 

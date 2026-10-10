@@ -21,7 +21,9 @@ import { useConfig } from "../../api/config";
 import { LOCAL_COMFY_URL } from "../../theme";
 import { ConfigWizard, WIZARD_DONE_KEY } from "../../pages/settings/ConfigWizard";
 import { JobDrawer } from "../common/JobDrawer";
-import { JOB_DRAWER_EVENT, useJobs } from "../../api/jobs";
+import { JOB_DRAWER_EVENT, useJobs, type JobsSnapshot, type SyncJob } from "../../api/jobs";
+import { openBridgeEventStream } from "../../api/events";
+import { useQueryClient } from "@tanstack/react-query";
 
 const { Sider, Header, Content } = Layout;
 
@@ -57,6 +59,7 @@ function StatusPill({ title, sub, state, tooltip }: { title: string; sub: string
 export function Shell() {
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const [collapsed, setCollapsed] = useState(false);
   const { data: health, isLoading } = useHealth();
 
@@ -76,6 +79,7 @@ export function Shell() {
   const { data: jobsData } = useJobs();
   const [jobsOpen, setJobsOpen] = useState(false);
   const [jobFocusId, setJobFocusId] = useState<string | null>(null);
+  const [eventStreamOnline, setEventStreamOnline] = useState(false);
   useEffect(() => {
     const onOpen = (ev: Event) => {
       const jobId = (ev as CustomEvent<{ jobId?: string }>).detail?.jobId ?? null;
@@ -86,6 +90,42 @@ export function Shell() {
     return () => window.removeEventListener(JOB_DRAWER_EVENT, onOpen);
   }, []);
   const runningJobs = jobsData?.running ?? 0;
+
+  // —— 统一事件流（P1-5）：推送直接回写查询缓存；断线由 EventSource 自动重连并轮询兜底 ——
+  useEffect(() => {
+    const upsertJob = (job: SyncJob) => {
+      queryClient.setQueryData<JobsSnapshot>(["jobs"], (old) => {
+        const jobs = old?.jobs ?? [];
+        const next = [job, ...jobs.filter((item) => item.id !== job.id)];
+        return { jobs: next, running: next.filter((item) => item.state === "running").length };
+      });
+      queryClient.setQueryData(["jobs", job.id], job);
+    };
+
+    return openBridgeEventStream({
+      onStatus: (online) => setEventStreamOnline(online),
+      onEvent: (item) => {
+        if (item.event === "resync") {
+          void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+          void queryClient.invalidateQueries({ queryKey: ["cost-summary"] });
+          void queryClient.invalidateQueries({ queryKey: ["nodes", "version"] });
+          return;
+        }
+        if (item.event === "job" || item.event === "node_sync") {
+          const job = (item.data as { job?: SyncJob } | null)?.job;
+          if (job?.id) upsertJob(job);
+          return;
+        }
+        if (item.event === "deploy") {
+          void queryClient.invalidateQueries({ queryKey: ["nodes", "version"] });
+          return;
+        }
+        if (item.event === "cost_alert") {
+          void queryClient.invalidateQueries({ queryKey: ["cost-summary"] });
+        }
+      },
+    });
+  }, [queryClient]);
   useEffect(() => {
     if (!needSetup || wizardDismissed) return;
     const timer = window.setTimeout(() => setWizardOpen(true), 600);
@@ -204,11 +244,16 @@ export function Shell() {
             <Tooltip title={budgetTooltip + modalLine} placement="bottom">
               {budgetTag}
             </Tooltip>
-            <Badge count={runningJobs} size="small" offset={[-2, 2]}>
-              <Button icon={<UnorderedListOutlined />} onClick={() => { setJobFocusId(null); setJobsOpen(true); }}>
-                任务
-              </Button>
-            </Badge>
+            <Tooltip
+              title={eventStreamOnline ? "任务状态实时推送已连接" : "事件流不可用，任务状态每 15 秒轮询兜底"}
+              placement="bottom"
+            >
+              <Badge count={runningJobs} size="small" offset={[-2, 2]}>
+                <Button icon={<UnorderedListOutlined />} onClick={() => { setJobFocusId(null); setJobsOpen(true); }}>
+                  任务
+                </Button>
+              </Badge>
+            </Tooltip>
             <Tooltip title={`经桥接器 ${bridgeUrl}（生成请求将被拦截路由）`} placement="bottom">
               <Button type="primary" ghost icon={<PictureOutlined />} href={bridgeUrl} target="_blank">
                 前往出图界面

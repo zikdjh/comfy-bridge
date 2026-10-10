@@ -2,7 +2,25 @@
 
 from fastapi import APIRouter
 
-from . import config, cost, health, jobs, launch, logs, media, modal, modal_volume, nodes, requests, routing, settings_sync, uploads, volume, workflows
+from . import (
+    config,
+    cost,
+    events,
+    health,
+    jobs,
+    launch,
+    logs,
+    media,
+    modal,
+    modal_volume,
+    nodes,
+    requests,
+    routing,
+    settings_sync,
+    uploads,
+    volume,
+    workflows,
+)
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(health.router)
@@ -14,6 +32,7 @@ api_router.include_router(workflows.router)
 api_router.include_router(jobs.router)
 api_router.include_router(media.router)
 api_router.include_router(logs.router)
+api_router.include_router(events.router)
 api_router.include_router(requests.router)
 api_router.include_router(routing.router)
 api_router.include_router(settings_sync.router)
