@@ -44,10 +44,12 @@ async def lifespan(_: FastAPI):
     warm = asyncio.create_task(_warm_cloud_index())
     warm_presence = asyncio.create_task(_warm_node_presence())
     warm_backfill = asyncio.create_task(_warm_model_backfill())
+    trash_cleanup = asyncio.create_task(_trash_cleanup_loop())
     yield
     warm.cancel()
     warm_presence.cancel()
     warm_backfill.cancel()
+    trash_cleanup.cancel()
     await close_upstream_client()
     close_db()
 
@@ -81,6 +83,18 @@ async def _warm_model_backfill() -> None:
     else:
         if n:
             logging.getLogger(__name__).info("已回填 %d 条历史请求的主模型字段", n)
+
+
+async def _trash_cleanup_loop() -> None:
+    """每小时清理一次超过保留期的回收站目录；失败只记日志。"""
+    from .volume_mgr import deletion
+
+    while True:
+        try:
+            await deletion.cleanup_all_expired_trash()
+        except Exception as exc:  # noqa: BLE001
+            logging.getLogger(__name__).warning("回收站后台清理失败: %s", exc)
+        await asyncio.sleep(3600)
 
 
 app = FastAPI(title="ComfyBridge", version="0.1.0", lifespan=lifespan)
