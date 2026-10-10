@@ -183,6 +183,30 @@ export function useNodeVersion() {
   });
 }
 
+export interface DependencyConflict {
+  package: string;
+  requirements: string[];
+  reason: string;
+  nodes: string[];
+}
+
+export interface DependencyPrecheck {
+  status: "ok" | "blocked" | "unavailable";
+  conflicts: DependencyConflict[];
+  nodes: string[];
+  merged_requirements: string[];
+  detail: string | null;
+  log_tail: string[];
+  cached: boolean;
+}
+
+/** 镜像重建前的节点依赖预检；不触发 Modal 容器或 deploy。force=true 绕过后端 5 分钟缓存。 */
+export function checkNodeDependencies(force = false) {
+  return apiGet<DependencyPrecheck>(
+    `/api/v1/nodes/dependency-precheck${force ? "?force=1" : ""}`,
+  );
+}
+
 /** 把云端镜像 pin 对齐到本地版本并 modal deploy 重建镜像（后台任务，失败自动回滚 pin）。 */
 export function alignNodeVersion() {
   return apiSend<{ ok: boolean; job: VersionJob }>("/api/v1/nodes/version/align", "POST", {});

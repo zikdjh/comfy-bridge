@@ -12,6 +12,9 @@
 - POST /nodes/cloud/remove      从云端数据卷移除节点（volume rm）
 - GET  /nodes/version           本地 ComfyUI 版本 vs 云端镜像 pin 对照 + 部署任务状态
 - POST /nodes/version/align     版本对齐（本地为权威）：写 pin 锁文件 → modal deploy 重建镜像
+- GET  /nodes/dependency-precheck
+                               重建前依赖预检：静态约束 + pip dry-run resolver，返回
+                               ok / blocked / unavailable 及涉及的节点与约束
 - POST /nodes/image/rebuild     镜像重建：固化（M2-2，nodes.lock.yaml + install_nodes.sh 依赖预装）
                                 + 可选版本对齐（align_version）合并为一次 modal deploy，失败自动回滚
                                 （部署任务体与互斥见 nodes_mgr.deploy，与 version/align 共用单飞通道）
@@ -40,7 +43,15 @@ from ...core.config import custom_nodes_dir, get_settings, modal_configured
 from ...modal_volume import client as volume_cli
 from ...modal_volume.client import ModalCliError
 from ...models_mgr import node_presence
-from ...nodes_mgr import deploy, diff_cache, image_rebuild, manager_api, version_align
+from ...nodes_mgr import (
+    deploy,
+    diff_cache,
+    image_rebuild,
+    lockfile,
+    manager_api,
+    resolve,
+    version_align,
+)
 from ...nodes_mgr.scan import DISABLED_SUFFIX, scan_custom_nodes
 from ...proxy import object_info as object_info_merge
 from ...runner import client as runner_client
@@ -615,6 +626,14 @@ async def nodes_version_align() -> dict:
     return {"ok": job["state"] in ("running", "ok"), "job": job}
 
 
+@router.get("/nodes/dependency-precheck")
+async def nodes_dependency_precheck(force: bool = Query(False)) -> dict:
+    """镜像重建前的节点依赖预检（本地计算，不触发 Modal 容器或 deploy）。"""
+    scan = await asyncio.to_thread(scan_custom_nodes)
+    lock = lockfile.generate(scan)
+    return await asyncio.to_thread(resolve.precheck, lock["nodes"], force=force)
+
+
 @router.post("/nodes/image/rebuild")
 async def nodes_image_rebuild(body: RebuildBody | None = None) -> dict:
     """镜像重建：固化本地节点依赖进镜像；align_version=True 时并入库内 ComfyUI 版本对齐（一次 deploy）。"""
@@ -622,6 +641,8 @@ async def nodes_image_rebuild(body: RebuildBody | None = None) -> dict:
         raise HTTPException(status_code=400, detail="未配置 Modal 凭证（设置 → Modal）")
     try:
         job = await image_rebuild.start_rebuild(align_version=bool(body and body.align_version))
+    except resolve.DependencyConflictError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"ok": job["state"] in ("running", "ok"), "job": job}

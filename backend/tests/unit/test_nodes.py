@@ -51,3 +51,27 @@ def test_safe_node_names_reject_paths_and_hidden_names():
     assert not nodes._safe_name(".hidden")
     assert not nodes._safe_name("nested/Node")
 
+
+async def test_dependency_precheck_endpoint_uses_lock_and_forwards_force(monkeypatch):
+    seen: dict = {}
+    monkeypatch.setattr(nodes, "scan_custom_nodes", lambda: {"packages": [], "single_files": []})
+    monkeypatch.setattr(
+        nodes.lockfile,
+        "generate",
+        lambda scan: {"nodes": [{"name": "A", "requirements": ["x==1"]}]},
+    )
+
+    def fake_precheck(lock_nodes, *, force=False):
+        seen["nodes"] = lock_nodes
+        seen["force"] = force
+        return {
+            "status": "ok", "conflicts": [], "nodes": ["A"],
+            "merged_requirements": ["x==1"], "detail": None, "log_tail": [], "cached": False,
+        }
+
+    monkeypatch.setattr(nodes.resolve, "precheck", fake_precheck)
+    result = await nodes.nodes_dependency_precheck(force=True)
+
+    assert result["status"] == "ok"
+    assert seen == {"nodes": [{"name": "A", "requirements": ["x==1"]}], "force": True}
+

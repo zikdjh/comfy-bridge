@@ -48,11 +48,23 @@ def test_diff_state_single_file_content_hash():
 # ---------------------------------------------------------------- 镜像重建入口合并（固化 + 版本对齐一次 deploy）
 @pytest.fixture()
 def rebuild_env(monkeypatch):
-    """打通 start_rebuild 的全部 IO：锁文件/部署/版本函数全部打桩，收集调用痕迹。"""
-    calls = {"written": [], "restored": [], "pins": [], "rollbacks": []}
+    """打通 start_rebuild 的全部 IO：锁文件/预检/部署/版本函数全部打桩，收集调用痕迹。"""
+    calls = {"written": [], "restored": [], "pins": [], "rollbacks": [], "prechecks": []}
 
     monkeypatch.setattr(ir, "scan_custom_nodes", lambda: {"packages": [], "single_files": []})
-    monkeypatch.setattr(ir.lockfile, "generate", lambda scan: {"nodes": [{"name": "n1"}], "comfyui_version": "v0.38.0"})
+    monkeypatch.setattr(
+        ir.lockfile, "generate",
+        lambda scan: {"nodes": [{"name": "n1", "requirements": ["requests>=2"]}], "comfyui_version": "v0.38.0"},
+    )
+
+    def fake_precheck(nodes, *, use_pip=True, force=False):
+        calls["prechecks"].append((nodes, use_pip, force))
+        return {
+            "status": "ok", "conflicts": [], "nodes": ["n1"],
+            "merged_requirements": ["requests>=2"], "detail": None, "log_tail": [], "cached": False,
+        }
+
+    monkeypatch.setattr(ir.resolve, "precheck", fake_precheck)
     monkeypatch.setattr(ir.lockfile, "render_install_script", lambda lock: "# script")
     monkeypatch.setattr(ir.lockfile, "backup_current", lambda: ("old-lock", "old-script"))
     monkeypatch.setattr(
@@ -116,6 +128,49 @@ async def test_rebuild_without_align_skips_version(rebuild_env, reset_deploy_job
     monkeypatch.setattr(va, "write_pin", _no)
     job = await ir.start_rebuild(align_version=False)
     assert "版本对齐" not in job["label"] and len(rebuild_env["written"]) == 1
+
+
+async def test_rebuild_blocked_precheck_mutates_nothing(rebuild_env, monkeypatch):
+    """确定冲突必须在 backup/exclusive/write/deploy 之前终止。"""
+    result = {
+        "status": "blocked",
+        "conflicts": [{"package": "pkg", "requirements": ["pkg==1", "pkg==2"],
+                       "reason": "版本约束没有交集", "nodes": ["n1"]}],
+        "nodes": ["n1"],
+        "merged_requirements": ["pkg==1,pkg==2"],
+        "detail": "依赖约束存在直接冲突，未进入镜像重建",
+        "log_tail": [],
+        "cached": False,
+    }
+    monkeypatch.setattr(ir.resolve, "precheck", lambda nodes, **kw: result)
+
+    with pytest.raises(ir.resolve.DependencyConflictError) as exc:
+        await ir.start_rebuild(align_version=True)
+
+    assert "n1" in str(exc.value)
+    assert rebuild_env["written"] == []
+    assert rebuild_env["pins"] == []
+    assert rebuild_env["restored"] == []
+    assert rebuild_env["rollbacks"] == []
+
+
+async def test_rebuild_unavailable_precheck_continues(rebuild_env, reset_deploy_job, monkeypatch):
+    """本机平台/Python 无法权威解析时继续重建，由远端 deploy 失败回滚兜底。"""
+    result = {
+        "status": "unavailable",
+        "conflicts": [],
+        "nodes": ["n1"],
+        "merged_requirements": ["requests>=2"],
+        "detail": "本机平台不匹配目标镜像",
+        "log_tail": [],
+        "cached": False,
+    }
+    monkeypatch.setattr(ir.resolve, "precheck", lambda nodes, **kw: result)
+
+    job = await ir.start_rebuild(align_version=False)
+    assert job["state"] == "running"
+    assert len(rebuild_env["written"]) == 1
+    assert len(rebuild_env["rollbacks"]) == 1
 
 
 async def test_rebuild_exclusive_conflict_mutates_nothing(rebuild_env, monkeypatch):
