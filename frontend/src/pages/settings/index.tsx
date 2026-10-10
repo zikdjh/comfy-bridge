@@ -64,6 +64,7 @@ export default function SettingsPage() {
       videoBackend: config.bridge.video_backend,
       largeSidePixels: config.bridge.large_side_pixels,
       preflight: config.bridge.preflight,
+      objectInfoMerge: config.bridge.object_info_merge,
     });
     modalForm.setFieldsValue({
       tokenId: config.modal.token_id,
@@ -129,6 +130,7 @@ export default function SettingsPage() {
     videoBackend: string;
     largeSidePixels: number | null;
     preflight: string;
+    objectInfoMerge: string;
   }) => {
     try {
       await saveConfig({
@@ -138,6 +140,7 @@ export default function SettingsPage() {
           video_backend: values.videoBackend,
           large_side_pixels: values.largeSidePixels ?? 0,
           preflight: values.preflight,
+          object_info_merge: values.objectInfoMerge,
         },
       });
       message.success("已保存（监听地址需重启桥接器进程生效，路由参数立即生效）");
@@ -356,6 +359,19 @@ export default function SettingsPage() {
                       { value: "strict", label: "strict —— 拦截" },
                       { value: "ask", label: "ask —— 拦截 + 可操作选项" },
                       { value: "auto", label: "auto —— 自动供给缺失模型" },
+                    ]}
+                  />
+                </Form.Item>
+                <Form.Item
+                  label="/object_info 合并策略"
+                  name="objectInfoMerge"
+                  extra="local-first = 同名节点以本地 schema 为准并追加云端独有节点（默认，最稳）；union = 同名节点保留本地结构，但把云端独有模型并入本地模型下拉；local-only = 完全使用本地清单。切换后立即清空合并缓存。"
+                >
+                  <Select
+                    options={[
+                      { value: "local-first", label: "local-first —— 本地优先（默认）" },
+                      { value: "union", label: "union —— 本地结构 + 云端模型并集" },
+                      { value: "local-only", label: "local-only —— 仅本地" },
                     ]}
                   />
                 </Form.Item>

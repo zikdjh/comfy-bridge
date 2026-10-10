@@ -78,6 +78,11 @@ class BridgeConfig(BaseModel):
     # 提交前预校验（M3-5 余项）：off=不校验（默认，历史行为）/ strict=拦截 / ask=拦截+可操作选项 /
     # auto=缺模型且本地有副本时自动上传云端卷后放行（缺节点仍拦截）。未知取值按 off。
     preflight: str = "off"
+    # /object_info 两端合并策略：
+    # - local-first（默认）：同名 class_type 完全使用本地 schema，只追加云端独有节点 + 云端模型名；
+    # - union：同名 class_type 保留本地 schema，但把云端独有的模型组合项并入本地 schema；
+    # - local-only：完全不合并云端 class_type / 模型名（排障用）。
+    object_info_merge: str = "local-first"
     # —— 自定义路由规则链（M3，规划文档 §3.1）——
     # 空列表 = 沿用内置 gen_type/size 规则（历史行为不变）；非空 = 自定义链按序求值并
     # 替换内置那两条；manual/tag/cloud_model/default 四步固定不参与 CRUD。

@@ -538,6 +538,39 @@ function DiffMatrix() {
         <Alert type="warning" showIcon message="云端 class_type 对比失败" description={diff.class_types.error} />
       )}
       {(() => {
+        const conflicts = diff?.class_types.conflicts ?? {};
+        const names = Object.keys(conflicts);
+        if (names.length === 0) return null;
+        return (
+          <Alert
+            type="warning"
+            showIcon
+            message={`检测到 ${names.length} 个同名 class_type 的 schema 冲突`}
+            description={
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span>
+                  当前合并策略：{diff?.class_types.merge_strategy ?? "local-only"}。
+                  同名节点始终使用本地 schema，冲突仅作诊断，不会覆盖本地节点定义。
+                </span>
+                {names.slice(0, 5).map((name) => (
+                  <Typography.Text key={name} style={{ fontSize: 12 }}>
+                    <Typography.Text code>{name}</Typography.Text>
+                    {" — "}
+                    {conflicts[name].slice(0, 8).join("、")}
+                    {conflicts[name].length > 8 ? "…" : ""}
+                  </Typography.Text>
+                ))}
+                {names.length > 5 && (
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    …等 {names.length} 个，完整路径见 API /api/v1/nodes/diff?deep=1
+                  </Typography.Text>
+                )}
+              </div>
+            }
+          />
+        );
+      })()}
+      {(() => {
         // 反向同步提示（M2 收尾）：云端独有节点只给安装线索，不自动改本地环境
         const cloudOnly = (diff?.rows ?? []).filter((r) => r.cloud && !r.local);
         if (cloudOnly.length === 0) return null;

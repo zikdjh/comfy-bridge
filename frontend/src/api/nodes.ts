@@ -97,6 +97,8 @@ export interface NodeDiff {
     local: string[] | null;
     cloud: string[] | null;
     error: string | null;
+    conflicts?: Record<string, string[]>;
+    merge_strategy?: string;
     cached?: boolean;
     cached_at?: string | null;
   };

@@ -15,6 +15,7 @@ from pydantic import BaseModel, ValidationError
 
 from ...core import comfy_scan
 from ...core.config import CONFIG_PATH, AppConfig, BridgeConfig, ModalConfig, get_settings
+from ...proxy import object_info as object_info_merge
 
 router = APIRouter(prefix="/config", tags=["config"])
 
@@ -161,6 +162,7 @@ async def write_config(body: ConfigBody) -> dict:
         encoding="utf-8",
     )
     get_settings.cache_clear()
+    object_info_merge.invalidate_merge_cache()
     return _view()
 
 
@@ -185,6 +187,7 @@ def update_bridge_section(updates: dict) -> dict:
         encoding="utf-8",
     )
     get_settings.cache_clear()
+    object_info_merge.invalidate_merge_cache()
     return _view()
 
 

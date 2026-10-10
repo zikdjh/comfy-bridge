@@ -19,6 +19,7 @@ export interface BridgeConfigDto {
   on_budget_exceed: string;
   max_cloud_concurrent: number;
   preflight: string;
+  object_info_merge: string;
 }
 
 /** Modal 认证与执行参数：secret 只回显脱敏值，明文仅保存时提交一次 */
