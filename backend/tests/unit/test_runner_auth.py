@@ -72,8 +72,8 @@ def test_shared_http_client_carries_auth_headers(monkeypatch):
 
 def test_available_gates_on_proxy_credentials(monkeypatch):
     """端点已开代理鉴权：缺代理凭证时通道必须判为不可用，避免决策后必然 401。"""
-    ready = dict(token_id=_ACCOUNT_ID + "a", token_secret=_ACCOUNT_SECRET + "a", runner_enabled=True,
-                 web_url="https://example.modal.run")
+    ready = {"token_id": _ACCOUNT_ID + "a", "token_secret": _ACCOUNT_SECRET + "a",
+             "runner_enabled": True, "web_url": "https://example.modal.run"}
     _patch_settings(monkeypatch, proxy_token_id=_PROXY_ID + "p", proxy_token_secret=_PROXY_SECRET + "p", **ready)
     runner._state.update(fetched_ms=runner.time.monotonic(), state="deployed")
     assert runner.available() is True

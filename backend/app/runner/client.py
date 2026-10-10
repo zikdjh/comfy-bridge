@@ -167,7 +167,7 @@ async def post_interrupt() -> None:
     async with _client() as cli:
         try:
             await cli.post(f"{url}/interrupt", timeout=httpx.Timeout(20.0, connect=10.0))
-        except httpx.HTTPError as exc:  # noqa: BLE001 —— 中断尽力而为
+        except httpx.HTTPError as exc:
             logger.warning("云端 /interrupt 失败: %s", exc)
 
 

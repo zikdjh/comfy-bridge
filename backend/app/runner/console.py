@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections import deque
 from datetime import datetime
 
@@ -25,7 +26,8 @@ _IDLE_TICK = 15.0
 def log(message: str, level: str = "info") -> None:
     """追加一条控制台事件并广播给所有订阅者（同步、无阻塞、永不抛出）。"""
     entry = {
-        "t": datetime.now().isoformat(timespec="milliseconds"),
+        # astimezone()：本地墙钟时间 + tzinfo；前端 formatLogTime 只取 HH:MM:SS.mmm
+        "t": datetime.now().astimezone().isoformat(timespec="milliseconds"),
         "m": message,
         "level": level,
     }
@@ -34,11 +36,9 @@ def log(message: str, level: str = "info") -> None:
         try:
             q.put_nowait(entry)
         except asyncio.QueueFull:
-            try:
+            with contextlib.suppress(Exception):  # 单个慢订阅者不影响整体，丢弃该条
                 q.get_nowait()
                 q.put_nowait(entry)
-            except Exception:  # noqa: BLE001 —— 单个慢订阅者不影响整体
-                pass
 
 
 def snapshot(tail: int = 300) -> list[dict]:
@@ -59,7 +59,7 @@ async def stream_entries(request, tail: int = 300):
             try:
                 entry = await asyncio.wait_for(q.get(), timeout=_IDLE_TICK)
                 yield "append", {"entries": [entry]}
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 yield "ping", None
     finally:
         _SUBS.discard(q)

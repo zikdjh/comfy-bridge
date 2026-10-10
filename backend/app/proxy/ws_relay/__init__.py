@@ -7,6 +7,7 @@ M1：新增浏览器套接字注册表（按 clientId），供 modal 执行通�
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 from urllib.parse import parse_qs
@@ -78,7 +79,7 @@ async def _send_json(client_id: str, event: dict) -> None:
                     await ws.send_text(text)
             else:
                 await ws.send_text(text)
-        except Exception:  # noqa: BLE001 —— 单个连接失败不影响其他订阅者
+        except Exception:
             logger.debug("ws inject failed", exc_info=True)
 
 
@@ -100,7 +101,7 @@ def _tap_event(raw: str) -> None:
             return
         error = json.dumps(event.get("data"), ensure_ascii=False)[:500] if etype == "execution_error" else None
         asyncio.get_running_loop().create_task(store.aupdate_status(prompt_id, _EVENT_STATUS[etype], error))
-    except Exception:  # noqa: BLE001 —— 事件解析失败只影响状态回写，不中断中继
+    except Exception:
         logger.debug("ws event tap failed", exc_info=True)
 
 
@@ -144,12 +145,10 @@ async def relay_local_ws(browser_ws: WebSocket) -> None:
             task.cancel()
         for task in done:
             task.result()  # 单侧异常向上抛，统一在 finally 收尾
-    except Exception:  # noqa: BLE001 —— 任一侧断开属正常结束
-        pass
+    except Exception:  # 任一侧断开属正常结束
+        logger.debug("ws relay closed", exc_info=True)
     finally:
         await _unregister(browser_ws, client_id)
         await upstream.close()
-        try:
+        with contextlib.suppress(Exception):  # 连接可能已关闭，close 失败不抛
             await browser_ws.close()
-        except Exception:  # noqa: BLE001
-            pass

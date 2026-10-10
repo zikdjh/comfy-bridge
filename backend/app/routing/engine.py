@@ -107,9 +107,9 @@ def extract_model_refs(prompt: dict) -> list[str]:
         for key, val in inputs.items():
             if not isinstance(val, str) or not val or val == "None":
                 continue
-            if key in MODEL_INPUT_CATEGORIES:
-                refs.add(val)
-            elif key.endswith("_name") and Path(val).suffix.lower() in MODEL_FILE_EXTS:
+            if key in MODEL_INPUT_CATEGORIES or (
+                key.endswith("_name") and Path(val).suffix.lower() in MODEL_FILE_EXTS
+            ):
                 refs.add(val)
     return sorted(refs)
 

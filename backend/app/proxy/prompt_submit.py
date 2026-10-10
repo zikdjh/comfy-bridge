@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-import asyncio
+import contextlib
 import json
 import uuid
 
@@ -55,7 +55,7 @@ async def handle_prompt_submit(request: Request) -> Response:
     try:
         payload = json.loads(raw)
         assert isinstance(payload, dict)
-    except Exception:
+    except Exception:  # noqa: BLE001 —— 非 JSON 载荷交本地原样报错，保持协议兼容
         # 非 JSON 载荷：交给本地 ComfyUI 原样报错，保持协议兼容
         return await _forward_raw(request, raw)
 
@@ -221,13 +221,11 @@ async def handle_prompt_submit(request: Request) -> Response:
         error = f"提交被 ComfyUI 拒绝（HTTP {up.status_code}）: {up.text[:300]}"
         await store.aupdate_status(prompt_id, "error", error)
     else:
-        try:
+        with contextlib.suppress(Exception):  # 响应非 JSON 时跳过节点校验回写
             ack = up.json()
             node_errors = ack.get("node_errors") or {}
             if node_errors:
                 await store.aupdate_status(prompt_id, "error", f"节点校验失败: {json.dumps(node_errors, ensure_ascii=False)[:300]}")
-        except Exception:
-            pass
 
     return Response(content=up.content, status_code=up.status_code,
                     media_type=up.headers.get("content-type", "application/json"))

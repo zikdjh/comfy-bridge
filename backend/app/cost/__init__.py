@@ -51,7 +51,7 @@ def totals(start_ms: int | None = None, end_ms: int | None = None) -> dict:
 
 def month_usage() -> dict:
     """本月已用（本地时区月初零点起）。"""
-    return store.cost_totals(_local_day_start_ms(datetime.now().replace(day=1)))
+    return store.cost_totals(_local_day_start_ms(datetime.now().astimezone().replace(day=1)))
 
 
 async def amonth_usage() -> dict:
@@ -80,7 +80,7 @@ async def abudget_state() -> dict:
 
 def summary() -> dict:
     """控制台「额度与成本」汇总：今日/本月 + 近 30 天逐日 + 预算现状。"""
-    today = store.cost_totals(_local_day_start_ms(datetime.now()))
+    today = store.cost_totals(_local_day_start_ms(datetime.now().astimezone()))
     return {
         "gpu_type": GPU_TYPE,
         "gpu_hourly_rate_usd": get_settings().bridge.gpu_hourly_rate_usd,

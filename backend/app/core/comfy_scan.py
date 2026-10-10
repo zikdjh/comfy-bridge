@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import ctypes
 import os
 import re
@@ -104,10 +105,9 @@ def _enumerate_drives() -> tuple[list[str], list[str]]:
     for i in range(26):
         letter = chr(ord("A") + i)
         root = f"{letter}:\\"
-        try:
+        dtype = None
+        with contextlib.suppress(Exception):  # API 不可用视为盘不存在
             dtype = ctypes.windll.kernel32.GetDriveTypeW(ctypes.c_wchar_p(root))
-        except Exception:  # noqa: BLE001 —— API 不可用视为盘不存在
-            continue
         if dtype not in (DRIVE_FIXED, DRIVE_REMOVABLE):
             continue
         if letter.lower() in EXCLUDED_LETTERS:

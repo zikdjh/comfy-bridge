@@ -82,7 +82,8 @@ test("全页面遍历：每个菜单页有内容且无错误边界", async ({ pa
     await gotoMenu(page, name);
     // 页面数据异步加载（React Query），等 main 文本连续两次采样一致再断言
     let text = "";
-    for (let i = 0; i < 12; i++) {
+    // 25 × 400ms = 10s：节点管理在隔离配置下要等本地/云端探测超时后才出实质内容
+    for (let i = 0; i < 25; i++) {
       const prev = text;
       await page.waitForTimeout(400);
       text = (await main.innerText()) || "";

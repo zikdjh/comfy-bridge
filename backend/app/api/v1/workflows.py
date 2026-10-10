@@ -18,7 +18,7 @@ import json
 import shutil
 import sqlite3
 import tempfile
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -82,7 +82,7 @@ async def workflows_local() -> dict:
                     "name": p.stem,
                     "file": p.name,
                     "size_bytes": stat.st_size,
-                    "mtime": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+                    "mtime": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
                     "hash": _short_hash(p),
                 }
             )
