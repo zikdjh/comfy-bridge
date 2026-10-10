@@ -69,6 +69,17 @@ comfy-bridge --port 8189   # 控制台 http://127.0.0.1:8189/bridge/
 - `scripts/build.ps1` 仅做前端嵌入构建（`pnpm build:embed` → `backend/app/static`，开发后端同样挂 /bridge）。
 - 依赖注：modal 1.6+ 在系统代理环境硬要求 python-socks，已直接声明，代理环境开箱可用。
 
+### 大模型分块上传
+
+模型页除本地 ↔ 云端同步外，还提供“分块上传（断点续传 + MD5 校验）”：
+
+- 浏览器按 8 MiB 分块上传到桥接器，分块和服务端会话元数据暂存在
+  `~/.comfybridge/uploads/<upload_id>/`（或 `CB_CONFIG_DIR` 指定的配置目录）。
+- 上传中断、浏览器刷新或后端重启后，只要重新选择同一文件，就能从服务端已确认的分块继续。
+- 全部分块到齐后，服务端按序合并、计算整文件 MD5；只有与客户端声明的 MD5 一致才调用
+  `modal volume put` 写入 `models/<分类>/<文件名>`。
+- MD5 不一致、分块损坏或落卷失败都会保留失败原因，页面可查看并重试；校验失败需要删除会话后重传。
+
 ## 测试
 
 ```powershell
