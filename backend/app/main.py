@@ -21,6 +21,7 @@ from fastapi.responses import StreamingResponse
 from starlette.websockets import WebSocket
 
 from .api.v1 import api_router
+from .core.management_auth import install_management_auth
 from .gui_static import mount_gui
 from .logs.store import close_db, close_stale_pending, init_db
 from .models_mgr import cloud_index
@@ -83,6 +84,7 @@ async def _warm_model_backfill() -> None:
 
 
 app = FastAPI(title="ComfyBridge", version="0.1.0", lifespan=lifespan)
+install_management_auth(app)
 app.include_router(api_router)
 
 # 管理面 GUI 挂 /bridge（前端产物存在才挂）：必须在 catch-all 透传之前注册，
