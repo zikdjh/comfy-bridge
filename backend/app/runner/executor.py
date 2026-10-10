@@ -25,9 +25,9 @@ from ..core import config
 from ..cost import arecord_cost
 from ..logs import store
 from ..modal_volume import client as modal_cli
+from ..proxy.ws_relay import send_event
 from . import client as runner_client
 from . import console
-from ..proxy.ws_relay import send_event
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +111,7 @@ async def _run(prompt_id: str, payload: dict) -> None:
         await _finish(prompt_id, state, kind, entry, detail)
     except asyncio.CancelledError:
         raise
-    except Exception as exc:  # noqa: BLE001 —— 任何环节失败都收敛到 error 终态
+    except Exception as exc:
         logger.exception("[%s] 云端执行失败", prompt_id[:8])
         await _finish(prompt_id, state, "error", None, str(exc))
     finally:
@@ -329,7 +329,7 @@ async def _finish(prompt_id: str, state: dict, kind: str, entry: dict | None, de
         count = await _download_outputs(outputs)
         logger.info("[%s] 输出回传完成：%d 个文件", prompt_id[:8], count)
         console.log(f"[{prompt_id[:8]}] 执行完成，输出回传 {count} 个文件")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("[%s] 输出回传失败", prompt_id[:8])
         err = f"输出回传失败: {exc}"[:500]
         console.log(f"[{prompt_id[:8]}] 执行失败：{err}", "error")

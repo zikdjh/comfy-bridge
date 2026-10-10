@@ -122,7 +122,7 @@ def _push_modal_args(args: list[str]) -> dict:
     try:
         proc = subprocess.run(
             ["modal", "volume", "put", settings.modal.volume, "-f", str(src), VOLUME_ARGS_FILE],
-            capture_output=True, text=True, timeout=180,
+            capture_output=True, text=True, timeout=180, check=False,
             env={**os.environ, **auth_env()},
         )
     except Exception as exc:  # noqa: BLE001
@@ -217,7 +217,7 @@ def _container_rows() -> tuple[list[dict], int, str | None]:
     try:
         proc = subprocess.run(
             ["modal", "container", "list", "--json"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90, check=False,
             env={**os.environ, **auth_env()},
         )
     except Exception as exc:  # noqa: BLE001
@@ -303,7 +303,7 @@ def _stop_modal_containers() -> dict:
         try:
             s = subprocess.run(
                 ["modal", "container", "stop", cid, "-y"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90, check=False,
                 env={**os.environ, **auth_env()},
             )
         except Exception as exc:  # noqa: BLE001

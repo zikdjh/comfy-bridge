@@ -877,3 +877,21 @@ executed/无图，媒体库不落盘。自 M1 起每次真实云端生成均命�
   静默炸掉泵、零帧）——补 rc_mod.get_settings 打桩；③ runner_auth 的
   _patch_settings 漏了 runner.get_settings 与 modal_configured 两个消费方——补齐。
   修复后以「假 USERPROFILE」（等价 CI 无配置环境）+ 真实环境双跑 243 全绿。
+
+## 二十六、P3-1 ruff 存量清零（2026-10-11）
+
+路线图第三轮最后一项：把 CI 里「允许存量 68、只拦新增」的临时门禁升级为零违规门禁。
+
+- **分批偿还**：先 `ruff check . --fix` 跑掉 27 条安全 autofix（unused-import / unused-noqa /
+  UTC 别名 / 引号注解 / import 排序 / SIM114 同类分支合并），64 → 40；再按类别人工处理。
+- **DTZ005（12 条）**：本地墙钟时间改 `datetime.now().astimezone()`，保留本地语义并附
+  tzinfo；`now_iso()` 与 runner 控制台时间戳的落库/展示格式不变，test_cost.py 同步改。
+- **PLW1510（8 条）**：netstat / tasklist / taskkill / powershell 查询与 modal volume put、
+  modal container 调用补 `check=False`，明确这些靠 returncode/stdout 判断、不抛异常。
+- **S110 / S112 / BLE001**：静默兜底改 `contextlib.suppress(...)`（语义不变、更显式）；
+  ws_relay / runner.client / executor 里带 logger.*(exc_info=True) 的兜底去掉已失效的 noqa；
+  local_stream / logs.py / nodes 的边界捕获保留 except Exception 并补原因。
+- **其余**：SIM102（嵌套 if 合并）、SIM103（直接返回布尔）、C408（dict() 改字面量）各就地
+  修正；tests/regress_local_ws.py 的顺序阻塞 HTTP 标注 noqa: ASYNC210（手动脚本，非 pytest 模块）。
+- **收口**：.github/workflows/ci.yml 的 ruff 步骤从「基线 68」改为「任何违规即失败」；
+  `ruff check` 全仓 0 违规，`pytest -q` 307 passed / 9 skipped。

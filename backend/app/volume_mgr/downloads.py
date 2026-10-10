@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import re
 import subprocess
 import time
@@ -24,7 +25,7 @@ _RUNNER_FILE = runner_assets.runner_file("runner.py")
 _LOG_KEEP = 12          # 每作业保留的最近输出行数
 _JOBS_KEEP = 50         # 作业表保留上限（超出淘汰最旧已完成作业）
 _NAME_RE = re.compile(r"^[a-z][a-z0-9-]{2,31}$")   # 与 API 侧卷名校验一致
-_JOBS: dict[str, "DownloadJob"] = {}
+_JOBS: dict[str, DownloadJob] = {}
 
 
 def now_ms() -> int:
@@ -178,7 +179,7 @@ async def _run(job: DownloadJob) -> None:
         for t in (out_task, err_task):
             try:
                 await asyncio.wait_for(asyncio.shield(t), timeout=10)
-            except (asyncio.TimeoutError, Exception):  # noqa: BLE001
+            except (TimeoutError, Exception):  # noqa: BLE001
                 t.cancel()
         job._proc = None
 
@@ -190,11 +191,9 @@ async def _run(job: DownloadJob) -> None:
             job.error = (job.log_tail[-1] if job.log_tail else f"modal run 退出码 {proc.returncode}")
         else:
             job.status = "done"
-            try:  # 完成后列出目标目录，展示落卷文件
+            with contextlib.suppress(Exception):  # 清单失败不影响下载结果
                 entries = await modal_cli.list_dir(job.dest_dir, volume=job.volume)
                 job.result_files = [e["name"] for e in entries if e["type"] in ("file", "dir")][:50]
-            except Exception:  # noqa: BLE001 —— 清单失败不影响下载结果
-                pass
     except Exception as exc:  # noqa: BLE001
         job.status = "error"
         job.error = str(exc)[:300]

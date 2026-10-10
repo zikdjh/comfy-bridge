@@ -61,7 +61,7 @@ def tmp_db(monkeypatch, tmp_path):
 def test_record_cost_and_totals(tmp_db):
     from datetime import datetime, timedelta
 
-    now = datetime.now()
+    now = datetime.now().astimezone()
     _insert("modal", 0.5, 900.0, now - timedelta(days=2))
     _insert("modal", 0.25, 450.0, now)
     _insert("local", None, None, now)  # 本地请求不产生成本记录
@@ -80,7 +80,7 @@ def test_record_cost_and_totals(tmp_db):
 def test_cost_daily_groups_by_local_date(tmp_db):
     from datetime import datetime, timedelta
 
-    now = datetime.now()
+    now = datetime.now().astimezone()
     # 用本地零点定位「昨天」，避免 now 接近零点时相对偏移跨到前天。
     midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
     yesterday_late = midnight - timedelta(hours=1)   # 昨天 23:00
@@ -101,7 +101,7 @@ def test_cost_daily_groups_by_local_date(tmp_db):
 def test_record_cost_idempotent_overwrite(tmp_db):
     from datetime import datetime
 
-    pid = _insert("modal", 0.5, 900.0, datetime.now())
+    pid = _insert("modal", 0.5, 900.0, datetime.now().astimezone())
     store.record_cost(pid, 10.0, 0.01)  # 同 prompt_id 重复入账 = 覆盖
     assert store.cost_totals()["est_cost_usd"] == pytest.approx(0.01)
 
@@ -147,13 +147,13 @@ def test_budget_state_thresholds(tmp_db, monkeypatch):
     from datetime import datetime
 
     _patch_budget_settings(monkeypatch, monthly_budget_usd=0.5)
-    _insert("modal", 0.49, 900.0, datetime.now())
+    _insert("modal", 0.49, 900.0, datetime.now().astimezone())
     state = cost_svc.budget_state()
     assert state["enabled"] is True
     assert state["exceeded"] is False
     assert state["remaining_usd"] == pytest.approx(0.01)
 
-    _insert("modal", 0.02, 100.0, datetime.now())
+    _insert("modal", 0.02, 100.0, datetime.now().astimezone())
     state = cost_svc.budget_state()
     assert state["exceeded"] is True  # 0.51 >= 0.5
     assert state["remaining_usd"] == 0.0
@@ -163,7 +163,7 @@ def test_budget_state_disabled_when_limit_zero(tmp_db, monkeypatch):
     from datetime import datetime
 
     _patch_budget_settings(monkeypatch, monthly_budget_usd=0)
-    _insert("modal", 10.0, 9000.0, datetime.now())
+    _insert("modal", 10.0, 9000.0, datetime.now().astimezone())
     state = cost_svc.budget_state()
     assert state["enabled"] is False
     assert state["exceeded"] is False
@@ -174,7 +174,7 @@ def test_summary_shape(tmp_db, monkeypatch):
     from datetime import datetime
 
     _patch_budget_settings(monkeypatch, monthly_budget_usd=30.0)
-    _insert("modal", 1.0, 3600.0, datetime.now())
+    _insert("modal", 1.0, 3600.0, datetime.now().astimezone())
     s = cost_svc.summary()
     assert s["gpu_type"] == cost_svc.GPU_TYPE
     assert s["today"]["requests"] == 1
@@ -268,7 +268,7 @@ async def test_fetch_cli_error_strips_noise_and_short_caches(monkeypatch, fresh_
 async def test_afull_summary_includes_modal(monkeypatch, tmp_db):
     from datetime import datetime
 
-    _insert("modal", 1.0, 3600.0, datetime.now())
+    _insert("modal", 1.0, 3600.0, datetime.now().astimezone())
 
     async def fake_fetch(force=False):
         return {"ok": True, "metered_cost_usd": 5.97, "credits_applied_usd": 5.5}

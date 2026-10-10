@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from urllib.parse import urlsplit, urlunsplit
+
 import httpx
 from fastapi import Request
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
-from urllib.parse import urlsplit, urlunsplit
 
 from ..core.config import get_settings
 from ..core.constants import HOP_BY_HOP_HEADERS

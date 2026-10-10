@@ -9,7 +9,7 @@ import time
 import websockets
 
 sys.path.insert(0, ".")
-from app.runner import client as runner_client  # noqa: E402
+from app.runner import client as runner_client
 
 
 async def main():
@@ -24,7 +24,7 @@ async def main():
         while time.monotonic() < deadline:
             try:
                 raw = await asyncio.wait_for(ws.recv(), timeout=290)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 break
             if isinstance(raw, bytes):
                 continue

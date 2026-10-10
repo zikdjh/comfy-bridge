@@ -17,6 +17,7 @@ pid，就绪归属用「拉起前端口为空 + 首个占用进程的命令行�
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import json
 import logging
@@ -63,7 +64,7 @@ def pid_listening(port: int) -> int | None:
         # （需要解析的 LISTENING 行本身是纯 ASCII）
         out = subprocess.run(
             ["netstat", "-ano"], capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=15,
+            encoding="utf-8", errors="replace", timeout=15, check=False,
         ).stdout or ""
     except Exception:  # noqa: BLE001 —— 探测失败是正常路径（非 Windows 等）
         return None
@@ -95,7 +96,7 @@ def detect_local_command(port: int) -> dict | None:
         ps = f'(Get-CimInstance Win32_Process -Filter "ProcessId={pid}").CommandLine'
         out = subprocess.run(
             ["powershell", "-NoProfile", "-Command", ps],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20, check=False,
         ).stdout.strip()
     except Exception:  # noqa: BLE001
         return None
@@ -116,7 +117,7 @@ def _pid_alive(pid: int) -> bool:
     try:
         out = subprocess.run(
             ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10, check=False,
         ).stdout or ""
     except Exception:  # noqa: BLE001
         return False
@@ -127,7 +128,7 @@ def _kill(pid: int) -> None:
     try:
         subprocess.run(
             ["taskkill", "/PID", str(pid), "/T", "/F"],
-            capture_output=True, text=True, timeout=20,
+            capture_output=True, text=True, timeout=20, check=False,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         # 不向上抛：调用方随后的端口释放检查会如实报告"仍被占用"
@@ -143,7 +144,7 @@ def _parent_info(pid: int) -> tuple[int | None, str | None]:
         )
         out = subprocess.run(
             ["powershell", "-NoProfile", "-Command", ps],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20, check=False,
         ).stdout.strip()
         pp, name = out.split(";", 1)
         return int(pp), name
@@ -163,9 +164,7 @@ def _is_our_spawn(port_pid: int) -> bool:
         return True
     if not _pid_alive(ppid):
         return True
-    if pname and pname.lower().startswith("python"):
-        return True
-    return False
+    return bool(pname and pname.lower().startswith("python"))
 
 
 # ---------------------------------------------------------------- 归属记录
@@ -194,10 +193,8 @@ def _write_state_file(pid: int, argv: list[str]) -> None:
 
 
 def _clear_state_file() -> None:
-    try:
+    with contextlib.suppress(Exception):  # 文件缺失/占用等，清理失败不抛
         _STATE_FILE.unlink(missing_ok=True)
-    except Exception:  # noqa: BLE001
-        pass
 
 
 def _tail_log(lines: int = 25) -> list[str]:
@@ -320,12 +317,10 @@ def _wait_ready(argv: list[str], timeout: float, t0: float) -> dict:
                     }
                 _write_state_file(port_pid, argv)
                 attributed = True
-            try:
+            with contextlib.suppress(Exception):  # 端口已监听但应用未就绪，继续等
                 if httpx.get(f"{comfy_url}/system_stats", timeout=3.0).status_code == 200:
                     return {"ok": True, "pid": port_pid, "ready": True,
                             "seconds": round(time.monotonic() - t0, 1)}
-            except Exception:  # noqa: BLE001 —— 端口已监听但应用未就绪，继续等
-                pass
         time.sleep(1.5)
     return {
         "ok": False, "pid": pid_listening(LOCAL_PORT),
@@ -391,13 +386,12 @@ def stop(force: bool = False) -> dict:
     pid = st.get("pid")
     if not st.get("running") and not st.get("starting"):
         return {"ok": True, "stopped": False, "detail": "本地 ComfyUI 未在运行"}
-    if st.get("running") and not st.get("owned"):
-        if not force:
-            return {
-                "ok": False, "external": True, "pid": pid,
-                "error": f"该实例由 {st.get('managed_by') or '外部进程'} 托管（PID {pid}），桥接默认不结束它；"
-                         f"如需停止/接管请确认强制结束。",
-            }
+    if st.get("running") and not st.get("owned") and not force:
+        return {
+            "ok": False, "external": True, "pid": pid,
+            "error": f"该实例由 {st.get('managed_by') or '外部进程'} 托管（PID {pid}），桥接默认不结束它；"
+                     f"如需停止/接管请确认强制结束。",
+        }
     if pid is None:
         return {"ok": False, "error": "未找到目标进程"}
     _kill(int(pid))

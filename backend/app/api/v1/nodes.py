@@ -28,11 +28,12 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import shutil
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
@@ -68,7 +69,7 @@ def _manifest(scan: dict | None = None) -> dict:
     scan = scan or scan_custom_nodes()
     return {
         "schema": 1,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "packages": sorted(
             [
                 {
@@ -169,12 +170,10 @@ async def nodes_local() -> dict:
     except Exception as exc:  # noqa: BLE001
         error = str(exc) or type(exc).__name__
 
-    try:
+    with contextlib.suppress(Exception):  # 取版本失败不影响在线判定
         stats = await comfy_client.fetch_system_stats()
         version = stats.get("system", {}).get("comfyui_version")
         online = True
-    except Exception:  # noqa: BLE001
-        pass
 
     # Manager API 兜底（M2-1 余项）：在线且装有 ComfyUI-Manager 时增强目录扫描，
     # 补非 git 包的 repo/版本/展示名；离线或失败静默跳过，不影响主清单
@@ -524,7 +523,7 @@ async def _sync_body(handle, names: list[str]) -> None:
                     }
             await _write_cloud_manifest({
                 "schema": 1,
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "packages": sorted(
                     (v for v in combined.values() if v["kind"] == "pkg"),
                     key=lambda p: p["name"],
@@ -585,7 +584,7 @@ async def nodes_cloud_remove(body: NamesBody) -> dict:
             manifest["single_files"] = [
                 p for p in manifest.get("single_files", []) if p["name"] not in successful
             ]
-            manifest["generated_at"] = datetime.now(timezone.utc).isoformat()
+            manifest["generated_at"] = datetime.now(UTC).isoformat()
             await _write_cloud_manifest(manifest)
     return {"ok": bool(results) and all(r["ok"] for r in results), "results": results}
 

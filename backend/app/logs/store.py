@@ -464,4 +464,5 @@ def now_ms() -> int:
 
 
 def now_iso() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    # astimezone()：拿到本地墙钟时间并附 tzinfo，规避 DTZ005 又不改变落库格式
+    return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]

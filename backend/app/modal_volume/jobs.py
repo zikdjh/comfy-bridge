@@ -18,7 +18,7 @@ from ..core.config import model_dirs_resolved
 from ..models_mgr import cloud_index
 from . import client
 
-_JOBS: dict[str, "SyncJob"] = {}
+_JOBS: dict[str, SyncJob] = {}
 _MAX_FINISHED = 50  # 已完成作业保留上限（每条含全量 files 明细，防止只进不出）
 
 
