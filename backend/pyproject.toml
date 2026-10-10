@@ -16,6 +16,8 @@ dependencies = [
     "httpx>=0.27",
     "websockets>=12",
     "pydantic>=2.7",
+    # 依赖预检静态解析 requirements/specifier；不依赖 pip 内部实现
+    "packaging>=24",
     # modal 仅作子进程调用（CLI：volume/app/container；账单：子进程内用其 gRPC 客户端查 WorkspaceBillingSummary），
     # 后端主进程不 import 其 SDK（副作用重：事件循环策略、日志钩子）
     "modal>=0.70",
