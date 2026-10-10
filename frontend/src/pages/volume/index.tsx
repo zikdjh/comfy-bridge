@@ -23,12 +23,14 @@ import {
 } from "antd";
 import {
   CloudDownloadOutlined,
+  DeleteOutlined,
   FileOutlined,
   FolderAddOutlined,
   FolderOutlined,
   PlusOutlined,
   ReloadOutlined,
   SendOutlined,
+  UndoOutlined,
 } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { useQueryClient } from "@tanstack/react-query";
@@ -42,14 +44,25 @@ import {
   deleteVolumePaths,
   forceVolumeUsageRefresh,
   mkdirVolumeFolder,
+  previewVolumePaths,
+  purgeVolumeTrash,
+  restoreVolumeTrash,
   useDownloadJobs,
   useMoveJobs,
   useVolumeDirs,
   useVolumeList,
   useVolumeMeta,
   useVolumeUsage,
+  useTrash,
 } from "../../api/volume";
-import type { DownloadJob, MoveJob, VolumeEntry, VolumeUsageItem } from "../../api/volume";
+import type {
+  DownloadJob,
+  MoveJob,
+  ReferenceCheck,
+  TrashEntry,
+  VolumeEntry,
+  VolumeUsageItem,
+} from "../../api/volume";
 import { EmptyGuide } from "../../components/common/EmptyGuide";
 
 /* 常用落卷目录（与 runner.py 的卷目录结构对应） */
@@ -456,6 +469,11 @@ function VolumeBrowser({
   const { data, isLoading, refetch, isFetching } = useVolumeList(path, volume);
   const queryClient = useQueryClient();
   const [deleting, setDeleting] = useState(false);
+  const [deletePreview, setDeletePreview] = useState<{
+    name: string;
+    path: string;
+    reference?: ReferenceCheck;
+  } | null>(null);
   const entries = data?.entries ?? [];
   const [selectedKeys, setSelectedKeys] = useState<Key[]>([]);
 
@@ -533,19 +551,56 @@ function VolumeBrowser({
     return [{ value: "", label: "（卷根目录）" }, ...dirs.map((d) => ({ value: d }))];
   }, [entries, selectedKeys, path, dirsQuery.data]);
 
-  const remove = async (name: string) => {
+  const remove = async (name: string, allowReferenced = false) => {
     setDeleting(true);
     try {
-      const res = await deleteVolumePaths([path ? `${path}/${name}` : name], volume);
+      const res = await deleteVolumePaths(
+        [path ? `${path}/${name}` : name],
+        volume,
+        allowReferenced,
+      );
       queryClient.invalidateQueries({ queryKey: ["volume", "list"] });
       queryClient.invalidateQueries({ queryKey: ["volume", "usage"] });
+      queryClient.invalidateQueries({ queryKey: ["volume", "trash", volume] });
       if (res.ok) {
-        message.success(`已删除 ${name}（清单刷新可能有约 1 分钟延迟）`);
+        message.success(`已删除 ${name}（模型文件已移入回收站）`);
+        setDeletePreview(null);
       } else {
-        message.error(res.results.find((r) => !r.ok)?.error ?? "删除失败");
+        const failed = res.results.find((r) => !r.ok);
+        if (failed?.reference?.referenced) {
+          setDeletePreview({
+            name,
+            path: failed.path,
+            reference: failed.reference,
+          });
+        } else {
+          message.error(failed?.error ?? "删除失败");
+        }
       }
     } catch (exc) {
       message.error(`删除失败：${exc instanceof Error ? exc.message : String(exc)}`);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const openDelete = async (entry: VolumeEntry) => {
+    const rel = path ? `${path}/${entry.name}` : entry.name;
+    if (entry.type === "dir" || !rel.startsWith("models/")) {
+      setDeletePreview({ name: entry.name, path: rel });
+      return;
+    }
+    setDeleting(true);
+    try {
+      const res = await previewVolumePaths([rel], volume);
+      const row = res.results[0];
+      if (!row?.ok) {
+        message.error(row?.error ?? "删除预检失败");
+        return;
+      }
+      setDeletePreview({ name: entry.name, path: rel, reference: row.reference });
+    } catch (exc) {
+      message.error(`删除预检失败：${exc instanceof Error ? exc.message : String(exc)}`);
     } finally {
       setDeleting(false);
     }
@@ -586,16 +641,9 @@ function VolumeBrowser({
       key: "op",
       width: 100,
       render: (_v, r) => (
-        <Popconfirm
-          title={`删除 ${r.name}${r.type === "dir" ? " 及其空子目录" : ""}？`}
-          description="仅允许删除空目录：含文件的目录（含子目录内）会被后端拒绝。"
-          okButtonProps={{ danger: true }}
-          onConfirm={() => remove(r.name)}
-        >
-          <Button size="small" type="link" danger disabled={deleting}>
-            删除
-          </Button>
-        </Popconfirm>
+        <Button size="small" type="link" danger disabled={deleting} onClick={() => openDelete(r)}>
+          删除
+        </Button>
       ),
     },
   ];
@@ -673,6 +721,64 @@ function VolumeBrowser({
           />
         )}
       </Space>
+
+      <Modal
+        title={`删除 ${deletePreview?.name ?? ""}`}
+        open={!!deletePreview}
+        onCancel={() => setDeletePreview(null)}
+        onOk={() =>
+          deletePreview &&
+          remove(deletePreview.name, Boolean(deletePreview.reference?.referenced))
+        }
+        confirmLoading={deleting}
+        okText={deletePreview?.reference?.referenced ? "仍要软删除" : "移入回收站"}
+        okButtonProps={{ danger: true }}
+      >
+        <Space direction="vertical" size={10} style={{ width: "100%" }}>
+          {deletePreview?.reference?.referenced ? (
+            <>
+              <Alert
+                type="warning"
+                showIcon
+                message="该模型仍被引用"
+                description={deletePreview.reference.warning}
+              />
+              <Table
+                size="small"
+                pagination={false}
+                rowKey={(r) => `${r.source}-${r.ref}-${r.detail}`}
+                dataSource={deletePreview.reference.refs}
+                columns={[
+                  {
+                    title: "来源",
+                    dataIndex: "source",
+                    width: 90,
+                    render: (v: string) =>
+                      v === "request" ? "请求日志" : v === "graph" ? "图快照" : "工作流",
+                  },
+                  { title: "引用", dataIndex: "ref" },
+                  { title: "位置", dataIndex: "detail", width: 180 },
+                ]}
+              />
+            </>
+          ) : deletePreview?.path.startsWith("models/") ? (
+            <Alert
+              type="info"
+              showIcon
+              message="未发现近期引用"
+              description="该模型文件将移入 .trash，默认保留 7 天，可在下方回收站恢复。"
+            />
+          ) : (
+            <Alert
+              type="warning"
+              showIcon
+              message="删除空目录"
+              description="目录含文件（递归）时会被后端拒绝；只有空目录才会删除。"
+            />
+          )}
+          <Typography.Text code>{deletePreview?.path}</Typography.Text>
+        </Space>
+      </Modal>
 
       <Modal
         title="新建文件夹"
@@ -850,6 +956,135 @@ function DownloadJobsCard() {
   );
 }
 
+/* ---------------- 回收站 ---------------- */
+
+function TrashCard({ volume }: { volume: string }) {
+  const queryClient = useQueryClient();
+  const { data, isLoading, refetch, isFetching } = useTrash(volume);
+  const [busyPath, setBusyPath] = useState<string | null>(null);
+  const entries = data?.entries ?? [];
+
+  const invalidateVolume = () => {
+    queryClient.invalidateQueries({ queryKey: ["volume", "trash", volume] });
+    queryClient.invalidateQueries({ queryKey: ["volume", "list"] });
+    queryClient.invalidateQueries({ queryKey: ["volume", "usage"] });
+  };
+
+  const restore = async (entry: TrashEntry) => {
+    setBusyPath(entry.path);
+    try {
+      const res = await restoreVolumeTrash(entry.path, volume);
+      message.success(`已恢复到 ${res.path}`);
+      invalidateVolume();
+    } catch (exc) {
+      message.error(`恢复失败：${exc instanceof Error ? exc.message : String(exc)}`);
+    } finally {
+      setBusyPath(null);
+    }
+  };
+
+  const purge = async (entry: TrashEntry) => {
+    setBusyPath(entry.path);
+    try {
+      const res = await purgeVolumeTrash([entry.path], volume);
+      const failed = res.results.find((r) => !r.ok);
+      if (!res.ok) throw new Error(failed?.error ?? "永久清理失败");
+      message.success(`已永久清理 ${entry.name}`);
+      invalidateVolume();
+    } catch (exc) {
+      message.error(`永久清理失败：${exc instanceof Error ? exc.message : String(exc)}`);
+    } finally {
+      setBusyPath(null);
+    }
+  };
+
+  const columns: ColumnsType<TrashEntry> = [
+    {
+      title: "条目",
+      dataIndex: "name",
+      render: (v: string, r) => (
+        <Space size={6}>
+          {r.type === "dir" ? <FolderOutlined /> : <FileOutlined />}
+          <Typography.Text code>{v}</Typography.Text>
+        </Space>
+      ),
+    },
+    { title: "原路径", dataIndex: "path", ellipsis: true },
+    {
+      title: "类型",
+      dataIndex: "type",
+      width: 90,
+      render: (v: string) => (v === "dir" ? <Tag>目录</Tag> : <Tag>文件</Tag>),
+    },
+    { title: "大小", dataIndex: "size", width: 110 },
+    { title: "删除时间", dataIndex: "mtime", width: 200 },
+    {
+      title: "操作",
+      key: "op",
+      width: 150,
+      render: (_v, r) => (
+        <Space size={4}>
+          <Button
+            size="small"
+            type="link"
+            icon={<UndoOutlined />}
+            disabled={busyPath !== null}
+            loading={busyPath === r.path}
+            onClick={() => restore(r)}
+          >
+            恢复
+          </Button>
+          <Popconfirm
+            title={`永久清理 ${r.name}？`}
+            description="永久清理后无法恢复，请确认该模型不再需要。"
+            okButtonProps={{ danger: true }}
+            onConfirm={() => purge(r)}
+          >
+            <Button
+              size="small"
+              type="link"
+              danger
+              icon={<DeleteOutlined />}
+              disabled={busyPath !== null}
+            >
+              清理
+            </Button>
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <Card
+      size="small"
+      title={`回收站（${entries.length}）`}
+      extra={
+        <Button size="small" icon={<ReloadOutlined />} onClick={() => refetch()} loading={isFetching}>
+          刷新
+        </Button>
+      }
+    >
+      {data?.error && (
+        <Alert type="error" showIcon message="回收站读取失败" description={data.error} style={{ marginBottom: 12 }} />
+      )}
+      {isLoading && !data ? (
+        <Spin style={{ display: "block", margin: "24px auto" }} />
+      ) : entries.length === 0 ? (
+        <EmptyGuide description="回收站为空 —— 删除模型文件后可在保留期内从这里恢复" />
+      ) : (
+        <Table
+          columns={columns}
+          dataSource={entries}
+          rowKey="path"
+          size="small"
+          pagination={false}
+        />
+      )}
+    </Card>
+  );
+}
+
 /* ---------------- 移动任务 ---------------- */
 
 function MoveJobsCard() {
@@ -1001,6 +1236,7 @@ export default function VolumePage() {
         setPath={setPath}
         volumeNames={volumeNames}
       />
+      <TrashCard volume={volume} />
       <MoveJobsCard />
       <DownloadJobsCard />
     </Space>

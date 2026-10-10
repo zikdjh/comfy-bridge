@@ -87,12 +87,93 @@ export function useVolumeList(path: string, volume: string) {
 
 export interface PathOpResult {
   ok: boolean;
-  results: { path: string; ok: boolean; error?: string }[];
+  results: {
+    path: string;
+    ok: boolean;
+    error?: string;
+    kind?: string;
+    trash_path?: string;
+    reference?: ReferenceCheck;
+  }[];
   note?: string;
 }
 
-export function deleteVolumePaths(paths: string[], volume: string) {
-  return apiSend<PathOpResult>("/api/v1/volume/delete", "POST", { paths, volume });
+export interface ReferenceHit {
+  source: "request" | "graph" | "workflow";
+  ref: string;
+  detail: string;
+}
+
+export interface ReferenceCheck {
+  checked: boolean;
+  referenced: boolean;
+  refs: ReferenceHit[];
+  truncated?: boolean;
+  warning: string | null;
+}
+
+export function previewVolumePaths(paths: string[], volume: string) {
+  return apiSend<PathOpResult>("/api/v1/volume/delete", "POST", {
+    paths,
+    volume,
+    dry_run: true,
+  });
+}
+
+export function deleteVolumePaths(
+  paths: string[],
+  volume: string,
+  allowReferenced = false,
+) {
+  return apiSend<PathOpResult>("/api/v1/volume/delete", "POST", {
+    paths,
+    volume,
+    allow_referenced: allowReferenced,
+  });
+}
+
+export interface TrashEntry {
+  path: string;
+  name: string;
+  type: string;
+  size: string;
+  mtime: string;
+  error: string | null;
+}
+
+export interface TrashList {
+  ok: boolean;
+  volume: string;
+  entries: TrashEntry[];
+  error: string | null;
+}
+
+export function useTrash(volume: string) {
+  return useQuery({
+    queryKey: ["volume", "trash", volume],
+    queryFn: ({ signal }) =>
+      apiGet<TrashList>(
+        `/api/v1/volume/trash?volume=${encodeURIComponent(volume)}`,
+        signal,
+      ),
+    refetchInterval: 30_000,
+  });
+}
+
+export function restoreVolumeTrash(path: string, volume: string, dest?: string) {
+  return apiSend<{ ok: boolean; path: string }>("/api/v1/volume/trash/restore", "POST", {
+    path,
+    volume,
+    dest: dest || null,
+  });
+}
+
+export function purgeVolumeTrash(paths: string[], volume: string) {
+  return apiSend<{ ok: boolean; results: { path: string; ok: boolean; error?: string }[] }>(
+    "/api/v1/volume/trash/purge",
+    "POST",
+    { paths, volume },
+  );
 }
 
 /* ---------------- 云端直下（仅主卷：runner 只挂载 comfyui-data） ---------------- */
