@@ -6,6 +6,9 @@ build-backend = "hatchling.build"
 name = "comfy-bridge"
 version = "0.1.0"
 description = "ComfyBridge - 本地 ComfyUI 与 Modal 云端 GPU 的桥接器"
+# PEP 639 SPDX 表达式；backend/LICENSE 是仓库根 LICENSE 的构建镜像
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",

@@ -71,7 +71,7 @@
 <header class="hero">
   <h1>ComfyBridge 项目计划书</h1>
   <p>本地 ComfyUI × Modal 云端 GPU 桥接器 · 立项与执行计划</p>
-  <div class="meta">版本 v1.0 · 编写日期 2026-09-25 · 状态：待评审</div>
+  <div class="meta">版本 v1.1 · 编写日期 2026-09-25 · 滚动修订至 2026-10-10 · 状态：开发中</div>
 </header>
 
 <nav class="toc">
@@ -285,7 +285,7 @@
         <tr><td>M4-1</td><td>成本聚合（次/日/月）、预算护栏、超限自动回落本地 + 通知 <span class="badge green">已完成 2026-09-30～10-01</span>：按次入账 + 今日/本月/逐日聚合、预算护栏（回落/拒绝 + 告警）、云端最大并发护栏、Modal 账单实时查询；成本报表 v2——工作流/主模型聚合、CSV 导出、逐项账单对账（billing report 明细 GPU 计量，UTC 月）已落地</td><td>预算护栏</td><td>2d</td></tr>
         <tr><td>M4-2</td><td>预热按钮、Runner 状态/容器数面板 <span class="badge green">已完成 2026-10-02</span>：预热按钮先前已随仪表盘/设置落地；容器数面板——<code>GET /api/v1/launch/modal/containers</code>（modal container list 归属过滤，45s 进程内缓存、停止容器后失效），设置·启动命令控制条「运行中容器 N」+ 刷新、仪表盘 Modal 通道卡片副标展示；Runner 状态在仪表盘顶栏与卡片呈现</td><td>运维面板</td><td>0.5d</td></tr>
         <tr><td>M4-3</td><td>打包分发（pip 安装包内嵌前端）+ 首次配置向导 <span class="badge green">打包分发已完成 2026-10-01</span>：hatchling wheel——GUI 嵌入 <code>/bridge</code> 挂载 + SPA 回退、modal-runner 包内副本双布局解析、<code>comfy-bridge</code> 启动命令、一键打包脚本、pipx 即装即用 + modal 1.6 系统代理补 python-socks；<span class="badge green">首次配置向导已完成 2026-10-02</span>：五步向导（检测 → Modal 凭证 → 本地 ComfyUI → 云端 Runner → 完成，逐步可跳过，复用 <code>PUT /config</code> 热生效保存与 validate-comfy 校验），Shell 在凭证缺失且本浏览器未完成过向导时自动弹一次 + 顶部提示条（localStorage 记忆），设置页入口可随时重跑</td><td>可安装产物</td><td>1.5d</td></tr>
-        <tr><td>M4-4</td><td>Playwright e2e + 兼容矩阵（远端对 2 个 ComfyUI 版本跑核心链路）<span class="badge green">兼容矩阵部分已完成 2026-10-03</span>：backend/tests/compat 离线夹具矩阵——v0.37.2/v0.38.0/v0.38.2 三版本上游源码 sha256 指纹溯源 × 13 协议面 × 40 用例，负向验证漂移可捕获，升版 SOP 复制夹具目录→更新指纹→跑矩阵；e2e 待做（仓库无 remote 暂低优先）</td><td>测试基线</td><td>2d</td></tr>
+        <tr><td>M4-4</td><td>Playwright e2e + 兼容矩阵（远端对 2 个 ComfyUI 版本跑核心链路）<span class="badge green">已完成 2026-10-04</span>：backend/tests/compat 离线夹具矩阵——v0.37.2/v0.38.0/v0.38.2 三版本上游源码 sha256 指纹溯源 × 13 协议面 × 40 用例，负向验证漂移可捕获，升版 SOP 复制夹具目录→更新指纹→跑矩阵；Playwright 全栈 e2e 已覆盖向导契约/仪表盘/全页遍历/节点/设置+JobDrawer，GitHub Actions 双 job 在 main <code>0db455c</code> 首次全绿（<a href="https://github.com/zikdjh/comfy-bridge/actions/runs/37201257230">run 37201257230</a>）</td><td>测试基线</td><td>2d</td></tr>
         <tr><td>M4-5</td><td>文档：README、安装手册、故障排查、兼容性矩阵发布</td><td>文档集</td><td>1d</td></tr>
       </tbody>
     </table>
@@ -336,7 +336,7 @@
         <tr><td>云端资源</td><td>Modal：L40S（$1.95/h）开发期日均 1–2h 调试 + 预热；数据卷 <code>comfyui-data</code>（存储每月免费 1 TiB 内）；Starter 计划每月 $30 免费额度</td></tr>
         <tr><td>费用预估</td><td>开发期（2 个月）约 $40–80 总消耗，免费额度可覆盖大半，净支出预计 ≤ $40；生产期按实际用量（预算护栏上限由配置决定）</td></tr>
         <tr><td>账号与密钥</td><td>Modal Token（<code>MODAL_TOKEN_ID/SECRET</code>）；HF Token（私有/门禁模型下载用，建议 <code>modal.Secret</code> 注入）；Runner 代理 Token</td></tr>
-        <tr><td>许可证决策</td><td>桥接器自研代码拟选 MIT/Apache-2.0；与 ComfyUI（GPL）仅经 HTTP/WS API 交互、不静态/动态链接，独立进程部署，计划书中记录该边界判断；如后续引入 ComfyUI 代码片段需单独评审</td></tr>
+        <tr><td>许可证决策</td><td><span class="badge green">已确定 MIT 2026-10-10</span>：根目录 <code>LICENSE</code> + <code>backend/pyproject.toml</code> 元数据；与 ComfyUI（GPL）仅经 HTTP/WS API 交互、不静态/动态链接，独立进程部署；如后续引入 ComfyUI 代码片段需单独评审</td></tr>
         <tr><td>工具链</td><td>uv（Python 管理）、pnpm（前端）、ruff + mypy、GitHub Actions（lint + 单测，live 联调手动触发）</td></tr>
       </tbody>
     </table>
