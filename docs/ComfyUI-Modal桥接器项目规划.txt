@@ -330,7 +330,7 @@ nodes:
 │  ├─ image_builder.py               # 读 nodes.lock.yaml 生成 Image 与 install_nodes.sh
 │  ├─ lock/nodes.lock.yaml
 │  └─ templates/extra_model_paths.yaml.j2
-├─ e2e/                              # Playwright（驱动 http://127.0.0.1:8189）
+├─ frontend/e2e/                     # Playwright（隔离后端驱动 /bridge 管理台）
 ├─ docs/                             # 既有 4 份文档迁入
 ├─ scripts/                          # dev.ps1（并行起 uvicorn+vite）/ build.ps1（pnpm build:embed 构建进 app/static）
 ├─ backend/scripts/build_package.py  # M4 打包：前端嵌入 + modal-runner 复制进 pkg_assets + uv build wheel 自检
@@ -351,18 +351,18 @@ nodes:
          | 卷浏览/用量、分块续传上传、HF 导入、删除保护；model_presence 路由规则接入；node_presence 规则接入
          | 从本地/从 HF 各导一个模型进卷 → 引用它的路由自动命中 Modal
          | M4 打磨发布 | 1 周
-         | 成本预算护栏与告警、预热按钮、打包分发（pipx 单包内嵌前端）、兼容性矩阵测试（已完成 2026-10-03，tests/compat）、文档与 e2e
+         | 成本预算护栏与告警、预热按钮、打包分发（pipx 单包内嵌前端）、兼容性矩阵测试（已完成 2026-10-03，tests/compat）、e2e（已完成 2026-10-04，frontend/e2e）、文档与 live 冒烟骨架
          | 全新机器 30 分钟内完成安装到云端首图；e2e 全绿
   总工期约 7–8 周（单人、按正常投入估算）。M1 结束即可自用，此后每个里程碑交付独立可用能力。
-  进度（2026-10-03）：M0–M3 主体与 M4 的护栏/打包/成本报表均已落地并真机验证（逐项记录见 FIXLIST 与 README 里程碑节）；
+  进度（2026-10-10）：M0–M3 主体与 M4 的护栏/打包/成本报表均已落地并真机验证（逐项记录见 FIXLIST 与 README 里程碑节）；
   提交前预校验框架（M3-5 余项）与节点清单采集补全（M2-1 余项）均已落地；同步任务 JobDrawer（M2-6 余项：通用内存
   作业注册表 + /api/v1/jobs + 统一任务抽屉/顶栏角标）、版本对齐历史留痕（M2-5 收尾）、兼容性矩阵测试（tests/compat
-  三版本源码指纹夹具 × 逐版本协议断言，负向验证可捕获漂移）均已收尾；
-  余项：e2e 自动化（仓库无 git remote，暂低优先）。
+  三版本源码指纹夹具 × 逐版本协议断言，负向验证可捕获漂移）、Playwright 全栈 e2e 与真实两端 live 冒烟骨架均已收尾；
+  GitHub Actions 双 job 已在 main 0db455c 首次全绿（run 37201257230）；发布前余项为真实环境 live 全绿归档与新机器安装实测。
   9 风险与对策
      |  | 风险 | 等级 | 对策
        | 远端冷启动延迟（数十秒～分钟级，镜像 + 卷首读） | 高 | UI 明示状态与进度；预热按钮 / min_containers 策略；镜像层精简；路由规则可按「即时性要求」回流本地
-       | ComfyUI API/前端协议快速演进（/prompt、history 结构、WS 事件） | 高 | 兼容层集中隔离所有端点假设；版本锁定 + 对齐提示；兼容性矩阵已落地（tests/compat 夹具矩阵 2026-10-03，对 v0.37.2/v0.38.0/v0.38.2 逐版本跑协议断言；进 CI 待仓库有 remote）
+       | ComfyUI API/前端协议快速演进（/prompt、history 结构、WS 事件） | 高 | 兼容层集中隔离所有端点假设；版本锁定 + 对齐提示；兼容性矩阵已落地并随 backend-tests job 进 CI（tests/compat 夹具矩阵 2026-10-03，对 v0.37.2/v0.38.0/v0.38.2 逐版本跑协议断言）
        | 节点依赖地狱（同一节点两端环境不同；节点间依赖冲突） | 高 | 锁文件精确到 commit；镜像重建失败自动回滚；卷模式先行试装；依赖冲突检测在重建前预跑 pip resolve
        | Modal 计费失控（忘关 scaledown、预热常驻） | 中 | 月度预算 + 双向告警（Modal Dashboard 预算告警 + 桥接器本地硬切回）；每次运行成本入日志；默认 min_containers=0
        | 大文件上传慢（本地 → 卷，家庭带宽） | 中 | 分块 + 断点续传 + MD5；主推 HF 导入（云端直下）；文档引导用 modal volume put 批量导入
@@ -412,4 +412,4 @@ per_run_timeout_s = 1800
       本目录姊妹文档：ComfyUI 启动命令与参数参考（Runner 启动参数）、Modal 云平台与 SDK / CLI 参考（Runner App、Volume、web_server、计费）
       ComfyUI 官方仓库：github.com/comfyanonymous/ComfyUI（server.py 为 API 行为权威来源）
       Modal 文档：web-endpoints · volumes · gpu · sandboxes
-  ComfyUI × Modal 桥接器 · 项目规划 v0.1 · 2026-09-25 · 滚动修订至 2026-10-02（M2-2/4/5、P0 鉴权、M3 规则链、M4 护栏/打包/成本报表 v2、运行统计/容器面板/配置向导落地；已实现标注与偏差见 ADR 及各节）
+  ComfyUI × Modal 桥接器 · 项目规划 v0.1 · 2026-09-25 · 滚动修订至 2026-10-10（M2-2/4/5、P0 鉴权、M3 规则链、M4 护栏/打包/成本报表 v2、运行统计/容器面板/配置向导、e2e/live 测试骨架落地；已实现标注与偏差见 ADR 及各节）

@@ -106,6 +106,14 @@ Set-Content -Path "$HOME\.comfybridge\management_token" -Value "<随机长令牌
 浏览器访问管理台会弹 Basic 认证；脚本可发送 `Authorization: Bearer <令牌>`。
 数据面 ComfyUI 透传端点不受该中间件拦截，但仍建议只在本机或可信网络内使用。
 
+## 许可证
+
+ComfyBridge 采用 [MIT License](LICENSE)。
+
+桥接器只通过 HTTP/WebSocket API 与本地或 Modal 容器中的 ComfyUI 独立进程交互，
+不复制、不静态链接也不动态链接 ComfyUI 源码或二进制。ComfyUI 本体及其第三方节点
+仍分别受各自许可证约束；若后续要从 GPL 组件复制代码，需要单独评审并保留相应许可。
+
 ## 里程碑
 
 M0 技术验证收尾 → M1 MVP 桥接 → M2 同步引擎 → M3 模型卷管理 → M4 打磨发布。
