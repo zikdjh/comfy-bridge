@@ -81,13 +81,17 @@ def test_cost_daily_groups_by_local_date(tmp_db):
     from datetime import datetime, timedelta
 
     now = datetime.now()
-    _insert("modal", 0.10, 100.0, now - timedelta(days=1, hours=2))
-    _insert("modal", 0.20, 200.0, now - timedelta(days=1, hours=-1))
+    # 用本地零点定位「昨天」，避免 now 接近零点时相对偏移跨到前天。
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    yesterday_late = midnight - timedelta(hours=1)   # 昨天 23:00
+    yesterday_early = yesterday_late - timedelta(hours=12)  # 昨天 11:00
+    _insert("modal", 0.10, 100.0, yesterday_early)
+    _insert("modal", 0.20, 200.0, yesterday_late)
     _insert("modal", 0.40, 400.0, now)
 
     daily = store.cost_daily(30)
     assert len(daily) == 2
-    assert daily[0]["date"] == (now - timedelta(days=1)).strftime("%Y-%m-%d")
+    assert daily[0]["date"] == yesterday_late.strftime("%Y-%m-%d")
     assert daily[0]["requests"] == 2
     assert daily[0]["est_cost_usd"] == pytest.approx(0.30)
     assert daily[-1]["date"] == now.strftime("%Y-%m-%d")

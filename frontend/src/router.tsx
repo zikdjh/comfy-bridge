@@ -11,6 +11,7 @@ import LogsPage from "./pages/logs";
 import MediaPage from "./pages/media";
 import CostPage from "./pages/cost";
 import SettingsPage from "./pages/settings";
+import StatusPage from "./pages/status";
 
 function NotFoundPage() {
   return (
@@ -38,6 +39,7 @@ export const router = createBrowserRouter(
         { path: "media", element: <MediaPage /> },
         { path: "cost", element: <CostPage /> },
         { path: "logs", element: <LogsPage /> },
+        { path: "status", element: <StatusPage /> },
         { path: "settings", element: <SettingsPage /> },
         { path: "*", element: <NotFoundPage /> },
       ],
