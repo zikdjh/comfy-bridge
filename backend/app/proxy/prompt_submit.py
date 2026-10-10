@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 
 from .. import cost as cost_svc
 from ..core.config import get_settings
+from ..events import publish
 from ..logs import store
 from ..models_mgr import cloud_index, local_index, node_presence
 from ..models_mgr.presence import classify_model_refs
@@ -85,6 +86,15 @@ async def handle_prompt_submit(request: Request) -> Response:
     if decision.backend == "modal" and budget.get("exceeded"):
         # 超限告警：护栏已把请求拉回本地/拒绝，控制台与 trace 双留痕（M4-1「并通知」）
         runner_console.log(f"[预算护栏] {decision.fallback}", "warning")
+        publish("cost_alert", {
+            "action": "budget_exceeded",
+            "used_usd": budget.get("used_usd"),
+            "monthly_usd": budget.get("monthly_usd"),
+            "on_exceed": budget.get("on_exceed"),
+            "fallback": decision.fallback,
+            "workflow_name": _extract_workflow_name(payload),
+            "prompt_id": payload.get("prompt_id"),
+        })
 
     # —— 提交前预校验（M3-5 余项）：目标端缺节点/缺模型提前拦截或自动供给（off = 历史行为）——
     preflight_mode = get_settings().bridge.preflight

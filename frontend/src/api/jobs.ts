@@ -26,12 +26,18 @@ export interface SyncJob {
   finished_ms: number | null;
 }
 
+export interface JobsSnapshot {
+  jobs: SyncJob[];
+  running: number;
+}
+
 export function useJobs() {
   return useQuery({
     queryKey: ["jobs"],
     queryFn: ({ signal }) =>
-      apiGet<{ jobs: SyncJob[]; running: number }>("/api/v1/jobs?limit=50", signal),
-    refetchInterval: (query) => ((query.state.data?.running ?? 0) > 0 ? 3000 : 15000),
+      apiGet<JobsSnapshot>("/api/v1/jobs?limit=50", signal),
+    // 统一事件流负责实时更新；这里只做断线兜底（P1-5）。
+    refetchInterval: (query) => ((query.state.data?.running ?? 0) > 0 ? 15000 : 30000),
   });
 }
 
@@ -40,7 +46,7 @@ export function useJob(id: string | null) {
     queryKey: ["jobs", id],
     queryFn: async ({ signal }) => (await apiGet<{ job: SyncJob }>(`/api/v1/jobs/${id}`, signal)).job,
     enabled: !!id,
-    refetchInterval: (query) => (query.state.data?.state === "running" ? 2000 : false),
+    refetchInterval: (query) => (query.state.data?.state === "running" ? 15000 : false),
   });
 }
 
