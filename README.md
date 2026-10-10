@@ -88,6 +88,24 @@ pnpm exec playwright test
 真实本地 ComfyUI + Modal Runner 的发布前验收用例标记为 `live`，默认 skip，运行方式见
 `backend/tests/live/README.md`。未设置 `CB_LIVE=1` 时不会访问真实两端或产生 Modal 费用。
 
+## 管理面访问边界
+
+桥接器默认只监听 `127.0.0.1`，本机使用无需额外认证。若要用 `--host 0.0.0.0`
+或局域网地址对外监听，必须配置管理令牌，否则 `comfy-bridge` 会拒绝启动：
+
+```powershell
+# 方式一：环境变量
+$env:CB_MANAGEMENT_TOKEN = "<随机长令牌>"
+comfy-bridge --host 0.0.0.0 --port 8189
+
+# 方式二：写入用户配置目录（默认 ~/.comfybridge/management_token）
+Set-Content -Path "$HOME\.comfybridge\management_token" -Value "<随机长令牌>" -NoNewline
+```
+
+配置令牌后，`/api/v1`（`/api/v1/health` 除外）与 `/bridge` 需要认证：
+浏览器访问管理台会弹 Basic 认证；脚本可发送 `Authorization: Bearer <令牌>`。
+数据面 ComfyUI 透传端点不受该中间件拦截，但仍建议只在本机或可信网络内使用。
+
 ## 里程碑
 
 M0 技术验证收尾 → M1 MVP 桥接 → M2 同步引擎 → M3 模型卷管理 → M4 打磨发布。
