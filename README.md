@@ -13,7 +13,7 @@
 backend/       FastAPI 后端：数据面反代拦截 + /api/v1 管理面 + 日志/成本
 frontend/      React 控制台（开发期经 Vite dev server 访问；构建产物嵌入 backend/app/static，由后端挂载 /bridge）
 modal-runner/  Modal 云端 Runner App（runner.py 由原 comfyui_app.py 演进）
-e2e/           Playwright 端到端测试（预留，当前为空）
+frontend/e2e/  Playwright 全栈端到端测试（离线隔离配置，覆盖管理台核心链路）
 docs/          项目文档
 scripts/       dev.ps1 / build.ps1
 ```
@@ -68,6 +68,25 @@ comfy-bridge --port 8189   # 控制台 http://127.0.0.1:8189/bridge/
 - 安装包自带 modal-runner 副本：节点同步 / 版本对齐 / 数据卷作业 / `modal deploy` 在安装态均可直接用。
 - `scripts/build.ps1` 仅做前端嵌入构建（`pnpm build:embed` → `backend/app/static`，开发后端同样挂 /bridge）。
 - 依赖注：modal 1.6+ 在系统代理环境硬要求 python-socks，已直接声明，代理环境开箱可用。
+
+## 测试
+
+```powershell
+# 后端单元/集成/兼容矩阵（默认不跑 live）
+cd backend
+uv run pytest -q
+
+# 前端类型检查与构建
+cd frontend
+pnpm build
+
+# 离线管理台 Playwright e2e（自动拉起隔离后端，默认使用系统 Edge）
+cd frontend
+pnpm exec playwright test
+```
+
+真实本地 ComfyUI + Modal Runner 的发布前验收用例标记为 `live`，默认 skip，运行方式见
+`backend/tests/live/README.md`。未设置 `CB_LIVE=1` 时不会访问真实两端或产生 Modal 费用。
 
 ## 里程碑
 
