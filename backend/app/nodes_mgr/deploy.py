@@ -119,8 +119,12 @@ async def run_deploy(rollback) -> None:
         out, err = await asyncio.wait_for(proc.communicate(), timeout=_DEPLOY_TIMEOUT)
     except TimeoutError:
         proc.kill()
-        error = (f"modal deploy 超时（>{_DEPLOY_TIMEOUT:g}s）已终止；远端镜像可能仍在构建，"
-                 "新文件已保留，可稍后重新发起或手动 `modal app list` 核对")
+        error = (
+            f"modal deploy 超时（>{_DEPLOY_TIMEOUT:g}s）已终止；远端镜像可能仍在构建，"
+            "新文件已保留，请先执行 `modal app list` 核对应用状态与部署时间，"
+            "再查看 `modal app logs <app_name>` 和 `modal image logs <image_id>`，"
+            "确认结果前不要重复发起 deploy"
+        )
         _JOB.update(
             state="error", finished_ms=_now_ms(),
             error=error,

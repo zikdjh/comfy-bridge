@@ -146,6 +146,9 @@ def test_deploy_timeout_keeps_new_pin(tmp_path, align_env, monkeypatch):
     job = deploy.job_state()
     assert job["state"] == "error"
     assert "超时" in job["error"]
+    assert "modal app list" in job["error"]
+    assert "modal image logs" in job["error"]
+    assert "不要重复发起 deploy" in job["error"]
     # 超时属不确定态（镜像可能已建成）：不回滚
     assert version_align.read_pin() == "v0.38.0"
 
