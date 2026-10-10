@@ -42,6 +42,7 @@ from ...modal_volume.client import ModalCliError
 from ...models_mgr import node_presence
 from ...nodes_mgr import deploy, diff_cache, image_rebuild, manager_api, version_align
 from ...nodes_mgr.scan import DISABLED_SUFFIX, scan_custom_nodes
+from ...proxy import object_info as object_info_merge
 from ...runner import client as runner_client
 from ...sync import jobs
 
@@ -130,6 +131,15 @@ async def _local_class_types() -> list[str] | None:
     try:
         info = await comfy_client.fetch_object_info()
         return sorted(info.keys())
+    except Exception:  # noqa: BLE001 —— 服务未启动是正常状态
+        return None
+
+
+async def _local_object_info() -> dict | None:
+    """本地全量 object_info schema；本地服务未启动返回 None。"""
+    try:
+        info = await comfy_client.fetch_object_info()
+        return info if isinstance(info, dict) else None
     except Exception:  # noqa: BLE001 —— 服务未启动是正常状态
         return None
 
@@ -384,21 +394,42 @@ async def nodes_diff(
         # 只有 force=1 或块缺失才重拉
         class_types = None if force else diff_cache.load_class_types()
         ct_hit = class_types is not None
+        cloud_schemas: dict | None = None
         if class_types is None:
-            class_types = {"local": await _local_class_types(), "cloud": None, "error": None}
+            local_doc = await _local_object_info()
+            class_types = {
+                "local": sorted(local_doc.keys()) if local_doc is not None else None,
+                "cloud": None,
+                "error": None,
+                "conflicts": {},
+                "merge_strategy": object_info_merge.effective_strategy(),
+            }
             if matrix.get("ok"):
                 try:
                     info = await runner_client.fetch_object_info()
                     class_types["cloud"] = sorted(info.keys())
+                    diagnostics = object_info_merge.set_cloud_schemas(info, local_doc or {})
+                    class_types["conflicts"] = diagnostics["conflicts"]
+                    cloud_schemas = object_info_merge.cloud_schemas_snapshot()
                 except Exception as exc:  # noqa: BLE001 —— 冷启动超时/容器不可达
                     class_types["error"] = str(exc) or type(exc).__name__
             diff_cache.save_class_types(class_types)
+            if cloud_schemas is not None:
+                diff_cache.save_cloud_schemas(cloud_schemas)
+        else:
+            object_info_merge.restore_cloud_schemas(
+                diff_cache.load_cloud_schemas(),
+                class_types.get("conflicts") or {},
+            )
+            class_types["merge_strategy"] = object_info_merge.effective_strategy()
+        object_info_merge.invalidate_merge_cache()
         class_types["cached"] = ct_hit
         class_types["cached_at"] = class_types.get("cached_at") if ct_hit else None
     else:
         class_types = {
-            "local": await _local_class_types(), "cloud": None,
-            "error": None, "cached": False, "cached_at": None,
+            "local": await _local_class_types(), "cloud": None, "error": None,
+            "conflicts": {}, "merge_strategy": object_info_merge.effective_strategy(),
+            "cached": False, "cached_at": None,
         }
 
     return {**matrix, "class_types": class_types}
