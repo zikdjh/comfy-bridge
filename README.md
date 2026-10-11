@@ -126,6 +126,16 @@ Set-Content -Path "$HOME\.comfybridge\management_token" -Value "<随机长令牌
 浏览器访问管理台会弹 Basic 认证；脚本可发送 `Authorization: Bearer <令牌>`。
 数据面 ComfyUI 透传端点不受该中间件拦截，但仍建议只在本机或可信网络内使用。
 
+配置令牌后还会启用两项边界保护（P2-1）：
+
+- **Origin 校验**：跨站 `Origin` 的管理请求返回 403（CSRF 防护）；独立前端域名需加入
+  `CB_ALLOWED_ORIGINS`（逗号分隔）。
+- **审计日志**：写操作与所有被拒请求记入 `<配置目录>/audit.log`（JSONL，5MB 轮转），
+  只记方法/路径/状态码/客户端 IP/Origin/认证方式，**不含 token 与请求体**。
+
+对外部署（反代、Origin 白名单、审计开关、边界检查清单）见
+[`docs/反向代理与多用户部署.md`](docs/反向代理与多用户部署.md)。
+
 ## 许可证
 
 ComfyBridge 采用 [MIT License](LICENSE)。
