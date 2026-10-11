@@ -26,7 +26,7 @@ from ..runner import console as runner_console
 from ..runner import executor
 from . import local_tracker, precheck
 from . import privacy as privacy_gate
-from .passthrough import get_upstream_client
+from .passthrough import get_upstream_client, upstream_headers
 
 
 def _extract_manual_backend(payload: dict) -> str | None:
@@ -246,8 +246,7 @@ async def handle_prompt_submit(request: Request) -> Response:
 
 async def _forward_raw(request: Request, raw: bytes) -> Response:
     client = get_upstream_client()
-    headers = [(k, v) for k, v in request.headers.items() if k.lower() not in
-               {"host", "content-length", "connection", "keep-alive", "transfer-encoding"}]
+    headers = upstream_headers(request)
     try:
         up = await client.request(request.method,
                                   f"{get_settings().local.comfy_url.rstrip('/')}{request.url.path}",

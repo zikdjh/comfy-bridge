@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 from typing import Any
 
 import pytest
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from app.logs import store
@@ -47,7 +47,7 @@ def _queue_endpoint(local_status: int = 200, local_body: dict | None = None):
     """构造独立 /queue 端点（跳过 app.main 的真实 forward 依赖）。"""
     body = json.dumps(local_body or {"queue_running": [], "queue_pending": []}).encode()
 
-    async def fake_forward(request):  # noqa: ANN202
+    async def fake_forward(request):
         return Response(body, status_code=local_status, media_type="application/json")
 
     async def endpoint(request: Request) -> Response:
@@ -114,7 +114,7 @@ def test_status_rewrites_queue_remaining_with_cloud() -> None:
         "type": "status",
         "data": {"status": {"queue_remaining": 2, "msg": ""}, "sid": "s1"},
     })
-    import asyncio; rewritten = asyncio.run(ws_relay._rewrite_status_queue_remaining(raw))
+    rewritten = asyncio.run(ws_relay._rewrite_status_queue_remaining(raw))
     assert rewritten is not None
     event = json.loads(rewritten)
     assert event["data"]["status"]["queue_remaining"] == 3  # 2 local + 1 cloud
@@ -125,12 +125,12 @@ def test_status_no_cloud_passthrough() -> None:
         "type": "status",
         "data": {"status": {"queue_remaining": 2}, "sid": "s1"},
     })
-    import asyncio; assert asyncio.run(ws_relay._rewrite_status_queue_remaining(raw)) is None
+    assert asyncio.run(ws_relay._rewrite_status_queue_remaining(raw)) is None
 
 
 def test_status_non_status_event_untouched() -> None:
     raw = json.dumps({"type": "progress", "data": {"value": 1}})
-    import asyncio; assert asyncio.run(ws_relay._rewrite_status_queue_remaining(raw)) is None
+    assert asyncio.run(ws_relay._rewrite_status_queue_remaining(raw)) is None
 
 
 def test_list_active_returns_pending_and_running() -> None:
