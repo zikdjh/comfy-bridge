@@ -35,7 +35,12 @@ from .passthrough import get_upstream_client
 logger = logging.getLogger(__name__)
 
 _VALID_STRATEGIES = {"local-first", "union", "local-only"}
-_cache: dict[str, tuple[bytes, tuple, bytes]] = {}
+_cache: dict[str, tuple[bytes, tuple, bytes, float]] = {}
+
+# /object_info 热缓存 TTL（秒）。TTL 内直接返回上次的合并结果，不再等上游
+# （大注册表下上游响应本身就 > 200ms，是数据面延迟的主要来源）。
+# invalidate_merge_cache()（策略切换/云端 schema 刷新）会主动清空。
+_TTL_SECONDS = 10.0
 
 # 云端 class_type schema 缓存；由节点页显式刷新，不在 /object_info 请求路径触发冷启动。
 _cloud_schemas: dict[str, dict] = {}
@@ -217,6 +222,13 @@ def _diff_paths(local: Any, remote: Any, prefix: str = "") -> list[str]:
 
 
 async def handle_object_info(request: Request, node_type: str | None) -> Response:
+    now = time.monotonic()
+    stamp = (cloud_index.stamp(), _strategy(), _cloud_schema_stamp)
+    hit = _cache.get(request.url.path)
+    if hit is not None and hit[1] == stamp and (now - hit[3]) < _TTL_SECONDS:
+        content_type = "application/json"
+        return Response(hit[2], media_type=content_type)
+
     base = get_settings().local.comfy_url.rstrip("/")
     url = f"{base}{request.url.path}"
     if request.url.query:
@@ -227,24 +239,23 @@ async def handle_object_info(request: Request, node_type: str | None) -> Respons
     except httpx.HTTPError as exc:
         return JSONResponse(status_code=502, content={"error": f"本地 ComfyUI 不可达: {exc}"})
 
-    content_type = up.headers.get("content-type", "application/json")
     if up.status_code != 200:
+        content_type = up.headers.get("content-type", "application/json")
         return Response(up.content, status_code=up.status_code, media_type=content_type)
+    content_type = up.headers.get("content-type", "application/json")
     upstream = up.content
 
     strategy = _strategy()
-    stamp = (cloud_index.stamp(), strategy, _cloud_schema_stamp)
-    hit = _cache.get(request.url.path)
     if hit is not None and hit[0] == upstream and hit[1] == stamp:
         return Response(hit[2], media_type=content_type)
 
     try:
         doc = json.loads(upstream)
     except (TypeError, ValueError):
-        _cache[request.url.path] = (upstream, stamp, upstream)
+        _cache[request.url.path] = (upstream, stamp, upstream, now)
         return Response(upstream, media_type=content_type)
     if not isinstance(doc, dict):
-        _cache[request.url.path] = (upstream, stamp, upstream)
+        _cache[request.url.path] = (upstream, stamp, upstream, now)
         return Response(upstream, media_type=content_type)
 
     if strategy != "local-only" and (cloud_index.stamp()[1] > 0 or _cloud_schemas):
@@ -259,5 +270,5 @@ async def handle_object_info(request: Request, node_type: str | None) -> Respons
         )
     else:
         merged = upstream
-    _cache[request.url.path] = (upstream, stamp, merged)
+    _cache[request.url.path] = (upstream, stamp, merged, now)
     return Response(merged, media_type=content_type)

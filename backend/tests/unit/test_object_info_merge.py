@@ -192,7 +192,7 @@ async def test_handle_object_info_single_node_does_not_add_cloud_only(monkeypatc
 
 
 def test_save_config_invalidates_object_info_cache(monkeypatch, tmp_path) -> None:
-    object_info._cache["/object_info"] = (b"old", ("stamp",), b"old")
+    object_info._cache["/object_info"] = (b"old", ("stamp",), b"old", 0.0)
     monkeypatch.setattr(config_api, "CONFIG_PATH", tmp_path / "config.toml")
     class FakeSettings:
         bridge = BridgeConfig(object_info_merge="union")
