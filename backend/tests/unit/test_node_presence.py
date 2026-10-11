@@ -71,6 +71,13 @@ async def test_refresh_ttl_skips_when_fresh(fresh, monkeypatch):
     assert snap == {"local": {"A"}, "cloud": {"B"}}
 
 
+async def test_fetch_cloud_raises_readable_error_without_web_url(monkeypatch, fresh):
+    """安装态未配置 web_url：报可读错误，而不是 httpx 协议错误。"""
+    monkeypatch.setattr(np.runner_client, "web_url", lambda: None)
+    with pytest.raises(RuntimeError, match="web_url 未配置"):
+        await np._fetch_cloud()
+
+
 def test_snapshot_missing_file_is_empty(fresh):
     snap = np.snapshot()
     assert snap == {"local": set(), "cloud": set()}

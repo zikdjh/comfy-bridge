@@ -79,6 +79,8 @@ async def _fetch_local() -> set[str]:
 
 
 async def _fetch_cloud() -> set[str]:
+    if runner_client.web_url() is None:
+        raise RuntimeError("云端 web_url 未配置（跳过云端节点采集）")
     doc = await runner_client.fetch_object_info()
     return set(doc.keys()) if isinstance(doc, dict) else set()
 
