@@ -32,7 +32,7 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 _LEVEL_RE = re.compile(r"\[(DEBUG|DETAIL|INFO|WARNING|ERROR|CRITICAL)\]")
 
 # ws 空闲多久做一次断连检查 / 心跳注释帧（SSE 经代理时防空闲超时）
-_WS_IDLE_TIMEOUT = 15.0
+_WS_IDLE_TIMEOUT = 2.0
 _RECONNECT_DELAY = 2.0
 _CONNECT_TIMEOUT = 5.0
 
