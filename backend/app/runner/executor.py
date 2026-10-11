@@ -346,6 +346,7 @@ async def _ws_pump(client_id: str, modal_pid: str, bridge_pid: str,
         async with websockets.connect(
             runner_client.ws_url(client_id), max_size=None, additional_headers=runner_client.proxy_headers(),
             compression=None,
+            proxy=None,  # 云端 WS 不走本机系统代理（与 httpx trust_env=False 同口径）
         ) as up:
             last_logged = [0.0]  # 进度节流（同批多步事件只按时间采样写控制台）
             async for raw in up:

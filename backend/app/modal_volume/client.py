@@ -244,7 +244,7 @@ def cli_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     并把版本 pin 回滚（镜像其实已经构建完成）。强制 UTF-8 同时与调用方的
     decode("utf-8") 对称，顺带修掉中文错误消息的乱码。
     """
-    return {
+    env = {
         **os.environ,
         "PYTHONWARNINGS": "ignore",
         "PYTHONUTF8": "1",
@@ -252,6 +252,13 @@ def cli_env(extra: dict[str, str] | None = None) -> dict[str, str]:
         **auth_env(),
         **(extra or {}),
     }
+    # Modal 云端通信不走本机代理：CLI 的 aiohttp 通道拾取 HTTP(S)_PROXY 后
+    # 需要 aiohttp-socks 额外包，且代理链路不稳定会拖垮所有 CLI 调用。
+    # Modal API 端点（api.modal.com 等）由 Modal 自己的边缘网络保证可达性。
+    for key in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "ALL_PROXY", "all_proxy"):
+        env.pop(key, None)
+    env["NO_PROXY"] = "*"
+    return env
 
 
 def proxy_credentials() -> tuple[str, str] | None:
