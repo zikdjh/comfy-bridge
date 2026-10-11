@@ -414,6 +414,20 @@ def count_active_modal() -> int:
     return n
 
 
+def list_active() -> list[dict]:
+    """在途任务（queued/running，不分端）：/queue 合成与队列面板数据源。"""
+    with _lock:
+        rows = _get_conn().execute(
+            "SELECT prompt_id, client_id, status, workflow_name, model_name, final_backend "
+            "FROM requests WHERE status IN ('queued', 'running') ORDER BY id ASC"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+async def alist_active() -> list[dict]:
+    return await asyncio.to_thread(list_active)
+
+
 def get_request(req_id: int) -> dict | None:
     with _lock:
         row = _get_conn().execute("SELECT * FROM requests WHERE id = ?", (req_id,)).fetchone()
