@@ -10,14 +10,13 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import os
 import shutil
 import time
 from collections.abc import Callable
 
 from .. import runner_assets
 from ..events import publish
-from ..modal_volume.client import auth_env
+from ..modal_volume.client import cli_env
 
 RUNNER_FILE = runner_assets.runner_file("runner.py")
 
@@ -113,7 +112,7 @@ async def run_deploy(rollback) -> None:
             shutil.which("modal") or "modal", "deploy", str(RUNNER_FILE),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env={**os.environ, "PYTHONWARNINGS": "ignore", **auth_env()},
+            env=cli_env(),
         )
     except (FileNotFoundError, OSError) as exc:
         if rollback:

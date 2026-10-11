@@ -24,7 +24,7 @@ from ..routing.engine import classify_graph, decide, extract_primary_model
 from ..runner import client as runner_client
 from ..runner import console as runner_console
 from ..runner import executor
-from . import precheck
+from . import local_tracker, precheck
 from . import privacy as privacy_gate
 from .passthrough import get_upstream_client
 
@@ -229,11 +229,16 @@ async def handle_prompt_submit(request: Request) -> Response:
         error = f"提交被 ComfyUI 拒绝（HTTP {up.status_code}）: {up.text[:300]}"
         await store.aupdate_status(prompt_id, "error", error)
     else:
+        node_errors: dict = {}
         with contextlib.suppress(Exception):  # 响应非 JSON 时跳过节点校验回写
             ack = up.json()
             node_errors = ack.get("node_errors") or {}
             if node_errors:
                 await store.aupdate_status(prompt_id, "error", f"节点校验失败: {json.dumps(node_errors, ensure_ascii=False)[:300]}")
+        if not node_errors:
+            # 本地请求终态跟踪：浏览器 WS 中继是快路径，但没有浏览器（纯 HTTP /
+            # 断线）时记录会永远停在 queued，这里用 /history 轮询兜底收敛。
+            local_tracker.dispatch(prompt_id)
 
     return Response(content=up.content, status_code=up.status_code,
                     media_type=up.headers.get("content-type", "application/json"))

@@ -236,6 +236,24 @@ def auth_env() -> dict[str, str]:
     return {}
 
 
+def cli_env(extra: dict[str, str] | None = None) -> dict[str, str]:
+    """modal CLI 子进程统一环境：凭证 + 静音告警 + 强制 UTF-8 输出。
+
+    Windows 中文控制台下 CLI 的 stdout 默认走 GBK：成功路径会打印 "✓ / 🔨 / 🎉"，
+    编码失败直接让进程以非零码退出——实测 `modal deploy` 因此被误判为「部署失败」
+    并把版本 pin 回滚（镜像其实已经构建完成）。强制 UTF-8 同时与调用方的
+    decode("utf-8") 对称，顺带修掉中文错误消息的乱码。
+    """
+    return {
+        **os.environ,
+        "PYTHONWARNINGS": "ignore",
+        "PYTHONUTF8": "1",
+        "PYTHONIOENCODING": "utf-8",
+        **auth_env(),
+        **(extra or {}),
+    }
+
+
 def proxy_credentials() -> tuple[str, str] | None:
     """Runner 端点代理鉴权凭证对（proxy_token_id, proxy_token_secret）。
 
@@ -262,7 +280,7 @@ def _popen(*args: str, extra_env: dict[str, str] | None = None) -> subprocess.Po
             [_exe(), *args],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            env={**os.environ, "PYTHONWARNINGS": "ignore", **auth_env(), **(extra_env or {})},
+            env=cli_env(extra_env),
         )
     except FileNotFoundError as exc:
         error = ModalCliError(

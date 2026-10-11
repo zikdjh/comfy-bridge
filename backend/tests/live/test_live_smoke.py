@@ -4,6 +4,7 @@
 
 1. 桥接器健康检查可读。
 2. 本地 ComfyUI `/object_info` 可用。
+2b. 本地通道真实出图且终态自行收敛（不需要浏览器 WS）。
 3. Modal Runner 凭证与部署状态可探。
 4. 可选的只读请求断言（不产生新费用）。
 5. 显式开启后提交一次云端文生图并检查输出与日志。
@@ -27,6 +28,7 @@ import pytest
 from .conftest import (
     LiveEnv,
     load_fixture_prompt,
+    load_local_fixture_prompt,
     load_no_output_fixture_prompt,
     require_local,
     require_modal,
@@ -71,10 +73,16 @@ def _assert_output_landed(client: httpx.Client, rec: dict[str, Any]) -> None:
     assert items, "媒体库为空，未观察到回传输出"
 
 
-def _submit(client: httpx.Client, prompt: dict[str, Any], client_id: str) -> str:
+def _submit(
+    client: httpx.Client,
+    prompt: dict[str, Any],
+    client_id: str,
+    headers: dict[str, str] | None = None,
+) -> str:
     resp = client.post(
         "/prompt",
         json={"prompt_id": "", "client_id": client_id, "prompt": prompt},
+        headers=headers,
     )
     assert resp.status_code == 200, f"提交失败: HTTP {resp.status_code} {resp.text[:500]}"
     prompt_id = resp.json().get("prompt_id")
@@ -110,6 +118,28 @@ def test_local_comfy_object_info(bridge_client: httpx.Client, bridge_health: dic
     assert any("KSampler" in str(k) or "CheckpointLoader" in str(k) for k in data), (
         "/object_info 未包含基础生成节点，确认当前 ComfyUI 已完整启动"
     )
+
+
+def test_local_text_to_image(live_env: LiveEnv, bridge_client: httpx.Client, bridge_health: dict[str, Any]) -> None:
+    """本地通道真实出图：强制 x-bridge-backend=local，不依赖浏览器 WS 也要收敛到 done。
+
+    回归真机缺陷（2026-10-11）：本地请求只靠浏览器 WS 中继回写状态，纯 HTTP 提交
+    会永远停在 queued，即使图已落 output/。本用例要求终态由后端自行判定。
+    """
+    require_local(bridge_health)
+    fixture = load_local_fixture_prompt(live_env)
+    if not fixture:
+        pytest.skip("未设置 CB_LIVE_LOCAL_FIXTURE_JSON，跳过本地出图用例")
+    prompt_id = _submit(
+        bridge_client,
+        fixture["prompt"],
+        "bridge-live-local",
+        headers={"x-bridge-backend": "local"},
+    )
+    rec = _wait_terminal(bridge_client, prompt_id, timeout_s=900)
+    assert rec.get("status") == "done", f"本地执行未成功收敛: {rec.get('status')} {rec.get('error')}"
+    assert rec.get("final_backend") == "local", f"未走本地通道: {rec.get('final_backend')}"
+    assert rec.get("finished_ms"), "终态请求缺少 finished_ms"
 
 
 def test_modal_runner_reachable(live_env: LiveEnv, bridge_client: httpx.Client, bridge_health: dict[str, Any]) -> None:
@@ -164,15 +194,24 @@ def test_modal_interrupt(live_env: LiveEnv, bridge_client: httpx.Client, bridge_
     """运行中中断：请求最终收敛为 cancelled，而不是悬挂。"""
     require_modal(live_env, bridge_health)
     fixture = load_fixture_prompt(live_env)
+    prompt = fixture["prompt"]
+    # 换一次种子：与文生图用例同容器时不共享 ComfyUI 节点缓存，否则 0.02s 就跑完，
+    # 「中断」根本落不到执行中，用例会退化成假绿。
+    for node in prompt.values():
+        inputs = node.get("inputs") if isinstance(node, dict) else None
+        if node.get("class_type") == "KSampler" and isinstance(inputs, dict):
+            inputs["seed"] = int(time.time()) % 2**31
     prompt_id = _submit(bridge_client, fixture["prompt"], "bridge-live-interrupt")
     # 提交返回即由后台执行器接管；短等待后中断，覆盖“运行中”而不是排队前后的空窗。
     time.sleep(3)
     resp = bridge_client.post("/interrupt")
     assert resp.status_code < 500, f"中断端点异常: HTTP {resp.status_code} {resp.text[:300]}"
     rec = _wait_terminal(bridge_client, prompt_id, timeout_s=900)
-    assert rec.get("status") in {"cancelled", "done", "error"}, f"中断后终态异常: {rec.get('status')}"
-    if rec.get("status") == "cancelled":
-        assert "中断" in str(rec.get("error") or "") or not rec.get("error")
+    # 真机回归（2026-10-11）：/interrupt 曾被 WS 泵阻塞而从未送达，请求跑完才结束。
+    # 修复后中断必须真正生效，终态收敛为 cancelled。
+    assert rec.get("status") == "cancelled", (
+        f"中断未生效，终态={rec.get('status')} 错误={rec.get('error')}"
+    )
 
 
 def test_modal_reconnect_history_fallback(live_env: LiveEnv, bridge_client: httpx.Client, bridge_health: dict[str, Any]) -> None:

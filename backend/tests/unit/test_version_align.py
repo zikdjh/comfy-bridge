@@ -251,3 +251,20 @@ def test_append_history_silent_when_unwritable(tmp_path, align_env, monkeypatch)
     monkeypatch.setattr(version_align, "HISTORY_FILE", blocker / "sub" / "history.jsonl")
     version_align.append_history({"outcome": "ok"})  # mkdir 撞上普通文件 → OSError 被吞
     assert version_align.read_history() == []
+
+
+def test_run_deploy_passes_utf8_cli_env(align_env, monkeypatch):
+    """实测回归：GBK 控制台下 modal deploy 打印 ✓ 会非零退出，子进程必须带 UTF-8 环境。"""
+    captured: dict = {}
+
+    async def fake_exec(*args, **kwargs):
+        captured["args"] = args
+        captured.update(kwargs)
+        return _FakeProc(out=b"Deployed apps\n")
+
+    monkeypatch.setattr(deploy.asyncio, "create_subprocess_exec", fake_exec)
+    asyncio.run(deploy.run_deploy(None))
+    assert captured["env"]["PYTHONUTF8"] == "1"
+    assert captured["env"]["PYTHONIOENCODING"] == "utf-8"
+    assert captured["env"]["PYTHONWARNINGS"] == "ignore"
+    assert deploy.job_state()["state"] == "ok"
