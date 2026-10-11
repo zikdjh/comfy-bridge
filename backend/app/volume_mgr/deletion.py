@@ -321,6 +321,10 @@ async def cleanup_expired_trash(
 async def cleanup_all_expired_trash(retention_days: int = TRASH_RETENTION_DAYS) -> dict[str, list[str]]:
     """清理所有卷的过期回收站；单卷失败不阻断其余卷。"""
     out: dict[str, list[str]] = {}
+    if not modal_cli.cli_path():
+        # 安装态仅本地桥接（未装 modal CLI）属正常形态，不作为启动告警刷屏。
+        logger.debug("回收站清理：modal CLI 未安装，跳过云端回收站清理")
+        return out
     try:
         rows = modal_cli.cli_json_list(await modal_cli.run("volume", "list", "--json"))
     except Exception as exc:  # noqa: BLE001 —— 后台清理必须静默降级

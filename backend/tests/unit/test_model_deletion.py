@@ -207,6 +207,19 @@ async def test_list_trash_returns_entries_and_marks_unreadable_timestamp(
     }]
 
 
+@pytest.mark.asyncio
+async def test_cleanup_all_skips_silently_without_cli(monkeypatch) -> None:
+    """安装态仅本地桥接（无 modal CLI）：静默跳过，不产生启动告警。"""
+    monkeypatch.setattr(deletion.modal_cli, "cli_path", lambda: "")
+
+    async def _boom(*args, **kwargs):
+        raise AssertionError("must not invoke CLI when not installed")
+
+    monkeypatch.setattr(deletion.modal_cli, "run", _boom)
+    result = await deletion.cleanup_all_expired_trash()
+    assert result == {}
+
+
 def test_delete_api_dry_run_and_reference_gate(monkeypatch) -> None:
     client = _client(monkeypatch)
     moved: list[tuple] = []
