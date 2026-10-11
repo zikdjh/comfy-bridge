@@ -1106,3 +1106,15 @@ P3-1 遗留的「mypy 尚未形成发布门禁」项闭环。
   （管理面 API 6 项 + 数据面代理 4 项）+ 兼容性矩阵 + 残留三项验收。
 - 每项标注已有单测/e2e/真机覆盖方式与当前状态，执行结果登记到计划第 8 节。
 - README 与路线图已同步索引。
+
+## 三十六、第二轮修复计划：透传 Origin 403 与遗留登记（2026-10-11）
+## 三十六、第二轮修复计划：透传 Origin 403 与遗留登记（2026-10-11）
+
+- 新增 `docs/第二轮修复计划.md`：登记 8 个遗留问题（P1 透传 Origin 403、P3 Untitled 工作流名、
+  P-06/P-08 性能待测、三项真机验收残留、方案A决策、成本页 egress 口径），按优先级排批次。
+- 本轮落地 P1 修复：`passthrough.upstream_headers()` 抽出公共请求头改写，
+  `prompt_submit._forward_raw` 复用，非 JSON / 空 prompt 兜底路径的 Origin/Referer
+  现已改写为上游地址，ComfyUI `origin_only_middleware` 不再拒绝（403 → 正常响应）。
+- 新增 `tests/unit/test_passthrough_origin_headers.py`（2 项）：Origin/Referer 改写
+  + 逐跳头剥离断言。
+- 同步：`docs/真机验收缺陷清单.md` 增加 §8 第二轮遗留索引。

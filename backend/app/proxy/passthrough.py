@@ -11,8 +11,7 @@ from starlette.background import BackgroundTask
 
 from ..core.config import get_settings
 from ..core.constants import HOP_BY_HOP_HEADERS
-from . import cloud_overlay
-from . import privacy
+from . import cloud_overlay, privacy
 
 _client: httpx.AsyncClient | None = None
 
@@ -53,10 +52,14 @@ def _upstream_url(request: Request) -> str:
     return f"{base}{request.url.path}{query}"
 
 
-async def forward_request(request: Request) -> Response:
-    """按原 method/headers/body 转发到本地 ComfyUI，响应流式透传。"""
+def upstream_headers(request: Request) -> list[tuple[str, str]]:
+    """透传用请求头：剥离逐跳头，Origin/Referer 改写为上游地址。
+
+    与 forward_request 共用，保证任何自拼头的转发路径（如 /prompt 的
+    非 JSON 兜底）都通过 ComfyUI origin_only_middleware 校验。
+    """
     upstream_authority = urlsplit(get_settings().local.comfy_url).netloc
-    headers = []
+    headers: list[tuple[str, str]] = []
     for k, v in request.headers.items():
         lk = k.lower()
         if lk in HOP_BY_HOP_HEADERS:
@@ -65,6 +68,12 @@ async def forward_request(request: Request) -> Response:
             headers.append((k, _rewrite_to_upstream(v, upstream_authority)))
         else:
             headers.append((k, v))
+    return headers
+
+
+async def forward_request(request: Request) -> Response:
+    """按原 method/headers/body 转发到本地 ComfyUI，响应流式透传。"""
+    headers = upstream_headers(request)
     body = await request.body()
     client = get_upstream_client()
     upstream_req = client.build_request(request.method, _upstream_url(request), headers=headers, content=body)

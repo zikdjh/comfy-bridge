@@ -168,7 +168,7 @@ async def synthetic_queue(request: Request) -> Response:
     pending_local: list = []
     if local.status_code == 200:
         with contextlib.suppress(Exception):
-            data = json.loads(local.body)
+            data = json.loads(bytes(local.body))
             running_local = list(data.get("queue_running") or [])
             pending_local = list(data.get("queue_pending") or [])
     cloud_rows = [r for r in await logs_store.alist_active() if r.get("final_backend") == "modal"]
