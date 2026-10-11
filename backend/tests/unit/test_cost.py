@@ -399,6 +399,8 @@ async def test_areconcile_merges_both_sides(monkeypatch, tmp_db):
     assert data["local"]["est_cost_usd"] == pytest.approx(0.4)
     assert data["modal"]["gpu_usd"] == pytest.approx(0.5)
     assert data["ratio_gpu_vs_est"] == pytest.approx(1.25)
+    assert data["diverged"] is False
+    assert data["divergence_message"] is None
     assert {r["date"] for r in data["daily"]} == {"2026-09-15", "2026-09-20"}  # 并集
     row15 = next(r for r in data["daily"] if r["date"] == "2026-09-15")
     assert row15["local_usd"] == pytest.approx(0.4) and row15["modal_gpu_usd"] == pytest.approx(0.5)
@@ -423,6 +425,46 @@ async def test_areconcile_modal_failure_keeps_local(monkeypatch, tmp_db):
     assert data["local"]["est_cost_usd"] == pytest.approx(0.4)  # 本地侧照常展示
     assert data["daily"] and data["daily"][0]["modal_gpu_usd"] == 0.0
     assert data["ratio_gpu_vs_est"] is None
+
+
+async def test_areconcile_flags_ratio_divergence(monkeypatch, tmp_db):
+    from datetime import UTC, datetime
+
+    from app.cost import reconciliation
+
+    _insert("modal", 1.0, 3600.0, datetime(2026, 9, 15, 12, tzinfo=UTC))
+
+    async def high_report(start, end, force=False):
+        return {
+            "ok": True, "gpu_usd": 3.0, "total_usd": 3.0,
+            "resources": {"L40S": 3.0}, "apps": [], "daily": {},
+        }
+
+    monkeypatch.setattr(reconciliation.modal_billing, "report", high_report)
+    data = await reconciliation.areconcile("2026-09")
+    assert data["ratio_gpu_vs_est"] == pytest.approx(3.0)
+    assert data["diverged"] is True
+    assert "gpu_hourly_rate_usd" in (data["divergence_message"] or "")
+    assert "Modal" in (data["divergence_message"] or "")
+
+
+async def test_areconcile_ratio_at_warn_boundary_not_flagged(monkeypatch, tmp_db):
+    from datetime import UTC, datetime
+
+    from app.cost import reconciliation
+
+    _insert("modal", 1.0, 3600.0, datetime(2026, 9, 15, 12, tzinfo=UTC))
+
+    async def boundary_report(start, end, force=False):
+        return {
+            "ok": True, "gpu_usd": 1.5, "total_usd": 1.5,
+            "resources": {"L40S": 1.5}, "apps": [], "daily": {},
+        }
+
+    monkeypatch.setattr(reconciliation.modal_billing, "report", boundary_report)
+    data = await reconciliation.areconcile("2026-09")
+    assert data["ratio_gpu_vs_est"] == pytest.approx(1.5)
+    assert data["diverged"] is False
 
 
 # ---------------------------------------------------------------- 报表 v2：账单明细 CLI

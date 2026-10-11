@@ -149,6 +149,22 @@ Redis Pub/Sub），再考虑横向扩展。作业状态已抽出统一接缝
 `app/core/job_store.py`：`sync/jobs.py` 与 `modal_volume/jobs.py` 已改用
 `JobStore` 协议，未来替换 Redis / PostgreSQL 实现无需重写业务模块。
 
+### 预算护栏边界（P2-4）
+
+管理台的「月度预算上限」是 **ComfyBridge 本地估算护栏**，不是 Modal 账户级
+硬上限，也无法阻止绕过桥接器的消费：
+
+- 判定依据是本地按次估算：`gpu_hourly_rate_usd × 请求墙钟秒数`（含冷启动等待），
+  只覆盖经桥接器分流到 Modal 的请求；`modal serve/deploy`、其他客户端、CPU/内存/
+  数据卷等其他资源都不计入。
+- 单价是配置值，Modal 调价后需在设置页同步更新；成本报表页的「账单对账」会显示
+  `Modal GPU 计量 ÷ 本地估算`，偏离 1 过大时会主动提示校准。
+- 需要账户级止损时，请在 Modal 平台配置预算 / 消费告警与额度上限；本地护栏与
+  平台侧预算配合使用：本地护栏负责即时回落或拒绝，平台侧负责全局兜底。
+
+`GET /api/v1/cost/summary` 的 `budget`、路由决策的 `budget_guardrail` 留痕与
+控制台告警都沿用同一估算口径，界面文案已明确标注「本地护栏」。
+
 ## 许可证
 
 ComfyBridge 采用 [MIT License](LICENSE)。
