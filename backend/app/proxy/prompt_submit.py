@@ -51,6 +51,12 @@ def _extract_workflow_name(payload: dict) -> str | None:
     return None
 
 
+def _workflow_name_fallback(request: Request) -> str | None:
+    """API 直提交（无 extra_data）时允许用请求头传工作流名。"""
+    value = (request.headers.get("x-bridge-workflow-name") or "").strip()
+    return value[:200] or None
+
+
 async def handle_prompt_submit(request: Request) -> Response:
     raw = await request.body()
     try:
@@ -75,9 +81,10 @@ async def handle_prompt_submit(request: Request) -> Response:
         facts.get("model_refs") or [], local_names, cloud_index.snapshot()
     )
     budget = await cost_svc.abudget_state()  # 月度预算护栏现状（决策前采集，纯本地 SQL）
+    workflow_name = _extract_workflow_name(payload) or _workflow_name_fallback(request)
     decision = decide(
         facts,
-        workflow_name=_extract_workflow_name(payload),
+        workflow_name=workflow_name,
         manual_backend=request.headers.get("x-bridge-backend") or _extract_manual_backend(payload),
         models={"cloud_only": cloud_only, "missing": missing},
         budget=budget,
@@ -100,7 +107,7 @@ async def handle_prompt_submit(request: Request) -> Response:
             "monthly_usd": budget.get("monthly_usd"),
             "on_exceed": budget.get("on_exceed"),
             "fallback": decision.fallback,
-            "workflow_name": _extract_workflow_name(payload),
+            "workflow_name": workflow_name,
             "prompt_id": payload.get("prompt_id"),
         })
 
@@ -154,7 +161,7 @@ async def handle_prompt_submit(request: Request) -> Response:
         "backend": decision.backend,
         "final_backend": decision.final_backend,
         "gen_type": decision.gen_type,
-        "workflow_name": _extract_workflow_name(payload),
+        "workflow_name": workflow_name,
         "model_name": extract_primary_model(prompt),
         "graph_hash": graph_hash,
         "graph_file": graph_file,
