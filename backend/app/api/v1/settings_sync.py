@@ -54,7 +54,9 @@ async def _read_cloud() -> tuple[dict | None, bool, str | None]:
     with tempfile.TemporaryDirectory() as td:
         dest = Path(td) / "comfy.settings.json"
         try:
-            await volume_cli.run("volume", "get", volume_cli.volume_name(), CLOUD_REL, str(dest))
+            # modal CLI 的 volume get 会在下载前预创建目标文件，二次调用会报
+            # "Output path already exists"——统一加 --force 覆盖临时目录内的文件。
+            await volume_cli.run("volume", "get", volume_cli.volume_name(), CLOUD_REL, str(dest), "--force")
         except ModalCliError as exc:
             msg = str(exc)
             if any(hint in msg.lower() for hint in _MISSING_HINTS):
