@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Card, Form, Input, InputNumber, Popconfirm, Select, Space, Table, Tabs, Tag, Typography } from "antd";
+import { Alert, Button, Card, Form, Input, InputNumber, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Typography } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { message } from "antd";
@@ -64,6 +64,7 @@ export default function SettingsPage() {
       videoBackend: config.bridge.video_backend,
       largeSidePixels: config.bridge.large_side_pixels,
       preflight: config.bridge.preflight,
+      privacyConfirm: config.bridge.privacy_confirm,
       objectInfoMerge: config.bridge.object_info_merge,
     });
     modalForm.setFieldsValue({
@@ -130,6 +131,7 @@ export default function SettingsPage() {
     videoBackend: string;
     largeSidePixels: number | null;
     preflight: string;
+    privacyConfirm: boolean;
     objectInfoMerge: string;
   }) => {
     try {
@@ -140,6 +142,7 @@ export default function SettingsPage() {
           video_backend: values.videoBackend,
           large_side_pixels: values.largeSidePixels ?? 0,
           preflight: values.preflight,
+          privacy_confirm: values.privacyConfirm,
           object_info_merge: values.objectInfoMerge,
         },
       });
@@ -361,6 +364,14 @@ export default function SettingsPage() {
                       { value: "auto", label: "auto —— 自动供给缺失模型" },
                     ]}
                   />
+                </Form.Item>
+                <Form.Item
+                  label="云端提交前隐私确认"
+                  name="privacyConfirm"
+                  valuePropName="checked"
+                  extra="开启后，首次把工作流分流到 Modal 会返回一次数据边界说明（图快照/输入文件/元数据/云端日志将离开本机），确认后放行。关闭可撤销，之后云端请求不再提示。"
+                >
+                  <Switch checkedChildren="开启" unCheckedChildren="关闭" />
                 </Form.Item>
                 <Form.Item
                   label="/object_info 合并策略"

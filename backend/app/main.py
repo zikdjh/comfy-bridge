@@ -17,7 +17,6 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import StreamingResponse
 from starlette.websockets import WebSocket
 
 from .api.v1 import api_router
@@ -116,14 +115,14 @@ async def ws_proxy(websocket: WebSocket) -> None:
 # 前端新版本实际提交 /api/prompt，两条路径必须一并接管。
 @app.post("/prompt", include_in_schema=False)
 @app.post("/api/prompt", include_in_schema=False)
-async def prompt_submit(request: Request) -> StreamingResponse:
+async def prompt_submit(request: Request) -> Response:
     return await handle_prompt_submit(request)
 
 
 # 中断：本地照常透传；云端有在跑任务时尽力转发 /interrupt（执行器 → execution_interrupted）
 @app.post("/interrupt", include_in_schema=False)
 @app.post("/api/interrupt", include_in_schema=False)
-async def interrupt(request: Request) -> StreamingResponse:
+async def interrupt(request: Request) -> Response:
     from .runner import executor
 
     executor.interrupt_all()
@@ -132,7 +131,7 @@ async def interrupt(request: Request) -> StreamingResponse:
 
 # 根路径不落入 catch-all（path 为空），显式透传 —— ComfyUI 前端挂载于此
 @app.get("/", include_in_schema=False)
-async def passthrough_root(request: Request) -> StreamingResponse:
+async def passthrough_root(request: Request) -> Response:
     return await forward_request(request)
 
 
@@ -156,5 +155,5 @@ async def object_info_node(request: Request, node_type: str) -> Response:
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
     include_in_schema=False,
 )
-async def passthrough(path: str, request: Request) -> StreamingResponse:
+async def passthrough(path: str, request: Request) -> Response:
     return await forward_request(request)

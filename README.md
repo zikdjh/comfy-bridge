@@ -165,6 +165,22 @@ Redis Pub/Sub），再考虑横向扩展。作业状态已抽出统一接缝
 `GET /api/v1/cost/summary` 的 `budget`、路由决策的 `budget_guardrail` 留痕与
 控制台告警都沿用同一估算口径，界面文案已明确标注「本地护栏」。
 
+### 云端提交前隐私确认（P2-5）
+
+首次把工作流分流到 Modal 时，桥接器会先返回一次数据边界说明，明确哪些数据会
+离开本机：
+
+- **工作流图快照**：节点、连线、参数（可能含提示词、路径、模型名）；
+- **输入文件**：`LoadImage` 等节点引用的本地图片/音频；
+- **必要元数据**：工作流名、客户端 ID、路由决策留痕；
+- **云端执行日志**：容器 stdout 与执行事件。
+
+模型权重仍留在 Modal 数据卷，不会因确认而上传整个本地磁盘。确认流程是
+**无状态**的：后端只在该次请求缺少 `X-Bridge-Privacy-Confirmed: 1` 且开关开启时
+返回 `409 privacy_confirmation_required`；浏览器页面由桥接器注入的一次性脚本
+弹窗确认并带重试，脚本按浏览器记在 localStorage。`设置 → 桥接 → 云端提交前
+隐私确认` 可随时关闭或重新开启（对应 `bridge.privacy_confirm`）。
+
 ## 许可证
 
 ComfyBridge 采用 [MIT License](LICENSE)。

@@ -19,6 +19,7 @@ export interface BridgeConfigDto {
   on_budget_exceed: string;
   max_cloud_concurrent: number;
   preflight: string;
+  privacy_confirm: boolean;
   object_info_merge: string;
 }
 
