@@ -3,17 +3,9 @@ import { readFileSync } from "node:fs";
 
 const OUT = "E:/JAVA/work/web/zc/modal/comfy-bridge/tmp/ui-verify";
 
-test("cloud overlay visible during cloud run", { timeout: 300000 }, async ({ page }) => {
+test("overlay shows progress bar", { timeout: 300000 }, async ({ page }) => {
   await page.goto("http://127.0.0.1:8189/", { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(6000);
-
-  // 悬浮组件初始隐藏（无在途任务）
-  const initial = await page.evaluate(() => {
-    const p = document.getElementById("cb-cloud-overlay");
-    return p ? { exists: true, visible: p.style.display !== "none" } : { exists: false };
-  });
-  console.log("initial overlay:", JSON.stringify(initial));
-  await page.screenshot({ path: `${OUT}/v1-no-task.png` });
 
   const clientId = await page.evaluate(() => {
     const app = (window as unknown as { app?: { api?: { clientId?: string } } }).app;
@@ -33,22 +25,25 @@ test("cloud overlay visible during cloud run", { timeout: 300000 }, async ({ pag
   console.log("submit:", JSON.stringify(submit).slice(0, 120));
   expect(submit.status).toBe(200);
 
-  // 等悬浮组件轮询周期（3s）+ 缓冲
-  await page.waitForTimeout(6000);
-  const during = await page.evaluate(() => {
-    const p = document.getElementById("cb-cloud-overlay");
-    if (!p) return { exists: false };
-    return {
-      exists: true,
-      visible: p.style.display !== "none",
-      text: p.innerText.replace(/\n/g, " | ").slice(0, 150),
-    };
-  });
-  console.log("during overlay:", JSON.stringify(during));
-  await page.screenshot({ path: `${OUT}/v2-overlay-running.png` });
-  expect(during.visible).toBe(true);
+  // 轮询悬浮组件文本，等出现 progress 条（最长 90s）
+  let sawProgress = false;
+  for (let i = 0; i < 18; i++) {
+    await page.waitForTimeout(5000);
+    const info = await page.evaluate(() => {
+      const p = document.getElementById("cb-cloud-overlay");
+      if (!p) return { exists: false };
+      return { exists: true, visible: p.style.display !== "none", text: p.innerText.replace(/\n/g, " | ") };
+    });
+    console.log(`t+${(i+1)*5}s:`, JSON.stringify(info).slice(0, 250));
+    if (info.exists && info.text && info.text.includes("%")) {
+      sawProgress = true;
+      await page.screenshot({ path: `${OUT}/w2-overlay-progress.png` });
+      break;
+    }
+  }
+  expect(sawProgress).toBe(true);
 
-  // 等任务完成
+  // 等任务结束，确认悬浮隐藏
   for (let i = 0; i < 8; i++) {
     await page.waitForTimeout(25000);
     const q = await page.evaluate(async () => (await (await fetch("/queue")).json()));
@@ -56,11 +51,11 @@ test("cloud overlay visible during cloud run", { timeout: 300000 }, async ({ pag
     if (q.queue_running.length === 0) {
       const after = await page.evaluate(() => {
         const p = document.getElementById("cb-cloud-overlay");
-        return p ? { visible: p.style.display !== "none" } : { exists: false };
+        return p ? p.style.display !== "none" : false;
       });
-      console.log("after overlay:", JSON.stringify(after));
-      await page.screenshot({ path: `${OUT}/v3-overlay-done.png` });
-      expect(after.visible).toBe(false);
+      console.log("after hidden:", !after);
+      await page.screenshot({ path: `${OUT}/w3-done.png` });
+      expect(after).toBe(false);
       break;
     }
   }

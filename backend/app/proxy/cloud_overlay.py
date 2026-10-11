@@ -27,6 +27,37 @@ OVERLAY_SCRIPT = """
     var POLL_MS = 3000;
     var panel = null;
     var listEl = null;
+    var progressMap = {};   // prompt_id -> {v, m}（WS progress 事件）
+    var nodeMap = {};       // prompt_id -> 当前执行节点名
+
+    function connectWs() {
+      var app = window.app;
+      var clientId = app && app.api && app.api.clientId;
+      if (!clientId) { setTimeout(connectWs, 1500); return; }
+      var proto = location.protocol === "https:" ? "wss" : "ws";
+      var ws = new WebSocket(proto + "://" + location.host + "/ws?clientId=" + encodeURIComponent(clientId));
+      ws.onmessage = function (ev) {
+        try {
+          var msg = JSON.parse(ev.data);
+          var d = msg.data || {};
+          if (!d.prompt_id) return;
+          if (msg.type === "progress") {
+            progressMap[d.prompt_id] = {
+              v: d.value || 0,
+              m: d.max || d.max_value || 0,
+            };
+          } else if (msg.type === "executing" && d.node) {
+            nodeMap[d.prompt_id] = String(d.node);
+          } else if (msg.type === "execution_success" || msg.type === "execution_error"
+                     || msg.type === "execution_interrupted") {
+            delete progressMap[d.prompt_id];
+            delete nodeMap[d.prompt_id];
+          }
+        } catch (e) {}
+      };
+      ws.onclose = function () { setTimeout(connectWs, 3000); };
+    }
+    connectWs();
 
     function ensurePanel() {
       if (panel) return panel;
@@ -70,14 +101,32 @@ OVERLAY_SCRIPT = """
       var p = ensurePanel();
       listEl.innerHTML = "";
       active.forEach(function (r) {
+        var pid = String(r.prompt_id);
         var row = document.createElement("div");
         row.style.cssText = "margin:4px 0;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.08);";
         var name = document.createElement("div");
-        name.textContent = (r.workflow_name || "Untitled") +
-          "  [" + (r.status === "running" ? "running " + fmtDuration(r.started_ms) : "queued") + "]";
+        var statusText = r.status === "running"
+          ? "running " + fmtDuration(r.started_ms)
+          : "queued";
+        name.textContent = (r.workflow_name || "Untitled") + "  [" + statusText + "]";
         name.style.cssText = "font-size:11px;opacity:0.85;";
+        var prog = progressMap[pid];
+        if (r.status === "running" && prog && prog.m > 0) {
+          var pct = Math.min(100, Math.round((prog.v / prog.m) * 100));
+          var barWrap = document.createElement("div");
+          barWrap.style.cssText = "background:rgba(255,255,255,0.12);border-radius:3px;height:6px;margin:4px 0;overflow:hidden;";
+          var bar = document.createElement("div");
+          bar.style.cssText = "background:#4f8ef7;height:100%;width:" + pct + "%;transition:width 0.4s;";
+          barWrap.appendChild(bar);
+          row.appendChild(barWrap);
+          var nodeLine = document.createElement("div");
+          nodeLine.textContent = pct + "%  (" + prog.v + "/" + prog.m + ")" +
+            (nodeMap[pid] ? "  node " + nodeMap[pid] : "");
+          nodeLine.style.cssText = "font-size:10px;opacity:0.7;font-family:monospace;";
+          row.appendChild(nodeLine);
+        }
         var id = document.createElement("div");
-        id.textContent = String(r.prompt_id).slice(0, 8) + "..." +
+        id.textContent = pid.slice(0, 8) + "..." +
           (r.model_name ? "  " + r.model_name : "");
         id.style.cssText = "font-size:10px;opacity:0.6;font-family:monospace;";
         row.appendChild(name);
