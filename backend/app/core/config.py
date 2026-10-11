@@ -78,6 +78,9 @@ class BridgeConfig(BaseModel):
     # 提交前预校验（M3-5 余项）：off=不校验（默认，历史行为）/ strict=拦截 / ask=拦截+可操作选项 /
     # auto=缺模型且本地有副本时自动上传云端卷后放行（缺节点仍拦截）。未知取值按 off。
     preflight: str = "off"
+    # 云端提交前隐私确认（P2-5）：首次把工作流分流到 Modal 时返回一次数据边界说明，
+    # 调用方带 X-Bridge-Privacy-Confirmed: 1 重试放行；关闭后不再拦截（可在设置页撤销）。
+    privacy_confirm: bool = True
     # /object_info 两端合并策略：
     # - local-first（默认）：同名 class_type 完全使用本地 schema，只追加云端独有节点 + 云端模型名；
     # - union：同名 class_type 保留本地 schema，但把云端独有的模型组合项并入本地 schema；

@@ -6,11 +6,12 @@ from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from fastapi import Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from starlette.background import BackgroundTask
 
 from ..core.config import get_settings
 from ..core.constants import HOP_BY_HOP_HEADERS
+from . import privacy
 
 _client: httpx.AsyncClient | None = None
 
@@ -51,7 +52,7 @@ def _upstream_url(request: Request) -> str:
     return f"{base}{request.url.path}{query}"
 
 
-async def forward_request(request: Request) -> StreamingResponse:
+async def forward_request(request: Request) -> Response:
     """按原 method/headers/body 转发到本地 ComfyUI，响应流式透传。"""
     upstream_authority = urlsplit(get_settings().local.comfy_url).netloc
     headers = []
@@ -79,6 +80,33 @@ async def forward_request(request: Request) -> StreamingResponse:
     resp_headers = {
         k: v for k, v in upstream_resp.headers.items() if k.lower() not in HOP_BY_HOP_HEADERS
     }
+
+    # ComfyUI 根页面注入一次性隐私确认脚本（P2-5）；其余响应仍流式透传，
+    # 不影响 SSE / 大文件。仅在开关开启且响应确为 HTML 时读取整体。
+    content_type = upstream_resp.headers.get("content-type", "")
+    if (
+        privacy.enabled()
+        and "text/html" in content_type.lower()
+        and request.method in {"GET", "HEAD"}
+        and request.url.path in {"/", "/index.html", "/api/"}
+    ):
+        body = await upstream_resp.aread()
+        await upstream_resp.aclose()
+        text = body.decode("utf-8", errors="replace")
+        marker = "</body>"
+        script = privacy.INJECT_SCRIPT
+        if marker in text:
+            text = text.replace(marker, script + marker, 1)
+        else:
+            text += script
+        resp_headers.pop("content-length", None)
+        return Response(
+            content=text.encode("utf-8"),
+            status_code=upstream_resp.status_code,
+            headers=resp_headers,
+            media_type="text/html",
+        )
+
     return StreamingResponse(
         upstream_resp.aiter_raw(),
         status_code=upstream_resp.status_code,

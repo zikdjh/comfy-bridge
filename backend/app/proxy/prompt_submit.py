@@ -25,6 +25,7 @@ from ..runner import client as runner_client
 from ..runner import console as runner_console
 from ..runner import executor
 from . import precheck
+from . import privacy as privacy_gate
 from .passthrough import get_upstream_client
 
 
@@ -83,6 +84,13 @@ async def handle_prompt_submit(request: Request) -> Response:
         presence=node_presence.snapshot(),
         cloud_active=await store.acount_active_modal(),  # 并发护栏计数（本请求尚未入库，不含自身）
     )
+
+    # 提交前隐私确认（P2-5）：首次把工作流分流到 Modal 时先返回数据边界说明，
+    # 调用方带确认头重试放行。放在落库/改写 prompt_id 之前，避免把确认拦截记成执行。
+    privacy = privacy_gate.challenge(request)
+    if decision.final_backend == "modal" and privacy is not None:
+        return JSONResponse(status_code=409, content=privacy)
+
     if decision.backend == "modal" and budget.get("exceeded"):
         # 超限告警：护栏已把请求拉回本地/拒绝，控制台与 trace 双留痕（M4-1「并通知」）
         runner_console.log(f"[预算护栏] {decision.fallback}", "warning")
