@@ -184,6 +184,21 @@ function ReconCard() {
           description={recon.modal.error}
         />
       )}
+      {recon?.diverged && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message={`GPU 计量 ÷ 本地估算 = ${recon.ratio_gpu_vs_est?.toFixed(2)}，已偏离合理区间`}
+          description={
+            <>
+              {recon.divergence_message}
+              <br />
+              这是本地估算与实际计费的校准提示；账户级消费上限请以 Modal 平台预算/告警设置为准。
+            </>
+          }
+        />
+      )}
       {recon && (
         <>
           <Space size={40} wrap style={{ marginBottom: 12 }}>

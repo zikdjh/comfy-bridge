@@ -26,6 +26,16 @@ NOTE = (
     f"{modal_billing.GPU_TYPE} 资源的真实计量；日界为 UTC（Modal 账单口径），与控制台逐日图（本地日界）最多差数小时。"
 )
 
+# 比例偏差告警阈值：Modal GPU 计量 / 本地估算 落在 [1/T, T] 之外即提醒校准单价。
+# 短期偏离属正常（冷启动等待、scaledown 保活窗口、并发复用计入方式不同），
+# 这里只做提示，不改配置、不拦截请求。
+RATIO_WARN_FACTOR = 1.5
+DIVERGENCE_MESSAGE = (
+    "Modal GPU 计量与本地估算的比值持续偏离 1，请核对设置中的 GPU 单价"
+    "（gpu_hourly_rate_usd）与 Modal 实际价格；本地护栏只是估算，"
+    "不代表 Modal 账户消费上限。"
+)
+
 
 def validate_cycle(cycle: str) -> str:
     """cycle 必须是合法计费月 YYYY-MM，否则 422。"""
@@ -70,11 +80,18 @@ async def areconcile(cycle: str) -> dict:
     ]
     local_est = local_totals["est_cost_usd"]
     modal_gpu = modal_rep.get("gpu_usd") if modal_rep.get("ok") else None
+    ratio = round(modal_gpu / local_est, 3) if modal_gpu and local_est > 0 else None
+    diverged = ratio is not None and not (
+        1 / RATIO_WARN_FACTOR <= ratio <= RATIO_WARN_FACTOR
+    )
     return {
         "cycle": cycle,
         "local": local_totals,
         "modal": modal_rep,
         "daily": daily,
-        "ratio_gpu_vs_est": round(modal_gpu / local_est, 3) if modal_gpu and local_est > 0 else None,
+        "ratio_gpu_vs_est": ratio,
+        "ratio_warn_factor": RATIO_WARN_FACTOR,
+        "diverged": diverged,
+        "divergence_message": DIVERGENCE_MESSAGE if diverged else None,
         "note": NOTE,
     }

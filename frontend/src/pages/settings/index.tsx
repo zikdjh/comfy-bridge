@@ -488,7 +488,7 @@ export default function SettingsPage() {
                   type="info"
                   showIcon
                   style={{ maxWidth: 640 }}
-                  message="「云端不可用动作」「单次运行超时」与「月度预算护栏」均已生效：预算按本月云端估算花费（单价 × 请求墙钟秒数）判定，超限请求自动回落本地或拒绝；使用曲线与快捷设置见仪表盘「额度与成本」卡片。云端最大并发护栏已生效：在途云端任务（排队/执行中）达到上限时，按「云端不可用动作」回落本地或拒绝。"
+                  message="「云端不可用动作」「单次运行超时」与「月度预算护栏」均已生效：预算按本月云端估算花费（单价 × 请求墙钟秒数）判定，超限请求自动回落本地或拒绝；使用曲线与快捷设置见仪表盘「额度与成本」卡片。云端最大并发护栏已生效：在途云端任务（排队/执行中）达到上限时，按「云端不可用动作」回落本地或拒绝。注意：预算是 ComfyBridge 本地护栏，只约束经桥接器的请求，不是 Modal 账户级硬上限；请同时在 Modal 平台设置预算与消费告警。"
                 />
                 <Form
                   layout="vertical"
@@ -519,7 +519,7 @@ export default function SettingsPage() {
                   <Form.Item
                     label="月度预算上限（USD）"
                     name="monthlyBudgetUsd"
-                    extra="0 = 关闭护栏；本月云端估算花费达到上限时触发超限动作。Modal Starter 每月赠 $30 免费额度可作参考"
+                    extra="0 = 关闭护栏；本月云端估算花费达到上限时触发超限动作。这是本地估算护栏，不阻断绕过桥接器或 Modal 侧其他消费；账户级上限请在 Modal 平台设置。Modal Starter 每月赠 $30 免费额度可作参考"
                   >
                     <InputNumber min={0} step={5} prefix="$" style={{ width: 160 }} />
                   </Form.Item>

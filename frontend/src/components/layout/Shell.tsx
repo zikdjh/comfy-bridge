@@ -176,10 +176,10 @@ export function Shell() {
     <Tag color="processing">预算 ${budget.used_usd.toFixed(2)}/${budget.monthly_usd.toFixed(2)}</Tag>
   );
   const budgetTooltip = !budget?.enabled
-    ? "月度预算护栏未启用：在仪表盘「本月额度」卡片设置上限后，超限请求将自动回落本地或拒绝"
+    ? "月度预算护栏未启用：在仪表盘「本月额度」卡片设置上限后，超限请求将自动回落本地或拒绝。这是本地估算护栏，不是 Modal 账户级硬上限"
     : budget.exceeded
-      ? `本月云端估算 $${budget.used_usd.toFixed(2)} 已达上限 $${budget.monthly_usd.toFixed(2)}：新云端请求将${budget.on_exceed === "reject" ? "被拒绝" : "回落本地"}`
-      : `本月云端估算 $${budget.used_usd.toFixed(2)} / 上限 $${budget.monthly_usd.toFixed(2)}（估算 = GPU 单价 × 请求墙钟秒数）`;
+      ? `本月云端估算 $${budget.used_usd.toFixed(2)} 已达上限 $${budget.monthly_usd.toFixed(2)}：新云端请求将${budget.on_exceed === "reject" ? "被拒绝" : "回落本地"}。这是本地估算护栏，不是 Modal 账户级硬上限`
+      : `本月云端估算 $${budget.used_usd.toFixed(2)} / 上限 $${budget.monthly_usd.toFixed(2)}（估算 = GPU 单价 × 请求墙钟秒数；本地护栏，不是 Modal 账户级硬上限）`;
   const modalLine = cost?.modal?.ok
     ? `；Modal 账单本期消耗 $${(cost.modal.metered_cost_usd ?? 0).toFixed(2)}（UTC 月）`
     : "";

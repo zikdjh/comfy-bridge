@@ -111,6 +111,9 @@ export interface Reconciliation {
   };
   daily: ReconciliationDailyPoint[];
   ratio_gpu_vs_est: number | null; // Modal GPU ÷ 本地估算；持续偏离 1 说明单价需校准
+  ratio_warn_factor: number; // 比例告警阈值（1/factor ~ factor 之外告警）
+  diverged: boolean;
+  divergence_message: string | null;
   note: string;
 }
 

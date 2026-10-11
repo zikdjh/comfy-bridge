@@ -245,6 +245,7 @@ export default function DashboardPage() {
               ? `本月云端估算 $${budget.used_usd.toFixed(2)} 已达预算上限 $${budget.monthly_usd.toFixed(2)}，新请求将按「超预算动作 = 拒绝执行」被拦截`
               : `本月云端估算 $${budget.used_usd.toFixed(2)} 已达预算上限 $${budget.monthly_usd.toFixed(2)}，新云端请求将自动回落本地执行`
           }
+          description="这是 ComfyBridge 本地护栏，只约束经桥接器的请求，不是 Modal 账户级硬上限；账户级预算与消费告警请在 Modal 平台设置。"
           action={
             <Button size="small" danger onClick={() => {
               budgetForm.setFieldsValue({
