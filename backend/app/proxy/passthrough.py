@@ -11,6 +11,7 @@ from starlette.background import BackgroundTask
 
 from ..core.config import get_settings
 from ..core.constants import HOP_BY_HOP_HEADERS
+from . import cloud_overlay
 from . import privacy
 
 _client: httpx.AsyncClient | None = None
@@ -84,17 +85,22 @@ async def forward_request(request: Request) -> Response:
     # ComfyUI 根页面注入一次性隐私确认脚本（P2-5）；其余响应仍流式透传，
     # 不影响 SSE / 大文件。仅在开关开启且响应确为 HTML 时读取整体。
     content_type = upstream_resp.headers.get("content-type", "")
-    if (
-        privacy.enabled()
+    html_inject = (
+        (privacy.enabled() or cloud_overlay.enabled())
         and "text/html" in content_type.lower()
         and request.method in {"GET", "HEAD"}
         and request.url.path in {"/", "/index.html", "/api/"}
-    ):
+    )
+    if html_inject:
         body = await upstream_resp.aread()
         await upstream_resp.aclose()
         text = body.decode("utf-8", errors="replace")
         marker = "</body>"
-        script = privacy.INJECT_SCRIPT
+        script = ""
+        if privacy.enabled():
+            script += privacy.INJECT_SCRIPT
+        if cloud_overlay.enabled():
+            script += cloud_overlay.OVERLAY_SCRIPT
         if marker in text:
             text = text.replace(marker, script + marker, 1)
         else:
