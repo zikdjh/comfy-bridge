@@ -269,7 +269,7 @@ async def create_upload(
         raise ValueError("分块数量超出支持范围")
 
     upload_id = uuid.uuid4().hex[:12]
-    session = {
+    session: dict[str, Any] = {
         "id": upload_id,
         "filename": safe_name,
         "volume": vol,

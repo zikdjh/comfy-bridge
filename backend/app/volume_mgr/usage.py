@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from typing import Any
 
 from ..modal_volume import client as modal_cli
 from ..modal_volume.client import ModalCliError
@@ -89,7 +90,7 @@ async def _compute() -> None:
 
 
 async def _volume_usage(name: str, row: dict) -> dict:
-    entry = {
+    entry: dict[str, Any] = {
         "name": name,
         "created_at": str(row.get("created_at") or ""),
         "total_bytes": 0,

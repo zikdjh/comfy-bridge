@@ -38,7 +38,8 @@ async def routing_preview(body: dict) -> dict:
     预算护栏现状随决策一并求值：超限时 trace 会出现 budget_guardrail 步骤，
     与真实提交路径一致。
     """
-    prompt = body.get("prompt") if isinstance(body.get("prompt"), dict) else body
+    raw_prompt = body.get("prompt")
+    prompt = raw_prompt if isinstance(raw_prompt, dict) else body
     workflow_name = body.get("workflow_name")
     manual_backend = body.get("manual_backend") or body.get("x-bridge-backend")
     facts = classify_graph(prompt)

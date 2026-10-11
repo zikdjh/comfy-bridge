@@ -58,6 +58,12 @@ dev = [
 [tool.ruff]
 line-length = 100
 
+# mypy 存量已清零（P3-1 收尾），CI 按「零错误」门禁执行：
+# 只检查自身代码，第三方 SDK 缺失的类型存根不参与判定
+[tool.mypy]
+ignore_missing_imports = true
+files = ["app"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 pythonpath = ["."]

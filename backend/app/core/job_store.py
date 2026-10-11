@@ -14,6 +14,10 @@ import threading
 from collections.abc import Callable
 from typing import Any, Protocol, runtime_checkable
 
+# 协议的 ``list`` 方法在类体内会遮蔽内建 ``list``，注解统一走别名避免 mypy 误解析
+_JobList = list[Any]
+_JobIds = list[str]
+
 
 @runtime_checkable
 class JobStore(Protocol):
@@ -30,7 +34,7 @@ class JobStore(Protocol):
     def get(self, namespace: str, job_id: str) -> Any | None:
         ...
 
-    def list(self, namespace: str) -> list[Any]:
+    def list(self, namespace: str) -> _JobList:
         ...
 
     def save(self, namespace: str, job_id: str, job: Any) -> Any:
@@ -52,7 +56,7 @@ class JobStore(Protocol):
         is_running: Callable[[Any], bool],
         created_at: Callable[[Any], Any],
         include_running: bool = True,
-    ) -> list[str]:
+    ) -> _JobIds:
         """裁剪已结束记录，运行中的永不清理，返回被删 ID。
 
         ``include_running=True``（默认）：``keep`` 是记录总数上限
@@ -82,7 +86,7 @@ class InMemoryJobStore:
         with self._lock:
             return self._data.get(namespace, {}).get(job_id)
 
-    def list(self, namespace: str) -> list[Any]:
+    def list(self, namespace: str) -> _JobList:
         with self._lock:
             return list(self._data.get(namespace, {}).values())
 
@@ -103,7 +107,7 @@ class InMemoryJobStore:
         is_running: Callable[[Any], bool],
         created_at: Callable[[Any], Any],
         include_running: bool = True,
-    ) -> list[str]:
+    ) -> _JobIds:
         with self._lock:
             bucket = self._data.get(namespace, {})
             finished = [
@@ -130,7 +134,7 @@ class InMemoryJobStore:
             self._data.pop(namespace, None)
 
 
-_DEFAULT = InMemoryJobStore()
+_DEFAULT: JobStore = InMemoryJobStore()
 
 
 def default_store() -> JobStore:

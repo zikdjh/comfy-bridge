@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
+from typing import Any
 
 from ..core.job_store import default_store
 from ..events import publish
@@ -99,7 +100,7 @@ def _prune() -> None:
 def start_job(kind: str, label: str, total: int, runner, cancellable: bool = False) -> dict:
     """创建作业并 spawn runner；立即返回作业视图（调用方把它作为响应体）。"""
     job_id = uuid.uuid4().hex[:12]
-    job = {
+    job: dict[str, Any] = {
         "id": job_id,
         "kind": kind,
         "label": label,

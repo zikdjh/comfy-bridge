@@ -481,8 +481,9 @@ def precheck(nodes: list[dict], *, use_pip: bool = True, force: bool = False) ->
             "cached": False,
         }
     status, detail, log, cached = _pip_resolve(merged, force=force)
+    pip_conflicts: list[dict] = []
     if status == "blocked":
-        conflicts = [Conflict(
+        pip_conflicts = [Conflict(
             package="pip resolver",
             requirements=merged,
             reason=detail or "pip resolver 确认依赖冲突",
@@ -490,7 +491,7 @@ def precheck(nodes: list[dict], *, use_pip: bool = True, force: bool = False) ->
         ).to_dict()]
     return {
         "status": status,
-        "conflicts": conflicts,
+        "conflicts": pip_conflicts,
         "nodes": node_names,
         "merged_requirements": merged,
         "detail": detail,
