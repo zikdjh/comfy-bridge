@@ -29,6 +29,7 @@ from .proxy.object_info import handle_object_info
 from .proxy.passthrough import close_upstream_client, forward_request, get_upstream_client
 from .proxy.prompt_submit import handle_prompt_submit
 from .proxy.ws_relay import relay_local_ws
+from .runner import reconcile
 
 # 应用日志（uvicorn 自己的 access/error logger 不传播，不会重复）
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
@@ -45,11 +46,13 @@ async def lifespan(_: FastAPI):
     warm_presence = asyncio.create_task(_warm_node_presence())
     warm_backfill = asyncio.create_task(_warm_model_backfill())
     trash_cleanup = asyncio.create_task(_trash_cleanup_loop())
+    reconcile.start()
     yield
     warm.cancel()
     warm_presence.cancel()
     warm_backfill.cancel()
     trash_cleanup.cancel()
+    await reconcile.stop()
     await local_tracker.aclose()
     await close_upstream_client()
     close_db()

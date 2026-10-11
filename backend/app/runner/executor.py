@@ -135,6 +135,7 @@ async def _run(prompt_id: str, payload: dict) -> None:
             f"[{prompt_id[:8]}] 云端已受理 modal_pid={state['modal_pid'][:8]}"
             f"（等待 {waited:.1f}s，含容器冷启动）"
         )
+        await store.aset_modal_pid(prompt_id, state["modal_pid"])
         await store.aupdate_status(prompt_id, "running")
         send_event(state["client_id"], {
             "type": "execution_start",
