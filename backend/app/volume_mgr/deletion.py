@@ -49,7 +49,9 @@ def model_refs(prompt: dict | Any) -> set[str]:
     if not isinstance(prompt, dict):
         return set()
     refs: set[str] = set()
-    nodes = prompt.get("nodes") if isinstance(prompt.get("nodes"), list) else prompt.values()
+    nodes = prompt.get("nodes")
+    if not isinstance(nodes, list):
+        nodes = list(prompt.values())
     for node in nodes:
         if not isinstance(node, dict):
             continue

@@ -13,6 +13,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 GRAPH_DIR = DATA_DIR / "graphs"
@@ -124,7 +125,7 @@ def insert_request(record: dict) -> int:
             record,
         )
         conn.commit()
-        return int(cur.lastrowid)
+        return int(cur.lastrowid or 0)
 
 
 def update_status(prompt_id: str, status: str, error: str | None = None) -> None:
@@ -334,7 +335,8 @@ def set_model_name(req_id: int, model_name: str | None) -> None:
 
 def list_requests(limit: int = 50, backend: str | None = None, status: str | None = None) -> list[dict]:
     sql = "SELECT * FROM requests"
-    conds, params = [], []
+    conds: list[str] = []
+    params: list[Any] = []
     if backend and backend != "all":
         conds.append("backend = ?")
         params.append(backend)
@@ -353,7 +355,8 @@ def list_requests(limit: int = 50, backend: str | None = None, status: str | Non
 def count_requests(backend: str | None = None, status: str | None = None) -> int:
     """过滤条件下的请求总数（/requests 的 total 用；list_requests 受 limit 截断）。"""
     sql = "SELECT COUNT(*) FROM requests"
-    conds, params = [], []
+    conds: list[str] = []
+    params: list[Any] = []
     if backend and backend != "all":
         conds.append("backend = ?")
         params.append(backend)

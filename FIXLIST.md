@@ -978,3 +978,20 @@ Redis / PostgreSQL 时重写每个业务模块。
 - **口径统一**：路线图/FIXLIST 只记录完成度与偏差，架构与验收标准留在计划书
   §6–§7，减少多处并存造成的过期描述。
 - **验证**：`git diff --check` 干净；本轮仅 Markdown 变更，不涉及运行时代码。
+
+## 三十二、P3-1 收尾：mypy 门禁接入（2026-10-11）
+
+P3-1 遗留的「mypy 尚未形成发布门禁」项闭环。
+
+- **配置固化**：`backend/pyproject.toml` 新增 `[tool.mypy]`（`ignore_missing_imports`
+  + `files = ["app"]`），CI 在 Pytest 后新增 `uv run mypy`，任何错误即失败。
+- **存量清零**：40 条错误逐类处理——Protocol 内 `list` 同名方法遮蔽改用模块级类型
+  别名；`Any` 容器补显式注解（usage / jobs / uploader / nodes / volume / launch /
+  manager_api / logs）；`AppConfig(**merged)` 与 `AppConfig(local=..., bridge=..., modal=...)`
+  改走 `model_validate`；`precheck` / `routing` 的联合类型收窄；`resolve.precheck`
+  的 pip 冲突结果改用局部变量避免与静态冲突表混淆。
+- **真实缺陷修复**：`cost/modal_billing.py` 的 `parse_report` 在 CLI 返回非列表时
+  执行 `{...}[:300]`，会抛 `TypeError` 而不是返回 `ok=false`；改为直接返回错误体。
+- **验证**：`mypy`（`app` 81 文件）0 错误；`ruff check .` 0 违规；后端全量
+  `340 passed, 9 skipped`；定向 `test_cost` / `test_job_store` / `test_sync_jobs`
+  合计 43 passed。

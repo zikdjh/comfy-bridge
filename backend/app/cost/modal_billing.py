@@ -132,7 +132,7 @@ def parse_report(raw: bytes) -> dict:
     except (ValueError, UnicodeDecodeError) as exc:
         return {"ok": False, "error": f"账单明细 CLI 输出解析失败: {exc}"[:300]}
     if not isinstance(rows, list):
-        return {"ok": False, "error": "账单明细 CLI 返回异常数据"}[:300]
+        return {"ok": False, "error": "账单明细 CLI 返回异常数据"}
 
     def f(text) -> float:
         try:

@@ -32,6 +32,8 @@ jobs:
           exit 0
       - name: Pytest
         run: uv run pytest -q
+      - name: Mypy（存量已清零，任何错误即失败）
+        run: uv run mypy
 
   # 前端全栈 e2e：构建嵌入产物 → webServer 拉起隔离后端（CB_CONFIG_DIR 离线空态）
   # → Playwright（系统 Edge）跑核心链路

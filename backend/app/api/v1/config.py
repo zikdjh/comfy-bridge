@@ -148,7 +148,7 @@ async def write_config(body: ConfigBody) -> dict:
         "modal": _merge_modal(current.modal.model_dump(), body.modal or {}),
     }
     try:
-        clean = AppConfig(**merged)
+        clean = AppConfig.model_validate(merged)
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=f"配置校验失败: {exc.errors()[:3]}")
 

@@ -29,6 +29,7 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -138,7 +139,13 @@ async def list_dir(
 ) -> dict:
     rel = _safe_rel(path)
     vol = _volume_or_default(volume)
-    view = {"ok": False, "error": None, "path": rel, "volume": vol, "entries": []}
+    view: dict[str, Any] = {
+        "ok": False,
+        "error": None,
+        "path": rel,
+        "volume": vol,
+        "entries": [],
+    }
     if not modal_configured():
         view["error"] = "未配置 Modal 凭证（设置 → Modal）"
         return view
@@ -167,32 +174,32 @@ async def delete_paths(body: PathsBody) -> dict:
     vol = _volume_or_default(body.volume)
     if body.dry_run:
         # 删除预览：只做引用扫描；目录内容守卫仍按真实状态检查。
-        results: list[dict] = []
+        preview: list[dict] = []
         for raw in body.paths:
             try:
                 rel = _safe_rel(raw)
             except HTTPException as exc:
-                results.append({"path": raw, "ok": False, "error": str(exc.detail)})
+                preview.append({"path": raw, "ok": False, "error": str(exc.detail)})
                 continue
             if not rel:
-                results.append({"path": raw, "ok": False, "error": "不能删除卷根目录"})
+                preview.append({"path": raw, "ok": False, "error": "不能删除卷根目录"})
                 continue
             try:
                 kind = await _entry_kind(vol, rel)
             except ModalCliError as exc:
-                results.append({"path": rel, "ok": False, "error": str(exc)})
+                preview.append({"path": rel, "ok": False, "error": str(exc)})
                 continue
             reference = await asyncio.to_thread(deletion.inspect_references, rel)
-            results.append({
+            preview.append({
                 "path": rel,
                 "ok": True,
                 "kind": kind,
                 "reference": reference,
             })
         return {
-            "ok": all(r["ok"] for r in results),
+            "ok": all(r["ok"] for r in preview),
             "dry_run": True,
-            "results": results,
+            "results": preview,
         }
 
     results: list[dict] = []

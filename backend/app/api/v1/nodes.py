@@ -35,6 +35,7 @@ import shutil
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -202,7 +203,7 @@ def _safe_name(name: str) -> bool:
 
 async def _cloud_listing() -> dict:
     """数据卷 custom_nodes/ 的一层清单；目录不存在（新卷/容器未启动过）视为空。"""
-    view = {
+    view: dict[str, Any] = {
         "ok": False,
         "error": None,
         "volume": volume_cli.volume_name(),
