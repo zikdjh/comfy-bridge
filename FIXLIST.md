@@ -995,3 +995,22 @@ P3-1 遗留的「mypy 尚未形成发布门禁」项闭环。
 - **验证**：`mypy`（`app` 81 文件）0 错误；`ruff check .` 0 违规；后端全量
   `340 passed, 9 skipped`；定向 `test_cost` / `test_job_store` / `test_sync_jobs`
   合计 43 passed。
+
+## 三十三、Playwright 失败现场上传实测（2026-10-11）
+
+发布验收清单最后一项可在无 Modal 环境下闭环的条目：确认 CI 的
+`上传失败现场` 真的能把可定位的产物交出来。
+
+- **做法**：临时分支 `test/e2e-artifact-verify` 加一个故意失败的探针用例，
+  `workflow_dispatch` 触发 CI（[run 38104366159](https://github.com/zikdjh/comfy-bridge/actions/runs/38104366159)）。
+  `e2e` job 按预期失败，`if: failure()` 的 `上传失败现场` 步骤执行成功；
+  `backend-tests` 不受影响仍全绿。
+- **下载与定位**：`gh run download 38104366159 -n playwright-artifacts` 取回现场。
+  因为 CI 上 `retries: 1`，共两份：`...-intentional-failure/` 与 `...-retry1/`。
+  每份含 `error-context.md`（失败用例名、文件位置、期望/实际值、页面快照、
+  控制台与网络摘要）、`test-failed-1.png` 与 `trace.zip`（内含 DOM 快照、网络
+  与 screencast，可 `playwright show-trace` 打开）。
+- **本地一致性**：同一探针在本机跑也产出同样三类文件，确认失败现场行为在本地
+  与 CI 一致。
+- **清理**：探针文件、`tmp/artifact-verify`、`frontend/test-results` 与远端临时
+  分支均已删除；`develop` 未受影响。
