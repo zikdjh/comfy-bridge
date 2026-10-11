@@ -5,6 +5,7 @@
 
 - 管理线（范围/排期/风险/验收）：`docs/ComfyBridge项目计划书.html`
 - 技术线（架构/核心设计/API/目录）：`docs/ComfyUI-Modal桥接器项目规划.html`
+- 缺陷与修复入口：`docs/真机验收缺陷清单.md`（真机验收残留项登记）
 - 速查：`docs/ComfyUI启动命令与参数参考.html`、`docs/Modal云平台与SDK参考.html`
 
 ## 目录
@@ -206,6 +207,9 @@ M0 技术验证收尾 → M1 MVP 桥接 → M2 同步引擎 → M3 模型卷管�
 
 **最近变更**
 
+- 真机验收（本地 v0.39.2 ↔ 云端 pin 不同）：修掉 modal CLI 编码崩溃、热容器
+  volume 快照读不到新输入、纯 HTTP 无终态、WS 泵阻塞导致中断失效四处缺陷，
+  版本对齐与节点同步实测通过；详见 `docs/真机验收缺陷清单.md` 与 `FIXLIST.md` §三十四。
 - P2-1 管理面鉴权边界（Origin + 审计日志 + 反代文档）。
 - P3-1 ruff 与 mypy 存量清零，CI 改为零违规、零类型错误门禁。
 - P2-2 作业状态存储接缝（`app/core/job_store.py`）与单实例边界文档。
