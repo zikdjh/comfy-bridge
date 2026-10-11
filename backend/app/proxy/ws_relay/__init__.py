@@ -105,6 +105,31 @@ def _tap_event(raw: str) -> None:
         logger.debug("ws event tap failed", exc_info=True)
 
 
+async def _rewrite_status_queue_remaining(raw: str) -> str | None:
+    """把本地 status 事件的 queue_remaining 重写为「本地 + 在途云端」合成值。
+
+    ComfyUI 前端的状态指示（Loading 环形进度、Queue 提示条）由 status 事件的
+    queue_remaining 驱动。不重写时浏览器只看到本地队列数，看不到在途云端任务。
+    """
+    try:
+        event = json.loads(raw)
+    except ValueError:
+        return None
+    if event.get("type") != "status":
+        return None
+    data = event.get("data") or {}
+    status = data.get("status") or {}
+    if not isinstance(status, dict):
+        return None
+    local_remaining = status.get("queue_remaining") or 0
+    cloud_rows = await store.alist_active()
+    cloud_count = sum(1 for r in cloud_rows if r.get("final_backend") == "modal")
+    if cloud_count == 0:
+        return None  # 无云端任务，原样透传（不改动本地事件）
+    status["queue_remaining"] = local_remaining + cloud_count
+    return json.dumps(event, ensure_ascii=False)
+
+
 async def relay_local_ws(browser_ws: WebSocket) -> None:
     await browser_ws.accept()
     client_id = _client_id_of(browser_ws)
@@ -132,7 +157,8 @@ async def relay_local_ws(browser_ws: WebSocket) -> None:
         async for raw in upstream:
             if isinstance(raw, str):
                 _tap_event(raw)
-                await browser_ws.send_text(raw)
+                rewritten = await _rewrite_status_queue_remaining(raw)
+                await browser_ws.send_text(rewritten if rewritten is not None else raw)
             else:
                 await browser_ws.send_bytes(raw)
 

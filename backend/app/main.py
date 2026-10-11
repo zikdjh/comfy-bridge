@@ -13,6 +13,8 @@
 """
 
 import asyncio
+import contextlib
+import json
 import logging
 from contextlib import asynccontextmanager
 
@@ -22,6 +24,7 @@ from starlette.websockets import WebSocket
 from .api.v1 import api_router
 from .core.management_auth import install_management_auth
 from .gui_static import mount_gui
+from .logs import store as logs_store
 from .logs.store import close_db, close_stale_pending, init_db
 from .models_mgr import cloud_index
 from .proxy import local_tracker
@@ -152,6 +155,40 @@ async def object_info_all(request: Request) -> Response:
 @app.get("/api/object_info/{node_type}", include_in_schema=False)
 async def object_info_node(request: Request, node_type: str) -> Response:
     return await handle_object_info(request, node_type)
+
+
+# 队列合成：本地 ComfyUI /queue + 在途云端任务（queued/running）。ComfyUI 前端的
+# 队列面板（Running / Queue Pending 区块）由该端点驱动；不合成时用户在浏览器上
+# 看不到已提交给云端执行器的任务（它们不占用本地队列）。
+@app.get("/queue", include_in_schema=False)
+@app.get("/api/queue", include_in_schema=False)
+async def synthetic_queue(request: Request) -> Response:
+    local = await forward_request(request)
+    running_local: list = []
+    pending_local: list = []
+    if local.status_code == 200:
+        with contextlib.suppress(Exception):
+            data = json.loads(local.body)
+            running_local = list(data.get("queue_running") or [])
+            pending_local = list(data.get("queue_pending") or [])
+    cloud_rows = [r for r in await logs_store.alist_active() if r.get("final_backend") == "modal"]
+    cloud_running = [
+        [r["prompt_id"], r["prompt_id"], None, r.get("client_id") or "", None, None, r.get("model_name") or ""]
+        for r in cloud_rows
+        if r.get("status") == "running"
+    ]
+    cloud_pending = [
+        [r["prompt_id"], r["prompt_id"], None, r.get("client_id") or "", None, None, r.get("model_name") or ""]
+        for r in cloud_rows
+        if r.get("status") == "queued"
+    ]
+    return Response(
+        content=json.dumps({
+            "queue_running": running_local + cloud_running,
+            "queue_pending": pending_local + cloud_pending,
+        }, ensure_ascii=False).encode(),
+        media_type="application/json",
+    )
 
 
 # 其余端点（含静态前端资源、/history、/view、/upload 等）原样透传本地 ComfyUI
