@@ -18,6 +18,10 @@ launch_command = []
 
 [bridge]
 listen = "127.0.0.1:8189"          # 桥接器监听地址（仅本机）
+# 管理面鉴权与部署边界（P0-5/P2-1）：令牌经环境变量 CB_MANAGEMENT_TOKEN 或
+# <配置目录>/management_token 提供，不写入本文件；非回环监听缺令牌会拒绝启动。
+# 配置令牌后：/api/v1（health 除外）与 /bridge 需认证；跨站 Origin 默认 403，
+# 可信前端域名经 CB_ALLOWED_ORIGINS 白名单；写操作与被拒请求落 <配置目录>/audit.log。
 default_backend = "local"          # 路由兜底后端：local | modal
 video_backend = "modal"            # 视频类输出节点请求的后端：local | modal
 large_side_pixels = 0              # 大分辨率上云阈值（图最大边 px；0 = 关闭）

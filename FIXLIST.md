@@ -894,4 +894,22 @@ executed/无图，媒体库不落盘。自 M1 起每次真实云端生成均命�
 - **其余**：SIM102（嵌套 if 合并）、SIM103（直接返回布尔）、C408（dict() 改字面量）各就地
   修正；tests/regress_local_ws.py 的顺序阻塞 HTTP 标注 noqa: ASYNC210（手动脚本，非 pytest 模块）。
 - **收口**：.github/workflows/ci.yml 的 ruff 步骤从「基线 68」改为「任何违规即失败」；
-  `ruff check` 全仓 0 违规，`pytest -q` 307 passed / 9 skipped。
+  `ruff check` 全仓 0 违规，pytest -q 307 passed / 9 skipped。
+
+## 二十七、P2-1 管理面鉴权边界补全（2026-10-11）
+
+路线图第四轮第一项：P0-5 已给管理面加 Bearer/Basic 与监听保护，本项补齐 Origin 校验、
+审计日志与反向代理部署说明。
+
+- **Origin 校验（CSRF）**：`management_auth` 增加同源比对；跨站 `Origin` 的管理请求返回 403，
+  可信前端/反代域名经 `CB_ALLOWED_ORIGINS`（逗号分隔）白名单放行；无 Origin 的脚本请求仍受令牌约束。
+  反代场景读 `X-Forwarded-Proto` 参与同源判定。
+- **审计日志**：新增 `app/core/audit.py`，JSONL 落 `<配置目录>/audit.log`（`CB_AUDIT_LOG` /
+  `CB_AUDIT_LOG_PATH` 可覆盖），超 5MB 轮转 `.1`。写操作 + 所有 401/403 拒绝必记，成功的只读
+  GET/HEAD/OPTIONS 不记；只记方法/路径/状态码/客户端 IP（含 `X-Forwarded-For`）/Origin/认证方式/原因，
+  **不含 Authorization、token 与请求体**。写入失败只记 logger，绝不阻断请求。
+- **部署文档**：新增《反向代理与多用户部署》，覆盖管理面 vs 数据面边界、令牌配置与生成、
+  Origin 白名单、审计说明、Nginx 反代示例（Host/X-Forwarded-Proto/X-Forwarded-For 透传、SSE/WS 超时）
+  与部署前检查清单；README「管理面访问边界」与 `config.example.toml` 同步。
+- **验证**：`test_management_auth.py` 14 passed（含同源放行/跨站 403/白名单/无 Origin/无令牌跳过、
+  审计记录与脱敏、只读不记、默认随令牌开关）；后端全量 315 passed / 9 skipped；ruff 全仓 0 违规。
