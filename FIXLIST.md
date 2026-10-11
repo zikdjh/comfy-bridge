@@ -913,3 +913,22 @@ executed/无图，媒体库不落盘。自 M1 起每次真实云端生成均命�
   与部署前检查清单；README「管理面访问边界」与 `config.example.toml` 同步。
 - **验证**：`test_management_auth.py` 14 passed（含同源放行/跨站 403/白名单/无 Origin/无令牌跳过、
   审计记录与脱敏、只读不记、默认随令牌开关）；后端全量 315 passed / 9 skipped；ruff 全仓 0 违规。
+
+## 二十八、P2-2 单实例边界与作业状态存储接缝（2026-10-11）
+
+路线图第四轮第二项：明确单实例边界，并把作业状态持久化抽象出来，避免未来迁移
+Redis / PostgreSQL 时重写每个业务模块。
+
+- **默认内存实现**：新增 `app/core/job_store.py`，定义 `JobStore` 协议与线程安全的
+  `InMemoryJobStore`；提供 create/get/list/save/delete/prune/clear，修剪语义区分
+  「总数上限」（sync，运行中占容量）与「已完成数上限」（卷同步，运行中不占容量），
+  运行中记录永不清理；`set_default_store` 供测试替换。
+- **首批接入**：`app/sync/jobs.py`（同步任务注册表）与 `app/modal_volume/jobs.py`
+  （卷同步作业表）改经存储接缝读写；每次日志/进度/取消/终态变更都调用 `save`，
+  API 返回结构、事件名与前端契约不变；默认仍是进程内、重启清空。
+- **发布文档**：README 新增「单实例限制（P2-2）」；《反向代理与多用户部署》新增
+  「单实例边界」小节，明确同一配置目录 + 同一后端实例 + 单进程，列出多实例迁移
+  需要改的共享存储、事件流与文件类状态，并在检查清单补「不要对 `/api/v1` 负载均衡」。
+- **验证**：`test_job_store.py` 新增 8 项（存储语义 / 两种修剪口径 / 默认存储替换 /
+  按值保存模拟外部实现 / sync 接入），与 `test_sync_jobs.py` 合计 17 passed；
+  定向 ruff 0 违规。
