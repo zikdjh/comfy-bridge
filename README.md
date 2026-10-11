@@ -136,6 +136,19 @@ Set-Content -Path "$HOME\.comfybridge\management_token" -Value "<随机长令牌
 对外部署（反代、Origin 白名单、审计开关、边界检查清单）见
 [`docs/反向代理与多用户部署.md`](docs/反向代理与多用户部署.md)。
 
+### 单实例限制（P2-2）
+
+当前版本是**单机单实例**：同一配置目录、同一后端实例、单进程。请求日志与成本
+存本地 SQLite，作业状态（同步、卷上传下载、卷移动、镜像部署、本机扫描）存进程
+内存，后端重启后历史作业清空、在途记录会收尾为 cancelled。不要启动多个后端
+进程共享同一个 `CB_CONFIG_DIR` / `~/.comfybridge`，也不要对 `/api/v1` 做多实例
+负载均衡。
+
+需要多实例时，应先把状态迁到共享存储（PostgreSQL / Redis；事件流同理换
+Redis Pub/Sub），再考虑横向扩展。作业状态已抽出统一接缝
+`app/core/job_store.py`：`sync/jobs.py` 与 `modal_volume/jobs.py` 已改用
+`JobStore` 协议，未来替换 Redis / PostgreSQL 实现无需重写业务模块。
+
 ## 许可证
 
 ComfyBridge 采用 [MIT License](LICENSE)。
