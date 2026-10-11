@@ -6,6 +6,7 @@
 - ``CB_BRIDGE_URL``：桥接器管理面地址，默认 ``http://127.0.0.1:8189``。
 - ``CB_LIVE_MODAL=1``：允许执行会产生 Modal 费用的云端用例。
 - ``CB_LIVE_FIXTURE_JSON``：可选，自定义文生图工作流 JSON 文件路径。
+- ``CB_LIVE_LOCAL_FIXTURE_JSON``：可选，只在本地可运行的工作流路径（本地出图用例）。
 - ``CB_LIVE_INPUT_IMAGE``：可选，图生图输入文件名（相对本地 ComfyUI input/ 根）。
 - ``CB_LIVE_NO_OUTPUT_FIXTURE_JSON``：可选，无输出工作流 JSON 文件路径。
 - ``CB_LIVE_PROMPT_ID``：可选，复用已有请求做只读断言，不提交新任务。
@@ -43,6 +44,7 @@ class LiveEnv:
     bridge_url: str
     modal_enabled: bool
     fixture_path: Path | None
+    local_fixture_path: Path | None
     input_image: str | None
     no_output_fixture_path: Path | None
     prompt_id: str | None
@@ -62,6 +64,11 @@ def live_env() -> LiveEnv:
     if fixture_path is not None and not fixture_path.is_file():
         pytest.fail(f"CB_LIVE_FIXTURE_JSON 指向的文件不存在: {fixture_path}")
 
+    local_fixture = os.environ.get("CB_LIVE_LOCAL_FIXTURE_JSON", "").strip()
+    local_fixture_path = Path(local_fixture).expanduser().resolve() if local_fixture else None
+    if local_fixture_path is not None and not local_fixture_path.is_file():
+        pytest.fail(f"CB_LIVE_LOCAL_FIXTURE_JSON 指向的文件不存在: {local_fixture_path}")
+
     no_output_fixture = os.environ.get("CB_LIVE_NO_OUTPUT_FIXTURE_JSON", "").strip()
     no_output_fixture_path = (
         Path(no_output_fixture).expanduser().resolve() if no_output_fixture else None
@@ -73,6 +80,7 @@ def live_env() -> LiveEnv:
         bridge_url=bridge,
         modal_enabled=_env_flag("CB_LIVE_MODAL"),
         fixture_path=fixture_path,
+        local_fixture_path=local_fixture_path,
         input_image=os.environ.get("CB_LIVE_INPUT_IMAGE", "").strip() or None,
         no_output_fixture_path=no_output_fixture_path,
         prompt_id=os.environ.get("CB_LIVE_PROMPT_ID", "").strip() or None,
@@ -131,6 +139,19 @@ def load_fixture_prompt(live_env: LiveEnv) -> dict[str, Any]:
             }
         }
     }
+
+
+def load_local_fixture_prompt(live_env: LiveEnv) -> dict[str, Any]:
+    """读取只在本地可运行的工作流；未提供时返回 {} 供用例 skip。"""
+    if live_env.local_fixture_path is None:
+        return {}
+    try:
+        data = json.loads(live_env.local_fixture_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        pytest.fail(f"读取 CB_LIVE_LOCAL_FIXTURE_JSON 失败: {exc}")
+    if not isinstance(data, dict) or not isinstance(data.get("prompt"), dict) or not data["prompt"]:
+        pytest.fail("CB_LIVE_LOCAL_FIXTURE_JSON 必须是含非空 prompt 字典的 API 工作流")
+    return data
 
 
 def load_no_output_fixture_prompt(live_env: LiveEnv) -> dict[str, Any]:

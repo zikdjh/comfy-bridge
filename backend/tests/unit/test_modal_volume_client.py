@@ -108,3 +108,35 @@ def test_read_only_command_detection():
     assert not modal_cli._is_read_only(("app", "shell", "app-name"))
     assert not modal_cli._is_read_only(("image", "rm", "img"))
     assert not modal_cli._is_read_only(("billing",))
+
+
+def test_cli_env_forces_utf8_cli_output(monkeypatch):
+    """Windows 中文控制台默认 GBK：CLI 成功路径打印 ✓/🔨 会以非零码退出，必须强制 UTF-8。"""
+    monkeypatch.setenv("PYTHONUTF8", "0")
+    monkeypatch.setenv("PYTHONIOENCODING", "gbk")
+    env = modal_cli.cli_env({"EXTRA": "1"})
+    assert env["PYTHONUTF8"] == "1"
+    assert env["PYTHONIOENCODING"] == "utf-8"
+    assert env["PYTHONWARNINGS"] == "ignore"
+    assert env["EXTRA"] == "1"
+
+
+def test_cli_env_layers_credentials_below_extra(monkeypatch):
+    monkeypatch.setattr(modal_cli, "auth_env", lambda: {"MODAL_TOKEN_ID": "ak-test"})
+    env = modal_cli.cli_env({"MODAL_TOKEN_ID": "override"})
+    assert env["MODAL_TOKEN_ID"] == "override"
+    assert modal_cli.cli_env()["MODAL_TOKEN_ID"] == "ak-test"
+
+
+def test_popen_builds_cli_env(monkeypatch):
+    captured: dict = {}
+
+    def fake_popen(args, **kwargs):
+        captured["args"] = args
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(modal_cli.subprocess, "Popen", fake_popen)
+    modal_cli._popen("volume", "ls", "vol", "--json")
+    assert captured["env"]["PYTHONUTF8"] == "1"
+    assert captured["env"]["PYTHONIOENCODING"] == "utf-8"

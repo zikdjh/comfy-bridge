@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "generated_at": "2026-09-30T10:42:23.170662+00:00",
-  "comfyui_version": "v0.38.0",
+  "generated_at": "2026-10-11T03:54:43.655486+00:00",
+  "comfyui_version": "v0.39.2",
   "nodes": [
     {
       "name": "comfybridge-openai-image",

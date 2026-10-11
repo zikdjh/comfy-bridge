@@ -114,6 +114,33 @@ async def post_prompt(payload: dict) -> dict:
     return resp.json()
 
 
+async def post_input_file(
+    filename: str, data: bytes, *, subfolder: str = "", overwrite: bool = True
+) -> dict:
+    """把输入文件写进运行中容器的 input/ 目录（ComfyUI `/upload/image`）。
+
+    必须走容器内的 ComfyUI，而不是外部 `modal volume put`：Modal Volume 是快照
+    语义，外部写入对**已经在运行**的容器不可见（load 时报 Invalid image file），
+    而容器内写入立刻可见；文件随容器正常退出提交回卷，持久化语义不变。
+    ComfyUI 该端点只落原始字节，不做图片解码校验（校验发生在 LoadImage 节点），
+    因此对非图片输入同样适用。
+
+    subfolder 为 input/ 内的相对子目录（对应工作流里的 "sub/name.png"）。
+    """
+    url = web_url()
+    files = {"image": (filename, data, "application/octet-stream")}
+    form = {"type": "input", "overwrite": "true" if overwrite else "false"}
+    if subfolder:
+        form["subfolder"] = subfolder
+    async with _client() as cli:
+        resp = await cli.post(f"{url}/upload/image", files=files, data=form)
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"云端输入上传失败（HTTP {resp.status_code}）: {filename} {resp.text[:200]}"
+        )
+    return resp.json()
+
+
 async def get_history(prompt_id: str) -> dict | None:
     """拉取云端 /history/<pid> 条目；未入历史返回 None。
 

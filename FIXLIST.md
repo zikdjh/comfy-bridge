@@ -1014,3 +1014,85 @@ P3-1 遗留的「mypy 尚未形成发布门禁」项闭环。
   与 CI 一致。
 - **清理**：探针文件、`tmp/artifact-verify`、`frontend/test-results` 与远端临时
   分支均已删除；`develop` 未受影响。
+
+## 三十四、版本对齐/节点同步真机验收与四处真实缺陷修复（2026-10-11）
+
+在真实 Modal 上把「本地 vs 云端版本不同 → 对齐版本 + 同步节点」跑成实机验收，
+沿途修掉四处只有真机才暴露的缺陷。分支 `feature/live-verify-version-node-sync`。
+
+### 1. CLI 输出编码：`modal deploy` 成功却被判失败
+
+- **症状**：中文 Windows 上点「对齐云端并重建」，UI 报「部署失败，已回滚 pin」，
+  但镜像其实已构建完成；CLI 退出码为 1。
+- **根因**：CLI stdout 默认 GBK，成功路径打印 `✓ / 🔨 / 🎉` 触发 `UnicodeEncodeError`。
+- **修复**：`app/modal_volume/client.py` 新增 `cli_env()`（`PYTHONUTF8=1` /
+  `PYTHONIOENCODING=utf-8` / `PYTHONWARNINGS=ignore` + 凭证），
+  `nodes_mgr/deploy.py`、`cost/modal_billing.py` 统一改用；与调用方 `decode("utf-8")` 对称。
+- **验证**：同一台机器加该环境后 `modal deploy` 8 秒成功；
+  `test_modal_volume_client.py` 新增 3 项、`test_version_align.py` 新增 1 项。
+
+### 2. 版本对齐真机实测（本地 v0.39.2 ↔ 云端 pin v0.38.0）
+
+- 本地 ComfyUI 实为 **v0.39.2**（`/system_stats`），云端 `lock/comfyui_version.txt`
+  仍 pin 在 **v0.38.0**，`/nodes/version` 正确报出 drift。
+- UI 真实点击「对齐云端 → v0.39.2」→「开始重建」：`state=ok`、20 秒完成、
+  pin `v0.38.0 → v0.39.2`、history `outcome=ok duration_ms=16782`；
+  复核 `/nodes/version` 为 `drift=false`、`pinned=v0.39.2`。
+- 修复前那次失败留下的 `outcome=rolled_back`（100s）历史与修复后的 `ok` 形成对照。
+
+### 3. 节点同步真机实测
+
+- 用无依赖探针节点（`custom_nodes/comfybridge-sync-probe/__init__.py`）走 UI
+  「安装到云端」：对话框回「已同步 1 个节点到云端数据卷」，卷上出现
+  `custom_nodes/comfybridge-sync-probe`（4.0 KiB），矩阵 `missing_cloud → same`。
+- 「从云端移除」后矩阵回到 `missing_cloud`；本地探针与云端副本均已删除，
+  矩阵回到 `synced 2 / only_local 0 / only_cloud 0`。
+
+### 4. 图生图：热容器读不到 `modal volume put` 写入的输入
+
+- **症状**：云端图生图报 `node_errors.1: image - Invalid image file: <name>`，
+  而 `modal volume ls ... input` 里文件确实存在。
+- **根因**：Modal Volume 是**快照语义**，外部 `volume put` 对**已在运行**的容器不可见。
+  冷启动容器能读到（探针 `/view?type=input` 返回 200 / 394894 字节），热容器读不到。
+- **修复**：`runner/client.py` 新增 `post_input_file()`，走容器内 ComfyUI
+  `/upload/image`（该端点只落原始字节，不做图片解码校验）；`executor._upload_inputs`
+  优先走容器内通道，端点不可用时回落 `volume put`。
+- **A/B 实测**（同一个热容器 `ta-01M4MFEG…`、同一个从未上传过的输入名）：
+  旧代码 `FAILED … Invalid image file`；新代码 `1 passed`，日志
+  `输入已推送云端(comfy): bridge_live_input_v3.png`。另补 7 条单测。
+
+### 5. 本地请求终态：没有浏览器就永远停在 queued
+
+- **症状**：纯 HTTP 提交（脚本/集成测试）本地文生图，请求记录一直 `queued`，
+  即使图已写入 `output/`；状态只由浏览器 WS 中继回写。
+- **修复**：新增 `app/proxy/local_tracker.py`，受理成功后后台轮询 ComfyUI
+  `/history/<prompt_id>`（该端点只在任务结束才出现条目），把
+  `queued → running → done/error/cancelled` 收敛到记录；`main.py` 关停时释放客户端。
+  新增 live 用例 `test_local_text_to_image`（`CB_LIVE_LOCAL_FIXTURE_JSON`）与 8 条单测。
+- **实测**：本地真实出图（RTX 4060，v0.39.2）`done / final_backend=local`，
+  生成 `bridge_live_local_00002_.png`（388715 字节）。
+
+### 6. WS 泵阻塞 HTTP：中断请求从未送达，请求挂到 3600s
+
+- **症状**：中断用例请求一直 `running` 十分钟以上；容器日志显示该 prompt
+  在云端 **0.02 秒**就结束，但桥接器侧看不到终态。
+- **根因**：Modal `web_server` 在 WS 泵存活期间只处理该连接，其它 HTTP
+  （`/history`、`/queue`、`/interrupt`）排队直到其结束。云端提前中断且终态事件
+  未被广播（泵建立晚于广播）时，泵一直挂着 → `/history` 永远读超时 →
+  请求被挂到 `task_timeout=3600s`；`/interrupt` 同样排队读超时，
+  **中断从未真正送达**（日志只剩「云端 /interrupt 失败:」）。
+- **对照实验**：桥接器 WS 存活时 `GET /history/<pid>` → `ReadTimeout`；
+  停掉桥接器后同一条 `GET /history/<pid>` → **200 + 该中断条目**。
+- **修复**：`executor._track` 每 45 秒主动收泵一拍做权威 `/history` 判定，未终态再重挂；
+  `interrupt_all` 改为「先收泵 → 发 `/interrupt` → 跟踪循环稍后重挂」。
+- **验证**：中断用例改为换种子避免缓存命中并断言 `cancelled` → `1 passed`（11.27s，
+  记录 `status=cancelled duration_ms=8208`，日志 `POST /interrupt … 200 OK`）；
+  新增 3 条单测。
+
+### 本轮门禁与 live 记录
+
+- `ruff check app tests` 0 违规；`mypy app`（82 文件）0 错误；
+  后端全量 **362 passed, 10 deselected**。
+- 非付费预检 + 本地真实出图：`3 passed, 1 skipped`。
+- 云端付费：文生图 / 图生图 / 中断 / 断线兜底 / 无输出 **全部通过**
+  （`4 passed` 一波 + 图生图与中断各单独复验；无输出用例回传 0 文件仍合法 `done`）。

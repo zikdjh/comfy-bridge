@@ -24,6 +24,7 @@ from .core.management_auth import install_management_auth
 from .gui_static import mount_gui
 from .logs.store import close_db, close_stale_pending, init_db
 from .models_mgr import cloud_index
+from .proxy import local_tracker
 from .proxy.object_info import handle_object_info
 from .proxy.passthrough import close_upstream_client, forward_request, get_upstream_client
 from .proxy.prompt_submit import handle_prompt_submit
@@ -49,6 +50,7 @@ async def lifespan(_: FastAPI):
     warm_presence.cancel()
     warm_backfill.cancel()
     trash_cleanup.cancel()
+    await local_tracker.aclose()
     await close_upstream_client()
     close_db()
 
