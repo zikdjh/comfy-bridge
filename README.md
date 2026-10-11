@@ -6,6 +6,7 @@
 - 管理线（范围/排期/风险/验收）：`docs/ComfyBridge项目计划书.html`
 - 技术线（架构/核心设计/API/目录）：`docs/ComfyUI-Modal桥接器项目规划.html`
 - 缺陷与修复入口：`docs/真机验收缺陷清单.md`（真机验收残留项登记）
+- 测试计划：docs/第二轮完整测试计划.md（第二轮完整回归 + 性能压测执行清单）
 - 速查：`docs/ComfyUI启动命令与参数参考.html`、`docs/Modal云平台与SDK参考.html`
 
 ## 目录
