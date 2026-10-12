@@ -8,6 +8,7 @@ import { LaunchArgsPanel } from "./LaunchArgsPanel";
 import { ComfyScanModal } from "./ComfyScanModal";
 import { SettingsSyncTab } from "./SettingsSyncTab";
 import { ConfigWizard } from "./ConfigWizard";
+import AccountProfilesCard from "./AccountProfilesCard";
 
 export default function SettingsPage() {
   const { data: config, isLoading } = useConfig();
@@ -459,6 +460,7 @@ export default function SettingsPage() {
                     </Space>
                   </Form>
                 </Card>
+                <AccountProfilesCard />
                 <Card size="small" title="执行参数">
                   <Form
                     layout="vertical"

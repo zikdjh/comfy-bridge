@@ -13,9 +13,21 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ValidationError
 
-from ...core import comfy_scan
-from ...core.config import CONFIG_PATH, AppConfig, BridgeConfig, ModalConfig, get_settings
+from ...core import audit, comfy_scan
+from ...core.config import (
+    CONFIG_PATH,
+    AccountProfile,
+    AppConfig,
+    BridgeConfig,
+    ModalConfig,
+    get_settings,
+)
+from ...logs.store import count_active_modal
+from ...modal_volume import client as modal_cli
+from ...nodes_mgr import diff_cache
 from ...proxy import object_info as object_info_merge
+from ...runner import client as runner_client
+from ...volume_mgr import usage as volume_usage
 
 router = APIRouter(prefix="/config", tags=["config"])
 
@@ -43,6 +55,8 @@ def _modal_view(modal: ModalConfig) -> dict:
         # Runner 通道参数（非敏感，health 也回显 web_url）：配置向导步骤读取/写入
         "runner_enabled": modal.runner_enabled,
         "web_url": modal.web_url,
+        "app_name": modal.app_name,
+        "extra_launch_args": list(modal.extra_launch_args),
     }
 
 
@@ -54,6 +68,183 @@ def _view() -> dict:
         "bridge": settings.bridge.model_dump(),
         "modal": _modal_view(settings.modal),
     }
+
+
+# ---------------------------------------------------------------- 账号档案（多账号维护）
+
+def _accounts_active_name(modal: ModalConfig) -> str | None:
+    """活跃档案判定：token_id 与 [modal] 生效视图一致的档案（token_id 唯一保证无歧义）。"""
+    if not modal.token_id:
+        return None
+    return next((p.name for p in modal.accounts if p.token_id == modal.token_id), None)
+
+
+def _account_view(profile: AccountProfile, active_name: str | None) -> dict:
+    return {
+        "name": profile.name,
+        "token_id": profile.token_id,
+        "has_secret": bool(profile.token_secret),
+        "secret_masked": _mask_secret(profile.token_secret),
+        "environment": profile.environment,
+        "proxy_token_id": profile.proxy_token_id,
+        "has_proxy_secret": bool(profile.proxy_token_secret),
+        "proxy_secret_masked": _mask_secret(profile.proxy_token_secret),
+        "volume": profile.volume,
+        "app_name": profile.app_name,
+        "web_url": profile.web_url,
+        "task_timeout": profile.task_timeout,
+        "extra_launch_args": list(profile.extra_launch_args),
+        "active": profile.name == active_name,
+    }
+
+
+def _accounts_payload(modal: ModalConfig) -> dict:
+    active = _accounts_active_name(modal)
+    return {"accounts": [_account_view(p, active) for p in modal.accounts], "active": active}
+
+
+def _persist_settings(local, bridge, modal) -> None:
+    """整体写回 config.toml 并刷新进程内配置缓存。"""
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(
+        _dump_toml({
+            "local": local.model_dump(),
+            "bridge": bridge.model_dump(),
+            "modal": modal.model_dump(),
+        }),
+        encoding="utf-8",
+    )
+    get_settings.cache_clear()
+
+
+def _invalidate_account_caches() -> None:
+    """账号切换联动（docs/多账号维护设计.md §3.3/§3.4）：配置缓存由 _persist_settings 清。"""
+    object_info_merge.invalidate_merge_cache()
+    runner_client.invalidate_state()
+    volume_usage.invalidate_cache()
+    modal_cli.reset_runtime_state()
+    diff_cache.invalidate_all()
+
+
+class AccountUpsertBody(BaseModel):
+    name: str
+    token_id: str = ""
+    token_secret: str = ""       # 已存在档案留空 = 保留；新档案语义见 upsert_account
+    environment: str = ""
+    proxy_token_id: str = ""
+    proxy_token_secret: str = ""  # 同上
+    volume: str = "comfyui-data"
+    app_name: str = "comfyui-l40s"
+    web_url: str = ""
+    task_timeout: int = 3600
+    extra_launch_args: list[str] = []
+
+
+class AccountActivateBody(BaseModel):
+    force: bool = False
+
+
+@router.get("/accounts")
+async def list_accounts() -> dict:
+    return _accounts_payload(get_settings().modal)
+
+
+@router.put("/accounts")
+async def upsert_account(body: AccountUpsertBody) -> dict:
+    """新增或覆盖档案；同名 = 覆盖（轮换/更新语义），token_id 跨档案唯一（1 账号 = 1 份凭据）。"""
+    name = body.name.strip()
+    token_id = body.token_id.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="档案名称不能为空")
+    if not token_id:
+        raise HTTPException(status_code=422, detail="Token ID 不能为空")
+    settings = get_settings()
+    modal = settings.modal
+    existing = next((p for p in modal.accounts if p.name == name), None)
+    if any(p.token_id == token_id for p in modal.accounts if p.name != name):
+        raise HTTPException(status_code=409, detail=f"该 Token ID 已登记为其它账号档案（1 账号 = 1 份凭据）：{token_id}")
+    if existing is not None:
+        # 已存在档案：secret 留空 = 保留原值（覆盖更新不要求重复粘贴密钥）
+        token_secret = body.token_secret or existing.token_secret
+        proxy_secret = body.proxy_token_secret or existing.proxy_token_secret
+    elif token_id == modal.token_id:
+        # 新档案但 token 与当前活跃一致（「保存当前为档案」）：留空 = 沿用当前密钥
+        token_secret = body.token_secret or modal.token_secret
+        proxy_secret = body.proxy_token_secret or modal.proxy_token_secret
+    else:
+        if not body.token_secret:
+            raise HTTPException(status_code=422, detail="新档案必须填写 Token Secret（与当前 token 相同时可留空沿用）")
+        token_secret = body.token_secret
+        proxy_secret = body.proxy_token_secret
+    profile = AccountProfile(
+        name=name,
+        token_id=token_id,
+        token_secret=token_secret,
+        environment=body.environment.strip(),
+        proxy_token_id=body.proxy_token_id.strip(),
+        proxy_token_secret=proxy_secret,
+        volume=body.volume.strip() or "comfyui-data",
+        app_name=body.app_name.strip() or "comfyui-l40s",
+        web_url=body.web_url.strip(),
+        task_timeout=body.task_timeout,
+        extra_launch_args=list(body.extra_launch_args),
+    )
+    new_modal = modal.model_copy(update={
+        "accounts": [*(p for p in modal.accounts if p.name != name), profile],
+    })
+    _persist_settings(settings.local, settings.bridge, new_modal)
+    audit.record({"event": "account_profile_save", "name": name})
+    return _accounts_payload(new_modal)
+
+
+@router.delete("/accounts/{name}")
+async def delete_account(name: str) -> dict:
+    settings = get_settings()
+    modal = settings.modal
+    if not any(p.name == name for p in modal.accounts):
+        raise HTTPException(status_code=404, detail=f"账号档案不存在：{name}")
+    if _accounts_active_name(modal) == name:
+        raise HTTPException(status_code=409, detail="不能删除当前激活的账号档案（请先激活其它账号）")
+    new_modal = modal.model_copy(update={
+        "accounts": [p for p in modal.accounts if p.name != name],
+    })
+    _persist_settings(settings.local, settings.bridge, new_modal)
+    audit.record({"event": "account_profile_delete", "name": name})
+    return _accounts_payload(new_modal)
+
+
+@router.post("/accounts/{name}/activate")
+async def activate_account(name: str, body: AccountActivateBody | None = None) -> dict:
+    """激活档案：字段整体复制进 [modal] 生效视图 + 全量缓存失效（§4.3 流程）。"""
+    settings = get_settings()
+    modal = settings.modal
+    profile = next((p for p in modal.accounts if p.name == name), None)
+    if profile is None:
+        raise HTTPException(status_code=404, detail=f"账号档案不存在：{name}")
+    if _accounts_active_name(modal) == name:
+        return _accounts_payload(modal)
+    active_tasks = count_active_modal()
+    if active_tasks > 0 and not (body and body.force):
+        raise HTTPException(
+            status_code=409,
+            detail=f"存在 {active_tasks} 个在途云端任务，切换账号会导致结果无法采集；确认切换请携带 force=true",
+        )
+    new_modal = modal.model_copy(update={
+        "token_id": profile.token_id,
+        "token_secret": profile.token_secret,
+        "environment": profile.environment,
+        "proxy_token_id": profile.proxy_token_id,
+        "proxy_token_secret": profile.proxy_token_secret,
+        "volume": profile.volume,
+        "app_name": profile.app_name,
+        "web_url": profile.web_url,
+        "task_timeout": profile.task_timeout,
+        "extra_launch_args": list(profile.extra_launch_args),
+    })
+    _persist_settings(settings.local, settings.bridge, new_modal)
+    _invalidate_account_caches()
+    audit.record({"event": "account_activate", "name": name, "forced": bool(body and body.force)})
+    return {**_accounts_payload(new_modal), "modal": _modal_view(new_modal)}
 
 
 def _dump_toml(sections: dict[str, dict]) -> str:
