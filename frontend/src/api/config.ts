@@ -36,6 +36,8 @@ export interface ModalConfigDto {
   task_timeout: number;
   runner_enabled: boolean;
   web_url: string;
+  app_name: string;
+  extra_launch_args: string[];
 }
 
 export interface ConfigResponse {
@@ -71,6 +73,89 @@ export function useSaveConfig() {
     const updated = await apiSend<ConfigResponse>("/api/v1/config", "PUT", body);
     await qc.invalidateQueries({ queryKey: ["config"] });
     return updated;
+  };
+}
+
+/** 账号档案（多账号维护）：secret 只回显脱敏值 */
+export interface AccountProfileDto {
+  name: string;
+  token_id: string;
+  has_secret: boolean;
+  secret_masked: string;
+  environment: string;
+  proxy_token_id: string;
+  has_proxy_secret: boolean;
+  proxy_secret_masked: string;
+  volume: string;
+  app_name: string;
+  web_url: string;
+  task_timeout: number;
+  extra_launch_args: string[];
+  active: boolean;
+}
+
+export interface AccountsResponse {
+  accounts: AccountProfileDto[];
+  active: string | null;
+}
+
+export function useAccounts() {
+  return useQuery({
+    queryKey: ["config", "accounts"],
+    queryFn: ({ signal }) => apiGet<AccountsResponse>("/api/v1/config/accounts", signal),
+  });
+}
+
+export interface AccountSaveInput {
+  name: string;
+  token_id?: string;
+  token_secret?: string;
+  environment?: string;
+  proxy_token_id?: string;
+  proxy_token_secret?: string;
+  volume?: string;
+  app_name?: string;
+  web_url?: string;
+  task_timeout?: number;
+  extra_launch_args?: string[];
+}
+
+async function invalidateAccountViews(qc: ReturnType<typeof useQueryClient>) {
+  await Promise.all([
+    qc.invalidateQueries({ queryKey: ["config", "accounts"] }),
+    qc.invalidateQueries({ queryKey: ["config"] }),
+  ]);
+}
+
+export function useSaveAccount() {
+  const qc = useQueryClient();
+  return async (input: AccountSaveInput) => {
+    const out = await apiSend<AccountsResponse>("/api/v1/config/accounts", "PUT", input);
+    await invalidateAccountViews(qc);
+    return out;
+  };
+}
+
+export function useDeleteAccount() {
+  const qc = useQueryClient();
+  return async (name: string) => {
+    const out = await apiSend<AccountsResponse>(`/api/v1/config/accounts/${encodeURIComponent(name)}`, "DELETE");
+    await invalidateAccountViews(qc);
+    return out;
+  };
+}
+
+export function useActivateAccount() {
+  const qc = useQueryClient();
+  return async (name: string, force = false) => {
+    const out = await apiSend<AccountsResponse & { modal: ModalConfigDto }>(
+      `/api/v1/config/accounts/${encodeURIComponent(name)}/activate`,
+      "POST",
+      { force },
+    );
+    // 激活改变通道判定与全部云端视图：配置、账号、健康/通道状态全部失效重拉
+    await qc.invalidateQueries();
+    return out;
   };
 }
 

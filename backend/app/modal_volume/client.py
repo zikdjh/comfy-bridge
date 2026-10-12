@@ -218,6 +218,11 @@ def _clear_diagnostics() -> None:
     _LAST_SUCCESS_MS = None
 
 
+def reset_runtime_state() -> None:
+    """账号切换后清空 CLI 诊断状态（config API 联动点）。"""
+    _clear_diagnostics()
+
+
 def cli_path() -> str:
     """返回解析到的 modal CLI 路径；未安装时返回空串。"""
     return shutil.which("modal") or ""

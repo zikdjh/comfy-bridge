@@ -39,6 +39,11 @@ def deployed_state() -> str | None:
     return _state["state"] if time.monotonic() - _state["fetched_ms"] < _STATE_TTL else None
 
 
+def invalidate_state() -> None:
+    """账号切换后强制下轮重新探测（app_name/web_url 已随账号变化）。"""
+    _state.update(fetched_ms=0.0, state=None)
+
+
 async def refresh_state() -> str | None:
     """`modal app list --json` 探测应用部署状态（单飞）。"""
     app_name = get_settings().modal.app_name

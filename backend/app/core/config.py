@@ -92,6 +92,22 @@ class BridgeConfig(BaseModel):
     rules: list[RoutingRule] = []
 
 
+class AccountProfile(BaseModel):
+    """单个 Modal 账号档案（[[modal.accounts]] 数组项）。"""
+
+    name: str = ""
+    token_id: str = ""      # ak-...
+    token_secret: str = ""  # as-...
+    environment: str = ""   # Modal 环境，空 = 默认环境
+    proxy_token_id: str = ""      # wk-...
+    proxy_token_secret: str = ""  # ws-...
+    volume: str = "comfyui-data"
+    app_name: str = "comfyui-l40s"
+    web_url: str = ""
+    task_timeout: int = 3600
+    extra_launch_args: list[str] = []
+
+
 class ModalConfig(BaseModel):
     # Modal 平台认证（modal token new 生成，或 modal.com 控制台）。
     # token_secret 仅落盘本文件（用户目录，不入代码库）；API 层脱敏回显。
@@ -113,6 +129,10 @@ class ModalConfig(BaseModel):
     # 云端 ComfyUI 追加启动参数：保存时经 modal volume put 写入数据卷
     # /config/launch_args.json，容器冷启动时由 runner.py 读取追加
     extra_launch_args: list[str] = []
+    # 账号档案注册表（多账号维护，docs/多账号维护设计.md）：[[modal.accounts]]。
+    # [modal] 本体始终是「当前活跃账号的生效视图」；激活 = 把档案字段整体复制进本体。
+    # 1 账号 = 1 份凭据：token_id 唯一，轮换 = 覆盖写回档案，不做多凭据并存。
+    accounts: list[AccountProfile] = []
 
 
 class AppConfig(BaseModel):

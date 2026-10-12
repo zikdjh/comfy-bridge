@@ -1,7 +1,8 @@
 # ComfyBridge
 
 本地 ComfyUI × Modal 云端 GPU 桥接器：拦截本地生成请求并按策略转发到 Modal 执行，
-同步两端节点/配置/工作流（不同步模型），管理 Modal 数据卷，统一记录日志与成本。
+同步两端节点/配置/工作流（不同步模型），管理 Modal 数据卷与多账号档案切换
+（1 账号 = 1 份凭据），统一记录日志与成本。
 
 - 管理线（范围/排期/风险/验收）：`docs/ComfyBridge项目计划书.html`
 - 技术线（架构/核心设计/API/目录）：`docs/ComfyUI-Modal桥接器项目规划.html`

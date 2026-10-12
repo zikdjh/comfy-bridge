@@ -76,6 +76,16 @@ def load_matrix(max_age_ms: float = _TTL_MS) -> dict | None:
     return out
 
 
+def invalidate_all() -> None:
+    """账号切换后整体重置（内存 + 落盘文件）：缓存口径是「本地 vs 当前云端」，云端已变。"""
+    global _doc
+    _doc = None
+    try:
+        _path().unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning("节点差异缓存重置失败: %s", exc)
+
+
 def save_matrix(payload: dict) -> None:
     """只缓存成功计算（ok=True）的矩阵；app_state 属于运行时状态，不进缓存（每次现取）。"""
     if not payload.get("ok"):
