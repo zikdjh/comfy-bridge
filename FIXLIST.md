@@ -1117,3 +1117,27 @@ P3-1 遗留的「mypy 尚未形成发布门禁」项闭环。
 - 新增 `tests/unit/test_passthrough_origin_headers.py`（2 项）：Origin/Referer 改写
   + 逐跳头剥离断言。
 - 同步：`docs/ComfyBridge-过程-真机验收缺陷清单.html` 增加 §8 第二轮遗留索引。
+
+## 三十七、10-13 真机测试遗留 P3 闭环：限流退避与 antd 弃用告警（2026-10-13）
+
+全天真机测试（见《完整测试报告-20261013》）发现 3 个 P3 轻微问题，其中两项当日闭环：
+
+### 1. 启动期 Modal 控制面限流：多级退避重试（`1e6881d`）
+
+- **症状**：启动期 `VolumeListFiles rate limit` 使节点在场索引、系统状态首检短暂失败，需人工重试。
+- **修复**：`modal_volume/client.py` 错误分类新增 `rate_limited`
+  （rate limit / too many requests / quota exceeded / 429），只读命令
+  （`app list`、`volume ls/get`、`billing summary` 等）按类别退避重试，
+  限流序列 1s/4s/10s（网络抖动保持 0.5s 单次）；写命令不自动重发。
+  `/health/modal-cli` 自检与节点云端清单均经 `client.run()`，自动获得该保护。
+- **验证**：`tests/unit/test_modal_volume_client.py` 扩至 15 项
+  （限流分类、退避恢复、退避耗尽抛错、写命令不重发），
+  `uv run pytest tests/unit/test_modal_volume_client.py -q` → **15 passed**。
+
+### 2. antd destroyOnClose 弃用告警（`004d02a`）
+
+- **症状**：控制台 `[antd: Modal] destroyOnClose is deprecated` 告警（仅开发态噪音）。
+- **修复**：media / dashboard / JobDrawer / ConfigWizard 共 4 处
+  `destroyOnClose` 全部替换为 `destroyOnHidden`（antd 5.29.3 支持）。
+- **验证**：`rg destroyOnClose frontend/src` 零命中；
+  `pnpm build`（tsc --noEmit + vite）0 错误，3719 模块构建通过。
