@@ -55,7 +55,7 @@ def get_usage(force: bool = False) -> dict:
 
 
 def invalidate_cache() -> None:
-    """账号切换后清空卷用量快照（volume 已随账号变化，docs/多账号维护设计.md §3.3）。
+    """账号切换后清空卷用量快照（volume 已随账号变化，docs/ComfyBridge-设计-多账号维护.html §3.3）。
 
     generation 自增让在途的旧账号计算在写回前被判定过期丢弃。
     """

@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ComfyBridge 真机点击测试报告 · 2026-10-13</title>
+<style>
+  :root{
+    --bg:#f4f6fb; --card:#ffffff; --ink:#1f2430; --sub:#6b7280; --line:#e5e8f0;
+    --pass:#16a34a; --pass-bg:#ecfdf3; --warn:#b45309; --warn-bg:#fffbeb;
+    --info:#1d4ed8; --info-bg:#eff6ff; --chip:#eef1f7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;line-height:1.65;font-size:15px}
+  .hero{background:linear-gradient(135deg,#232a3f 0%,#3b4668 100%);color:#fff;padding:42px 48px 34px}
+  .hero h1{margin:0 0 8px;font-size:28px;letter-spacing:.5px}
+  .hero p{margin:4px 0;color:#c9d1e8;font-size:14px}
+  .wrap{max-width:1080px;margin:-20px auto 60px;padding:0 20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:22px 26px;margin:18px 0;box-shadow:0 2px 10px rgba(31,36,48,.05)}
+  h2{font-size:19px;margin:6px 0 14px;padding-bottom:10px;border-bottom:2px solid var(--line)}
+  h3{font-size:15px;margin:18px 0 8px}
+  .meta-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 22px;font-size:14px}
+  .meta-grid div b{color:var(--sub);font-weight:600;margin-right:8px}
+  code{background:var(--chip);border-radius:5px;padding:1px 7px;font-size:13px;
+    font-family:Consolas,"Courier New",monospace}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin:8px 0}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#f8fafc;font-weight:600;white-space:nowrap}
+  td.c{text-align:center;white-space:nowrap}
+  .tag{display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:600;white-space:nowrap}
+  .pass{color:var(--pass);background:var(--pass-bg)}
+  .warn{color:var(--warn);background:var(--warn-bg)}
+  .info{color:var(--info);background:var(--info-bg)}
+  .block{background:var(--info-bg);border-left:4px solid var(--info);border-radius:0 8px 8px 0;
+    padding:12px 16px;margin:12px 0;font-size:13.5px}
+  .block.warnbox{background:var(--warn-bg);border-left-color:#d97706}
+  ul{margin:6px 0;padding-left:22px}
+  li{margin:4px 0}
+  .small{color:var(--sub);font-size:12.5px}
+  .sum{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px}
+  .sum div{flex:1;min-width:150px;border:1px solid var(--line);border-radius:10px;padding:12px 16px;background:#fbfcfe}
+  .sum b{display:block;font-size:24px;line-height:1.2}
+  .sum .n-pass{color:var(--pass)} .sum .n-warn{color:var(--warn)} .sum .n-skip{color:var(--sub)}
+</style>
+</head>
+<body>
+<div class="hero">
+  <h1>ComfyBridge 真机点击测试报告</h1>
+  <p>测试方式：浏览器自动化真实点击 / 输入 / 弹窗操作（非静态走查） · 共 11 个页面 + 40+ 交互点</p>
+  <p>测试时间：2026-10-13 12:00–12:40（Asia/Shanghai） · 测试人：自动化验收</p>
+</div>
+<div class="wrap">
+
+  <div class="card">
+    <h2>一、测试环境</h2>
+    <div class="meta-grid">
+      <div><b>后端</b>uvicorn <code>http://127.0.0.1:8189</code>（uv 运行，venv 内 modal client 1.5.5）</div>
+      <div><b>前端</b>Vite 5.4.21 <code>http://localhost:5173</code>（/api 代理至 8189）</div>
+      <div><b>运行时</b>Node v24.20.0 · pnpm 12.10.1 · Windows PowerShell</div>
+      <div><b>本地 ComfyUI</b>测试开始时离线（:8188 不通），测试中由桥接器拉起后停止</div>
+      <div><b>Modal Runner</b>应用未部署（web_url 探测 404，通道未就绪）</div>
+      <div><b>Modal 凭证</b>已配置（token 脱敏回显正常），数据卷可读</div>
+    </div>
+    <div class="sum">
+      <div><b class="n-pass">34</b>通过用例</div>
+      <div><b class="n-warn">3</b>轻微问题（P3，含 1 个环境问题）</div>
+      <div><b class="n-skip">6</b>需云端额度/部署，本轮未执行</div>
+      <div><b class="n-pass">0</b>阻断 / 严重缺陷</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>二、逐页测试结果</h2>
+    <table>
+      <thead><tr><th style="width:110px">页面</th><th>真实操作与证据</th><th style="width:70px">结果</th></tr></thead>
+      <tbody>
+      <tr>
+        <td><b>仪表盘</b><br><span class="small">/</span></td>
+        <td>
+          今日统计 / 执行通道状态 / 排队表 / 最近完成表（共 148 条、15 页分页）渲染正常；
+          顶部「任务」抽屉开关正常（0 个进行中）；
+          「预热」点击弹出 <b>Popconfirm 费用二次确认</b>（空转 $1.95/小时提示），取消后不发任何请求——费用护栏有效；
+          「前往出图界面」指向 <code>http://127.0.0.1:8189</code>，本地离线时桥接根返回 502（代理语义正确）。
+        </td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>路由规则</b><br><span class="small">/routing</span></td>
+        <td>
+          内置规则链 3 条（manual / tag=cloud: 前缀 / cloud_model）展示正确；
+          「添加规则」生成可编辑行（启用开关、名称、前缀、上移/下移、删除），删除后归零；
+          「干跑」空输入时 toast 提示「请先选择工作流或粘贴 API 格式工作流 JSON」。未点保存（避免改动配置）。
+        </td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>节点管理</b><br><span class="small">/nodes</span></td>
+        <td>
+          「本地清单 / 差异矩阵」Tab 在本地离线时给出明确指引文案，无报错崩溃；
+          「对齐历史」折叠面板展开，显示 1 条记录（10-03 v0.38.2→v0.38.2 无需变更）。
+        </td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>工作流</b><br><span class="small">/workflows</span></td>
+        <td>
+          本地清单扫描到 2 个工作流（krea2-文生图 / 图生图），大小/时间/hash 齐全，「重新扫描」正常返回；
+          同步状态：云端卷矩阵 2 个均「已同步」、待同步 0；
+          运行统计：148 次、成功 66 / 失败 59、本地 23 / 云端 125、平均 1m12s、估算 $1.8625。
+        </td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>模型卷</b><br><span class="small">/models</span></td>
+        <td>
+          显示「Modal 凭证已配置 / 数据卷 comfyui-data」；checkpoints 对比出 1 个仅本地占位文件
+          （put_checkpoints_here, 0 B），「上传缺云端(1)」计数联动、「下载到本地(0)」按钮正确禁用；
+          分类下拉 8 项（checkpoints/controlnet/diffusion_models/embeddings/loras/text_encoders/upscale_models/vae），
+          切换 loras 后计数与列表即时联动为 0。
+        </td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>数据卷</b><br><span class="small">/volume</span></td>
+        <td>
+          总览统计真实拉取：<b>31.7 GiB / 78 文件 / 1 卷</b>（comfyui-data，2026-09-23 创建），1024 GB 水位「正常」；
+          「重新统计」触发二次遍历并最终收敛、loading 消失；云端直下、目录浏览、回收站、移动/下载任务区块齐全。
+        </td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>媒体库</b><br><span class="small">/media</span></td>
+        <td>
+          共 44 个文件（图片 44 / 视频 0）；文件名过滤输入 <code>modal_00014</code> 即时收敛为 1 张；
+          点击缩略图打开详情 Modal（文件名 / 1.41 MB / 2026-10-11 18:15:35 / 预览图 / 原文件链接），
+          链接 <code>/api/v1/media/local/file?path=…</code> 有效，关闭正常。
+        </td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>成本报表</b><br><span class="small">/cost</span></td>
+        <td>
+          按工作流聚合：52 请求 / 3438.5 GPU 秒 / $1.8625；
+          切换「按主模型」：krea2_turbo_fp8_scaled 49 次 $1.7911（96.2%）+ 未记录 3 次，表头联动；
+          趋势图渲染；下载图标悬停弹出三选一菜单，点「逐条流水」实际请求
+          <code>GET /api/v1/cost/export?scope=entries&amp;days=30</code> → <b>200 text/csv</b>，中文表头与真实流水正确；
+          月度对账表 5 天数据（本地估算 vs Modal GPU / 全资源）。
+        </td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>日志</b><br><span class="small">/logs</span></td>
+        <td>
+          请求日志 148 条、分页、云/本地标识、prompt_id 复制（antd copyable）；
+          后端筛选「全部后端→本地」<b>148 → 19 条</b>，恢复后回 148；实时开关可关；
+          点击行打开「请求详情 #153」抽屉：状态/决策后端/实际执行/完整 prompt_id/耗时/图快照 hash/
+          <b>决策链路 cloud_model → modal</b> 齐全；
+          实时控制台双面板离线态文案正确（本地「通道断开，重连中」、云端「实时推送中·通道未就绪」）。
+        </td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>系统状态</b><br><span class="small">/status</span></td>
+        <td>
+          首检因启动期 Modal 限流显示「需要处理」；点「重新自检」后 <b>通过</b>：
+          已安装 / 已登录 / modal client 1.5.5 / 延迟 5251ms / CLI 路径正确；
+          最近失败表保留 VolumeListFiles rate limit 记录并给出处理建议（失败留痕闭环）。
+        </td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>设置</b><br><span class="small">/settings</span></td>
+        <td>
+          <b>配置向导</b>：5 步状态检测正确（凭证就绪 / 根目录就绪服务离线 / Runner 未配置），可进入第 2 步表单后关闭；<br>
+          <b>本地 Tab</b>：「扫描本机」真实扫描 D/E 盘（约 40 秒、枚举 33954 个目录），发现 2 个 v0.39.2 完整安装，
+          选中 E 盘目录「采用」正确回填（未保存）；「校验」提示「完整性校验通过（v0.39.2，内置 venv）」；<br>
+          <b>启动命令 Tab</b>：点「启动」由桥接器拉起本地 ComfyUI，:8188 返回 200，按钮联动
+          （启动禁用、停止/重启可用、check-circle）；点「停止」后 :8188 离线、按钮恢复——<b>启停闭环通过</b>；<br>
+          <b>桥接 / Modal / 护栏与预算 / 设置同步</b> 四个 Tab 均正常渲染；token 脱敏
+          <code>as-aY****Ru1X</code>；云端不可读时同步页给出合理提示。
+        </td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>404 路由</b><br><span class="small">/*</span></td>
+        <td>访问 <code>/no-such-page</code> 渲染「404 页面不存在」。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>三、发现的问题（均为 P3，不阻断使用）</h2>
+    <table>
+      <thead><tr><th style="width:48px">#</th><th>问题</th><th>证据 / 影响</th><th style="width:90px">建议</th></tr></thead>
+      <tbody>
+      <tr>
+        <td class="c">1</td>
+        <td><b>dev.ps1 在本机直接执行时前端启动失败</b>（环境）</td>
+        <td>pnpm shim 存在但 <code>node</code> 不在系统 PATH（node 安装于 <code>E:\node\version\v24.20.0</code>），
+        <code>pnpm dev</code> 报 “'node' is not recognized”。需手动把 node 目录注入 PATH 后才能启动。</td>
+        <td><span class="tag warn">文档/脚本</span></td>
+      </tr>
+      <tr>
+        <td class="c">2</td>
+        <td>启动期 Modal API 限流导致首检失败</td>
+        <td>VolumeListFiles rate limit exceeded，使节点在场索引、系统状态首检短暂失败；系统状态页已有留痕与建议，手动重试即恢复。</td>
+        <td><span class="tag info">可加退避</span></td>
+      </tr>
+      <tr>
+        <td class="c">3</td>
+        <td>antd 弃用告警（仅控制台）</td>
+        <td><code>[antd: Modal] destroyOnClose is deprecated. Please use destroyOnHidden instead.</code> 不影响功能。</td>
+        <td><span class="tag info">择机替换</span></td>
+      </tr>
+      </tbody>
+    </table>
+    <p class="small">说明：开发模式下浏览器控制台偶现 <code>net::ERR_ABORTED</code>（events/stream、settings-sync、media 等），
+    系 React StrictMode 双重挂载中止首个请求所致，生产构建不存在，非产品缺陷。</p>
+  </div>
+
+  <div class="card">
+    <h2>四、本轮未覆盖项（受环境限制）</h2>
+    <div class="block warnbox">
+      以下功能依赖 Modal Runner 已部署应用或会产生云端 GPU 费用，本轮环境 Runner 通道 404，未执行真实写操作：
+      <ul>
+        <li>预热「确定」后的真实冷启动（已验证费用确认弹窗与取消路径）</li>
+        <li>模型分块上传 / 云端下载、云端直链下载落卷</li>
+        <li>工作流一键同步推送 / 冲突保留双副本、设置同步推送到云端卷</li>
+        <li>真实出图请求的本地/云端分流、隐私确认与回退（fallback）链路</li>
+        <li>数据卷「新建文件夹 / 移动到 / 回收站删除」等写操作</li>
+        <li>新建数据卷</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>五、结论</h2>
+    <p>11 个页面全部可正常访问与交互，34 个真实操作用例通过：数据读取（健康/统计/卷用量/媒体/日志/成本 CSV）、
+    表单与向导（配置向导、本机扫描、校验回填）、进程接管（本地 ComfyUI 启动/停止闭环）、
+    费用护栏（预热二次确认）、筛选与详情（日志过滤、决策链路抽屉）均与后端真实数据一致；
+    离线/未部署状态下错误提示友好且无白屏崩溃。<b>未发现阻断或严重缺陷，版本具备进入云端联调（部署 Runner 后补测第四节项）的条件。</b></p>
+    <p class="small">测试结束时服务仍在运行：后端 8189 / 前端 5173；本地 ComfyUI 已通过界面停止恢复原状。</p>
+  </div>
+
+</div>
+</body>
+</html>

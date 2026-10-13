@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>反向代理与多用户部署 · ComfyBridge 文档</title>
+<style>
+  :root {
+    --bg: #f6f7fb; --card: #ffffff; --ink: #1f2430; --ink-soft: #5a6272;
+    --line: #e4e7ef; --accent: #4f5be8; --accent-soft: #eef0fe;
+    --code-bg: #14161f; --code-ink: #e6e9f2;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 70px; }
+  body {
+    margin: 0; font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.75; font-size: 15px;
+  }
+  code, pre { font-family: "JetBrains Mono", Consolas, "Cascadia Code", monospace; }
+  header.hero {
+    background: linear-gradient(135deg, #232a63 0%, #4f5be8 55%, #8a7bff 100%);
+    color: #fff; padding: 34px 24px 26px; text-align: center;
+  }
+  header.hero h1 { margin: 0 0 8px; font-size: 25px; letter-spacing: 1px; }
+  header.hero .meta { font-size: 12.5px; opacity: .82; margin-top: 8px; }
+  nav.toc {
+    position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,.95);
+    backdrop-filter: blur(6px); border-bottom: 1px solid var(--line);
+    padding: 9px 16px; display: flex; flex-wrap: wrap; gap: 5px 12px;
+    justify-content: center; font-size: 13.5px;
+  }
+  nav.toc a { color: var(--ink-soft); text-decoration: none; padding: 3px 8px; border-radius: 6px; }
+  nav.toc a:hover { color: var(--accent); background: var(--accent-soft); }
+  main { max-width: 1000px; margin: 0 auto; padding: 26px 20px 40px; }
+  h2 {
+    font-size: 20px; margin: 40px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--accent); line-height: 1.4;
+  }
+  main > h2:first-child { margin-top: 0; }
+  h3 { font-size: 16.5px; margin: 24px 0 8px; }
+  h4 { font-size: 14.5px; margin: 18px 0 6px; color: #4353d8; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 26px; }
+  li { margin: 4px 0; }
+  li input[type="checkbox"] { margin-right: 6px; vertical-align: -2px; }
+  blockquote {
+    margin: 12px 0; padding: 10px 16px; background: var(--accent-soft);
+    border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; color: #3a4160;
+  }
+  blockquote p { margin: 4px 0; }
+  pre {
+    position: relative; background: var(--code-bg); color: var(--code-ink);
+    border-radius: 10px; padding: 30px 16px 13px; overflow-x: auto;
+    font-size: 13px; line-height: 1.6; margin: 12px 0;
+  }
+  pre .lang {
+    position: absolute; top: 6px; right: 12px; font-size: 11px; opacity: .55;
+    text-transform: uppercase; letter-spacing: 1px; font-family: system-ui, sans-serif;
+  }
+  code {
+    background: #f0f2fa; color: #33398f; padding: 1.5px 6px;
+    border-radius: 5px; font-size: 13px;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  table {
+    width: 100%; border-collapse: collapse; background: var(--card);
+    font-size: 13.5px; margin: 12px 0;
+  }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  thead th { background: var(--accent-soft); color: #4353d8; font-weight: 600; }
+  tbody tr:nth-child(even) { background: #fafbfe; }
+  td code, th code { background: #f0f2fa; color: #33398f; }
+  hr { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
+  a { color: var(--accent); }
+  del { color: var(--ink-soft); }
+  .footer { text-align: center; color: var(--ink-soft); font-size: 12.5px; padding: 18px; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header class="hero">
+  <h1>反向代理与多用户部署</h1>
+  <div class="meta">ComfyBridge 文档 · 生成于 2026-10-13</div>
+</header>
+<nav class="toc"><a href="#c1">1. 部署前必须知道的边界</a><a href="#c2">2. 配置管理令牌</a><a href="#c3">3. Origin 校验（CSRF 防护）</a><a href="#c4">4. 审计日志</a><a href="#c5">5. 反向代理示例（Nginx）</a><a href="#c6">6. 边界检查清单</a></nav>
+<main>
+<p>ComfyBridge 默认是<strong>本机单用户工具</strong>：只监听 <code>127.0.0.1</code>，不配置管理令牌即可用。 一旦要放到局域网、内网服务器或公网入口后面，就进入「有认证边界的服务」模式， 这份文档说明边界、令牌、Origin 白名单、审计与反代配置。适用 P2-1。</p><h2 id="c1">1. 部署前必须知道的边界</h2><ul><li><strong>管理面</strong>：<code>/api/v1/*</code>（<code>/api/v1/health</code> 除外）与 <code>/bridge/*</code>，受管理令牌保护。</li><li><strong>数据面</strong>：ComfyUI 原生路径（<code>/prompt</code>、<code>/ws</code>、<code>/object_info</code>、<code>/view</code>、<code>/upload</code> 等）由桥接器透传到本地 ComfyUI，<strong>不受管理令牌拦截</strong>。这层等于「出图与控制的 完整权限」，暴露它就是暴露 ComfyUI 本身。</li><li><strong>单实例假设</strong>：SQLite 与进程内作业状态不跨实例共享；不要让两个 ComfyBridge 进程共用一个配置目录（见路线图 P2-2）。</li></ul><p>结论：对外只应暴露<strong>一个入口</strong>，把管理面与数据面放在同一个认证边界内（见下）。</p><h3>单实例边界（P2-2）</h3><p>当前版本按<strong>单机单实例</strong>设计，发布与运维必须满足以下三条：</p><ol><li><strong>同一个后端实例</strong>：同一时刻只有一个 ComfyBridge 进程读写该配置目录， 不要用多进程 / 多副本同时挂同一 <code>CB_CONFIG_DIR</code> 或 <code>~/.comfybridge</code>。</li><li><strong>同一个配置目录</strong>：请求日志、成本、进程状态、对齐历史、节点差异缓存、 上传会话等都以该目录为家；共享目录不能替代分布式存储。</li><li><strong>单进程</strong>：作业状态（同步、卷上传下载、卷移动、镜像部署、本机扫描）保存在 进程内，后端重启即清空；重启时会把遗留的 queued/running 记录收尾为 cancelled。</li></ol><p>需要横向扩展时，先把状态从「本地 SQLite + 进程内存」迁到共享存储：</p><ul><li><strong>请求日志 / 成本 / 审计</strong>：可迁 PostgreSQL（或兼容 SQL 的托管库）； 需要跨实例一致的作业控制时，再引入 Redis 做协调与通知。</li><li><strong>作业状态</strong>：已抽出统一接缝 <code>app/core/job_store.py</code>（<code>JobStore</code> 协议 + <code>InMemoryJobStore</code> 默认实现），<code>sync/jobs.py</code> 与 <code>modal_volume/jobs.py</code> 已接入。 未来新增 Redis / PostgreSQL 实现即可替换，无需重写各业务模块。</li><li><strong>事件流</strong>：<code>app/events</code> 是进程内总线，多实例需要改用 Redis Pub/Sub 或 消息队列，否则 SSE 只能看到本实例的作业进度。</li><li><strong>文件类状态</strong>：上传分块、图快照等仍落在配置目录 / <code>data/</code>，多实例需要共享 文件系统（对象存储或网络卷）并处理并发写。</li></ul><p>在没有完成上述迁移前，请用反代保持<strong>单上游</strong>（Nginx 只指向一个 <code>127.0.0.1:8189</code>），不要对 <code>/api/v1</code> 做多后端负载均衡。</p><h2 id="c2">2. 配置管理令牌</h2><p>非回环监听时未配置令牌会<strong>拒绝启动</strong>（<code>comfy-bridge --host 0.0.0.0</code> 会以退出码 2 退出）。</p><pre><span class="lang">powershell</span><code># 方式一：环境变量（临时）
+$env:CB_MANAGEMENT_TOKEN = "&lt;足够长的随机串&gt;"
+comfy-bridge --host 0.0.0.0 --port 8189
+
+# 方式二：写入配置目录（持久，推荐给服务化部署）
+Set-Content -Path "$HOME\.comfybridge\management_token" -Value "&lt;足够长的随机串&gt;" -NoNewline</code></pre><p>令牌<strong>不写入 <code>config.toml</code></strong>，也不经设置 API 回传，避免随配置导出泄漏。生成建议：</p><pre><span class="lang">powershell</span><code># 生成 32 字节随机令牌
+[Convert]::ToHexString((1..32 | ForEach-Object { Get-Random -Max 256 }))</code></pre><p>客户端认证方式：</p><ul><li>浏览器访问管理台：弹 <strong>Basic</strong> 认证框（用户名任意，密码填令牌）。</li><li>脚本 / CI：<code>Authorization: Bearer &lt;令牌&gt;</code>，或 <code>X-ComfyBridge-Token: &lt;令牌&gt;</code>。</li></ul><h2 id="c3">3. Origin 校验（CSRF 防护）</h2><p>配置令牌后，管理面对带 <code>Origin</code> 头的请求做同源校验：</p><ul><li><code>Origin</code> 与请求访问的 Host 同源 → 放行（同一入口下的正常前端调用）。</li><li>无 <code>Origin</code> → 放行（脚本、同站导航），仍受令牌约束。</li><li>跨站 <code>Origin</code> → <strong>403 拒绝</strong>，避免恶意站点借用浏览器已缓存的 Basic 凭证。</li></ul><p>用独立前端域名或反代后 Host 变化时，把可信来源加入白名单：</p><pre><span class="lang">powershell</span><code>$env:CB_ALLOWED_ORIGINS = "https://bridge.example.com,https://admin.example.com"</code></pre><p>反代务必透传原始协议与主机，否则同源判定会失败：</p><pre><code>proxy_set_header Host $host;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;</code></pre><h2 id="c4">4. 审计日志</h2><p>配置令牌后默认开启审计：<strong>写操作</strong>与<strong>所有被拒请求（401/403）</strong>各记一条 JSONL， 成功的只读请求不记，避免页面静态资源刷屏。</p><pre><span class="lang">jsonl</span><code>{"ts_ms":1760000000000,"method":"POST","path":"/api/v1/config","status":200,"client":"10.0.0.5","origin":"https://bridge.example.com","auth":"bearer","reason":"ok"}</code></pre><p>位置：<code>&lt;配置目录&gt;/audit.log</code>（默认 <code>~/.comfybridge/audit.log</code>），单文件超 5MB 轮转一份 <code>audit.log.1</code>。可用环境变量覆盖：</p><table><thead><tr><th>变量</th><th>作用</th></tr></thead><tbody><tr><td><code>CB_AUDIT_LOG=1</code> / <code>0</code></td><td>强制开启 / 关闭；不设时跟随「是否配置了管理令牌」</td></tr><tr><td><code>CB_AUDIT_LOG_PATH=&lt;路径&gt;</code></td><td>指定审计文件位置</td></tr></tbody></table><p><strong>审计不落 Authorization、token、请求体</strong>，只记方法、路径、状态码、客户端 IP、Origin、 认证方式与结果原因。</p><h2 id="c5">5. 反向代理示例（Nginx）</h2><p>把 <code>/bridge/</code>（管理台）与根路径（ComfyUI 数据面）都收在同一个 TLS 入口与认证之后：</p><pre><span class="lang">nginx</span><code>server {
+    listen 443 ssl;
+    server_name bridge.example.com;
+
+    ssl_certificate     /etc/ssl/bridge.pem;
+    ssl_certificate_key /etc/ssl/bridge.key;
+
+    location / {
+        proxy_pass http://127.0.0.1:8189;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;      # /ws 中继
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 3600s;                    # 长任务 / SSE 不被掐断
+        proxy_buffering off;                         # SSE / 流式响应
+    }
+}</code></pre><p>如果反代层已做统一登录（OAuth / SSO），可以同时保留桥接器令牌做纵深防御；两者不冲突。</p><h2 id="c6">6. 边界检查清单</h2><ul><li style="list-style:none"><input type="checkbox" disabled > 只用回环地址时，不配置令牌也能用；确认没有误绑 <code>0.0.0.0</code>。</li><li style="list-style:none"><input type="checkbox" disabled > 对外监听前已配置足够强的令牌（<code>CB_MANAGEMENT_TOKEN</code> 或 <code>management_token</code> 文件）。</li><li style="list-style:none"><input type="checkbox" disabled > 反代透传 <code>Host</code> / <code>X-Forwarded-Proto</code> / <code>X-Forwarded-For</code>。</li><li style="list-style:none"><input type="checkbox" disabled > 独立前端域名已加入 <code>CB_ALLOWED_ORIGINS</code>。</li><li style="list-style:none"><input type="checkbox" disabled > 确认只有一个 ComfyBridge 实例使用该配置目录。</li><li style="list-style:none"><input type="checkbox" disabled > 确认没有对 <code>/api/v1</code> 做多实例负载均衡（当前仅支持单实例）。</li><li style="list-style:none"><input type="checkbox" disabled > 已确认数据面（ComfyUI 透传）也在认证边界内，不是裸露的第二入口。</li><li style="list-style:none"><input type="checkbox" disabled > 需要时检查 <code>audit.log</code> 里的 401/403 记录。</li></ul>
+</main>
+<div class="footer">ComfyBridge · 本地 ComfyUI × Modal 云端 GPU 桥接器</div>
+</body>
+</html>

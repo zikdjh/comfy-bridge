@@ -1,4 +1,4 @@
-"""多账号档案 API 单测（docs/多账号维护设计.md）。
+"""多账号档案 API 单测（docs/ComfyBridge-设计-多账号维护.html）。
 
 get_settings / CONFIG_PATH / count_active_modal 一律 patch——不读真实
 ~/.comfybridge/config.toml，不碰真实任务库；toml 写回用临时目录真跑。

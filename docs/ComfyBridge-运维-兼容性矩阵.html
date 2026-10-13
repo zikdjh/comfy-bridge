@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyBridge 兼容性矩阵 · ComfyBridge 文档</title>
+<style>
+  :root {
+    --bg: #f6f7fb; --card: #ffffff; --ink: #1f2430; --ink-soft: #5a6272;
+    --line: #e4e7ef; --accent: #4f5be8; --accent-soft: #eef0fe;
+    --code-bg: #14161f; --code-ink: #e6e9f2;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 70px; }
+  body {
+    margin: 0; font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.75; font-size: 15px;
+  }
+  code, pre { font-family: "JetBrains Mono", Consolas, "Cascadia Code", monospace; }
+  header.hero {
+    background: linear-gradient(135deg, #232a63 0%, #4f5be8 55%, #8a7bff 100%);
+    color: #fff; padding: 34px 24px 26px; text-align: center;
+  }
+  header.hero h1 { margin: 0 0 8px; font-size: 25px; letter-spacing: 1px; }
+  header.hero .meta { font-size: 12.5px; opacity: .82; margin-top: 8px; }
+  nav.toc {
+    position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,.95);
+    backdrop-filter: blur(6px); border-bottom: 1px solid var(--line);
+    padding: 9px 16px; display: flex; flex-wrap: wrap; gap: 5px 12px;
+    justify-content: center; font-size: 13.5px;
+  }
+  nav.toc a { color: var(--ink-soft); text-decoration: none; padding: 3px 8px; border-radius: 6px; }
+  nav.toc a:hover { color: var(--accent); background: var(--accent-soft); }
+  main { max-width: 1000px; margin: 0 auto; padding: 26px 20px 40px; }
+  h2 {
+    font-size: 20px; margin: 40px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--accent); line-height: 1.4;
+  }
+  main > h2:first-child { margin-top: 0; }
+  h3 { font-size: 16.5px; margin: 24px 0 8px; }
+  h4 { font-size: 14.5px; margin: 18px 0 6px; color: #4353d8; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 26px; }
+  li { margin: 4px 0; }
+  li input[type="checkbox"] { margin-right: 6px; vertical-align: -2px; }
+  blockquote {
+    margin: 12px 0; padding: 10px 16px; background: var(--accent-soft);
+    border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; color: #3a4160;
+  }
+  blockquote p { margin: 4px 0; }
+  pre {
+    position: relative; background: var(--code-bg); color: var(--code-ink);
+    border-radius: 10px; padding: 30px 16px 13px; overflow-x: auto;
+    font-size: 13px; line-height: 1.6; margin: 12px 0;
+  }
+  pre .lang {
+    position: absolute; top: 6px; right: 12px; font-size: 11px; opacity: .55;
+    text-transform: uppercase; letter-spacing: 1px; font-family: system-ui, sans-serif;
+  }
+  code {
+    background: #f0f2fa; color: #33398f; padding: 1.5px 6px;
+    border-radius: 5px; font-size: 13px;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  table {
+    width: 100%; border-collapse: collapse; background: var(--card);
+    font-size: 13.5px; margin: 12px 0;
+  }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  thead th { background: var(--accent-soft); color: #4353d8; font-weight: 600; }
+  tbody tr:nth-child(even) { background: #fafbfe; }
+  td code, th code { background: #f0f2fa; color: #33398f; }
+  hr { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
+  a { color: var(--accent); }
+  del { color: var(--ink-soft); }
+  .footer { text-align: center; color: var(--ink-soft); font-size: 12.5px; padding: 18px; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header class="hero">
+  <h1>ComfyBridge 兼容性矩阵</h1>
+  <div class="meta">ComfyBridge 文档 · 生成于 2026-10-13</div>
+</header>
+<nav class="toc"><a href="#c1">1. 当前锁定矩阵</a><a href="#c2">2. 协议消费面</a><a href="#c3">3. 版本对齐</a><a href="#c4">4. 升版 SOP</a><a href="#c5">5. 已知不支持或降级项</a><a href="#c6">6. 兼容性记录模板</a></nav>
+<main>
+<p>本文记录当前锁定版本、支持边界和升级流程。矩阵的机器可读夹具位于 <code>backend/tests/compat/manifest.json</code>，回归入口是 <code>backend/tests/compat/test_compat_matrix.py</code>。</p><h2 id="c1">1. 当前锁定矩阵</h2><table><thead><tr><th>项目</th><th>锁定值</th><th>说明</th></tr></thead><tbody><tr><td>ComfyUI 参照版本</td><td><code>v0.37.2</code>、<code>v0.38.0</code>、<code>v0.38.2</code></td><td>三版 <code>execution.py</code> 同哈希；<code>server.py</code> 仅差资产导入守卫</td></tr><tr><td>Runner 默认 pin</td><td><code>v0.37.4</code></td><td><code>modal-runner/runner.py</code> 的固定默认；生产部署由版本对齐写入 pin</td></tr><tr><td>ComfyUI 仓库</td><td><code>comfyanonymous/ComfyUI</code></td><td>只通过 HTTP/WS API 交互，不复制或链接其代码</td></tr><tr><td>Modal CLI / SDK</td><td><code>modal&gt;=0.70</code>（当前锁文件为 1.5.x 兼容线）</td><td>作为子进程调用；代理环境需要 <code>python-socks</code></td></tr><tr><td>Python</td><td><code>&gt;=3.11</code></td><td>wheel 的 <code>requires-python</code></td></tr><tr><td>前端</td><td>Node.js 22 + pnpm 12（CI）</td><td>打包后前端嵌入 wheel，不要求用户安装 Node</td></tr></tbody></table><p>“锁定”指桥接器已对这些版本的 <code>/prompt</code>、WS 事件、<code>/history</code>、输出回传、 <code>/internal/logs/raw</code> 和 <code>/object_info</code> 顶层键集做逐项协议断言，而不是说只能连接这些版本。</p><h2 id="c2">2. 协议消费面</h2><p>矩阵按以下 13 个面组织，每个锁定版本都要通过：</p><table><thead><tr><th>协议面</th><th>桥接器消费点</th><th>夹具</th></tr></thead><tbody><tr><td><code>/prompt</code> 成功应答</td><td><code>runner/client.post_prompt</code></td><td><code>prompt_ack.json</code></td></tr><tr><td><code>/prompt</code> 400 拒绝</td><td>提交拒绝上浮</td><td><code>prompt_reject_400.json</code></td></tr><tr><td>WS 成功事件</td><td><code>runner/executor._ws_pump</code></td><td><code>ws_events_success.json</code></td></tr><tr><td>WS 错误事件</td><td>终态与错误归一</td><td><code>ws_events_error.json</code></td></tr><tr><td>WS 中断事件</td><td><code>/interrupt</code> 收敛</td><td><code>ws_events_interrupted.json</code></td></tr><tr><td><code>/history</code> 成功</td><td><code>get_history</code> + 输出四桶</td><td><code>history_success.json</code></td></tr><tr><td><code>/history</code> 错误</td><td>三态分类</td><td><code>history_error.json</code></td></tr><tr><td><code>/history</code> 中断</td><td>三态分类</td><td><code>history_interrupted.json</code></td></tr><tr><td>容器日志</td><td><code>/internal/logs/raw</code> 归一</td><td><code>logs_raw.json</code></td></tr><tr><td><code>/object_info</code></td><td>diff 矩阵顶层 class_type</td><td><code>object_info.json</code></td></tr><tr><td>本地 WS tap</td><td>本地事件状态回传</td><td>复用 success/error 事件</td></tr><tr><td>双通道终态</td><td>WS 快路径 + history 权威兜底</td><td>复用 history/WS 夹具</td></tr><tr><td>输出越界拒绝</td><td>只允许 ComfyUI 输出桶和安全子路径</td><td><code>history_success.json</code></td></tr></tbody></table><p>当前测试命令：</p><pre><span class="lang">powershell</span><code>cd backend
+.venv\Scripts\python.exe -m pytest tests/compat -q</code></pre><p>该矩阵离线运行，不需要 Modal 或本地 ComfyUI；最后一条输出应包含 <code>40 passed</code>。</p><h2 id="c3">3. 版本对齐</h2><p>桥接器把本地 ComfyUI 版本视为权威：</p><ol><li>管理台“节点 → 版本对齐”写入 <code>modal-runner/lock/comfyui_version.txt</code>。</li><li>Runner 的 <code>modal deploy</code> 重建镜像，并尝试拉起容器。</li><li>成功则保留 pin；失败则回滚 pin；超时进入不确定态并要求人工核对。</li><li>每次结果追加到 <code>~/.comfybridge/version_align_history.jsonl</code> 的 JSONL 历史。</li></ol><p>查看入口是“节点 → 对齐历史”，也可以：</p><pre><span class="lang">powershell</span><code>Get-Content "$HOME\.comfybridge\version_align_history.jsonl" -Tail 20</code></pre><p>历史记录中的结局：</p><table><thead><tr><th>结局</th><th>含义</th><th>处理</th></tr></thead><tbody><tr><td><code>ok</code></td><td>部署成功，pin 已更新</td><td>继续验证或出图</td></tr><tr><td><code>已回滚</code></td><td>部署失败，pin 已恢复</td><td>查看错误，修节点依赖或网络后重试</td></tr><tr><td><code>超时</code></td><td>远端状态不确定</td><td>先 <code>modal app list</code> / <code>modal app logs</code>，再决定重试</td></tr><tr><td><code>无需变更</code></td><td>本地版本与 pin 一致</td><td>正常</td></tr></tbody></table><h3>3.1 真实结局演练记录（2026-10-10）</h3><p>演练使用隔离的临时 Runner 副本（<code>app_name=comfyui-p3-3-drill</code>，临时数据卷）， 不触碰生产 Runner <code>comfyui-l40s</code>，也没有向仓库提交任何凭证或密钥。</p><table><thead><tr><th>结局</th><th>真实现场构造</th><th>观察结果</th><th>验证结论</th></tr></thead><tbody><tr><td><code>ok</code></td><td>独立 app 执行真实 <code>modal deploy</code>，pin 为可构建版本</td><td>约 12 秒完成部署，远端应用进入 <code>deployed</code></td><td>成功路径可稳定落地</td></tr><tr><td><code>rolled_back</code></td><td>把 pin 改为不存在的 <code>v0.0.0-p3-3-missing</code>，触发真实镜像构建</td><td><code>git clone</code> 因远端分支不存在返回 128，部署失败；失败不覆盖上一成功版本</td><td>构建失败能被识别，调用方应恢复旧 pin/旧文件</td></tr><tr><td><code>timeout</code></td><td>对可构建 pin 发起真实 deploy，并在 2 秒后终止客户端进程</td><td>客户端被终止，远端 app 仍保持上一次 <code>deployed</code> 状态；状态未同步</td><td>超时属于不确定态，必须保留新 pin 并人工核对，不能自动回滚或立即重试</td></tr></tbody></table><p>超时后的人工核对顺序：</p><pre><span class="lang">powershell</span><code>modal app list
+modal app logs &lt;app_name&gt;
+modal image logs &lt;image_id&gt;</code></pre><p>确认远端没有正在进行的构建后，再决定重新发起部署或恢复 pin。管理台“节点 → 对齐历史” 会记录 <code>timeout</code> 及其错误文案，便于后续追溯。</p><h2 id="c4">4. 升版 SOP</h2><p>当本地 ComfyUI 升级，或上游发布需要纳入支持的版本时：</p><ol><li>记录目标 tag 和 commit，确认 Runner 镜像能够构建。</li><li>复制最近的夹具目录，例如 <code>backend/tests/compat/fixtures/comfyui/v0.38.2</code> 到新版本目录。</li><li>逐项对照上游 <code>server.py</code>、<code>execution.py</code>、<code>main.py</code> 更新协议夹具，不修改桥接器代码来迁就夹具。</li><li>更新 <code>backend/tests/compat/manifest.json</code> 的版本号与源码 sha256 指纹。</li><li>运行完整测试：</li></ol><pre><span class="lang">powershell</span><code>cd backend
+.venv\Scripts\python.exe -m pytest tests/compat -q
+.venv\Scripts\python.exe -m pytest -q</code></pre><ol><li>若失败，先定位是夹具陈旧还是桥接器实现真有协议漂移；修复后补测试，再更新 README/本文矩阵。</li><li>在真实环境至少跑一次：</li></ol><pre><span class="lang">powershell</span><code>$env:CB_LIVE = "1"
+$env:CB_LIVE_MODAL = "1"
+$env:CB_LIVE_FIXTURE_JSON = "C:/path/to/txt2img-api.json"
+.venv\Scripts\python.exe -m pytest -m live -q</code></pre><h2 id="c5">5. 已知不支持或降级项</h2><table><thead><tr><th>项目</th><th>当前状态</th><th>影响</th></tr></thead><tbody><tr><td><code>object_info</code> 合并策略</td><td><code>local-first</code> / <code>union</code> / <code>local-only</code> 可配置</td><td>云端 schema 需在节点页显式刷新；未刷新时只保证模型名并集</td></tr><tr><td>模型上传</td><td>整文件上传</td><td>大模型中断后需要重新上传，尚无分块/续传/MD5</td></tr><tr><td>删除</td><td>删除前没有跨工作流/日志引用保护</td><td>误删后依赖 Modal 备份或重新下载</td></tr><tr><td>删除恢复</td><td>无回收站</td><td>不支持本地界面恢复</td></tr><tr><td>节点依赖预检</td><td>重建前静态约束 + 本机 pip dry-run resolver；结果 5 分钟缓存</td><td>本机无法代表目标镜像时标记 <code>unavailable</code> 并继续远端 deploy，最终仍由 deploy 失败回滚兜底</td></tr><tr><td>任务状态推送</td><td>仍以多路轮询为主</td><td>长任务 UI 实时性受轮询间隔限制</td></tr><tr><td>多实例</td><td>单实例假设</td><td>SQLite 和进程内作业状态不能跨实例共享</td></tr><tr><td>预算护栏</td><td>本地按单价和时间估算</td><td>不是 Modal 账户硬限制</td></tr><tr><td>Modal CLI</td><td>关键单点；已有结构化分类、只读网络重试与「系统状态」自检页</td><td>写操作不会自动重试；跨进程仅保留最近一次失败，重启后状态清空</td></tr></tbody></table><h2 id="c6">6. 兼容性记录模板</h2><p>每次发布把以下信息追加到发布记录或本文末尾：</p><pre><span class="lang">text</span><code>日期：
+ComfyBridge commit：
+本地 ComfyUI 版本/commit：
+Runner pin：
+模态版本：
+兼容矩阵命令与结果：
+live 冒烟命令与结果：
+已知偏差：</code></pre><p>发布前至少要有一份最近的真实环境 live 记录，以及一份 <code>pytest -q</code> 和 <code>pytest tests/compat -q</code> 的全绿记录。</p>
+</main>
+<div class="footer">ComfyBridge · 本地 ComfyUI × Modal 云端 GPU 桥接器</div>
+</body>
+</html>
