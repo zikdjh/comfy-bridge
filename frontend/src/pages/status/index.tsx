@@ -9,6 +9,7 @@ const CATEGORY_COLOR: Record<ModalCliFailure["category"], string> = {
   not_logged_in: "orange",
   network: "gold",
   permission: "volcano",
+  rate_limited: "geekblue",
   uncertain: "purple",
   command: "default",
 };
@@ -141,8 +142,9 @@ export default function StatusPage() {
         <Space direction="vertical" size={6}>
           <span><Tag color="red">未安装</Tag>找不到 modal CLI：安装 `modal` 并确认 PATH。</span>
           <span><Tag color="orange">未登录</Tag>凭证失效或未登录：`modal token new`，或在设置页填写 token。</span>
-          <span><Tag color="gold">网络失败</Tag>只读命令会自动退避重试一次；写命令不会自动重发。</span>
+          <span><Tag color="gold">网络失败</Tag>只读命令自动快速重试；写命令不会自动重发。</span>
           <span><Tag color="volcano">权限不足</Tag>当前账户缺少资源权限：检查 workspace / token 权限。</span>
+          <span><Tag color="geekblue">平台限流</Tag>Modal 控制面限流（rate limit）：只读命令按 1s/4s/10s 退避自动重试，稍候即可恢复。</span>
           <span><Tag color="purple">状态不确定</Tag>超时或远端未确认：先用 `modal app list` 核对，再决定是否重试。</span>
         </Space>
       </Card>

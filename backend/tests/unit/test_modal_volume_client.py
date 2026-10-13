@@ -33,6 +33,18 @@ def test_error_classification_covers_all_categories():
     assert modal_cli._classify_error("killed", timed_out=True)[0] == "uncertain"
 
 
+def test_rate_limit_is_retryable():
+    """VolumeListFiles rate limit → 平台限流分类，只读命令可退避重试。"""
+    category, retryable = modal_cli._classify_error(
+        "VolumeListFiles rate limit exceeded. Please wait and retry."
+    )
+    assert category == "rate_limited" and retryable is True
+    assert modal_cli._classify_error("HTTP 429 Too Many Requests")[0] == "rate_limited"
+    error = ModalCliError("rate limit exceeded", category="rate_limited", command="modal volume ls")
+    assert error.label == "平台限流"
+    assert "限流" in error.next_action
+
+
 def test_error_payload_has_next_action():
     error = ModalCliError("bad", category="not_logged_in", command="modal app list")
     payload = error.to_dict()
@@ -68,6 +80,43 @@ async def test_run_does_not_retry_write_command(monkeypatch):
     with pytest.raises(ModalCliError):
         await modal_cli.run("volume", "put", "vol", "local", "remote")
     assert calls["n"] == 1
+
+
+async def test_run_rate_limited_retries_with_backoff_then_recovers(monkeypatch):
+    """限流：前两次 rate limit、第三次成功 → 共 3 次调用，退避按 1s/4s 序列。"""
+    calls = {"n": 0, "delays": []}
+
+    async def fake_once(*args, timeout):
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise ModalCliError(
+                "VolumeListFiles rate limit exceeded.", category="rate_limited", retryable=True
+            )
+        return "ok\n"
+
+    async def fake_sleep(delay):
+        calls["delays"].append(delay)
+
+    monkeypatch.setattr(modal_cli, "_run_once", fake_once)
+    monkeypatch.setattr(modal_cli.asyncio, "sleep", fake_sleep)
+    assert await modal_cli.run("volume", "ls", "vol", "--json") == "ok\n"
+    assert calls["n"] == 3
+    assert calls["delays"] == [1.0, 4.0]
+
+
+async def test_run_rate_limited_exhausts_backoff_and_raises(monkeypatch):
+    """限流持续：1s/4s/10s 三次重试后仍失败 → 抛出最后一次错误（共 4 次调用）。"""
+    calls = {"n": 0}
+
+    async def fake_once(*args, timeout):
+        calls["n"] += 1
+        raise ModalCliError("rate limit exceeded", category="rate_limited", retryable=True)
+
+    monkeypatch.setattr(modal_cli, "_run_once", fake_once)
+    monkeypatch.setattr(modal_cli.asyncio, "sleep", lambda _: _noop())
+    with pytest.raises(ModalCliError):
+        await modal_cli.run("volume", "ls", "vol", "--json")
+    assert calls["n"] == 4
 
 
 async def test_run_records_success_and_failure(monkeypatch):

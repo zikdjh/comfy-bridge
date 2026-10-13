@@ -79,6 +79,7 @@ _ERROR_LABELS = {
     "not_logged_in": "未登录",
     "network": "网络失败",
     "permission": "权限不足",
+    "rate_limited": "平台限流",
     "uncertain": "远端状态不确定",
     "command": "命令失败",
 }
@@ -138,6 +139,7 @@ _DEFAULT_ACTIONS = {
     "not_logged_in": "执行 modal token new，或在「设置 → Modal」填写 token_id/token_secret",
     "network": "检查本机网络、代理和 Modal 服务状态后重试",
     "permission": "确认当前 Modal 账户对该资源有权限，或更换凭证",
+    "rate_limited": "Modal 控制面限流中，稍等片刻重试即可；启动期首检会自动退避重试",
     "uncertain": "先用 modal app list 核对远端状态，确认前不要重复发起写操作",
     "command": "查看错误详情与命令参数后重试",
 }
@@ -168,6 +170,14 @@ def _classify_error(message: str, *, timed_out: bool = False) -> tuple[str, bool
         "403",
     )):
         return "permission", False
+    if any(marker in low for marker in (
+        "rate limit",
+        "too many requests",
+        "quota exceeded",
+        "429",
+    )):
+        # Modal 控制面限流（VolumeListFiles 等）：窗口为秒级，只读命令按多级退避自动恢复
+        return "rate_limited", True
     if any(marker in low for marker in (
         "connection refused",
         "connection reset",
@@ -315,19 +325,37 @@ def _should_retry(error: ModalCliError, args: tuple[str, ...]) -> bool:
     return error.retryable and _is_read_only(args)
 
 
+# 各错误类别的重试退避序列（秒）：限流窗口为秒级，退避逐次拉长；
+# 其余可重试错误（网络抖动等）保持原有的单次快速重试。
+_RETRY_DELAYS: dict[str, tuple[float, ...]] = {
+    "rate_limited": (1.0, 4.0, 10.0),
+}
+_DEFAULT_RETRY_DELAYS: tuple[float, ...] = (0.5,)
+
+
 async def run(*args: str, timeout: float = 600.0) -> str:
     """执行 CLI 命令并返回 stdout；阻塞部分放到线程池，避免占用事件循环。
 
     timeout 兜底防止 CLI 网络僵死把整条决策链路（/health、/prompt 路由）挂死。
+    只读命令按类别退避重试：限流 1s/4s/10s 三次，网络抖动 0.5s 一次；写命令不重发。
     """
-    try:
-        return await _run_once(*args, timeout=timeout)
-    except ModalCliError as exc:
-        if not _should_retry(exc, args):
-            raise
-        logger.info("modal CLI 可重试错误，500ms 后重试一次: %s", exc)
-        await asyncio.sleep(0.5)
-        return await _run_once(*args, timeout=timeout)
+    attempt = 0
+    while True:
+        try:
+            return await _run_once(*args, timeout=timeout)
+        except ModalCliError as exc:
+            if not _should_retry(exc, args):
+                raise
+            delays = _RETRY_DELAYS.get(exc.category, _DEFAULT_RETRY_DELAYS)
+            if attempt >= len(delays):
+                raise
+            delay = delays[attempt]
+            attempt += 1
+            logger.info(
+                "modal CLI 可重试错误（%s），%.1fs 后第 %d 次重试: %s",
+                exc.category, delay, attempt, exc,
+            )
+            await asyncio.sleep(delay)
 
 
 async def _run_once(*args: str, timeout: float) -> str:

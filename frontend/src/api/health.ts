@@ -26,7 +26,7 @@ export interface HealthResponse {
 }
 
 export interface ModalCliFailure {
-  category: "not_installed" | "not_logged_in" | "network" | "permission" | "uncertain" | "command";
+  category: "not_installed" | "not_logged_in" | "network" | "permission" | "rate_limited" | "uncertain" | "command";
   label: string;
   message: string;
   retryable: boolean;
