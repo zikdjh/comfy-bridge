@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ComfyBridge 完整测试报告 · 2026-10-13</title>
+<style>
+  :root{
+    --bg:#f4f6fb; --card:#ffffff; --ink:#1f2430; --sub:#6b7280; --line:#e5e8f0;
+    --pass:#16a34a; --pass-bg:#ecfdf3; --fail:#b91c1c; --fail-bg:#fef2f2;
+    --warn:#b45309; --warn-bg:#fffbeb;
+    --info:#1d4ed8; --info-bg:#eff6ff; --chip:#eef1f7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;line-height:1.65;font-size:15px}
+  .hero{background:linear-gradient(135deg,#1f2540 0%,#3a4670 100%);color:#fff;padding:44px 48px 36px}
+  .hero h1{margin:0 0 8px;font-size:29px;letter-spacing:.5px}
+  .hero p{margin:4px 0;color:#c9d1e8;font-size:14px}
+  .wrap{max-width:1100px;margin:-20px auto 60px;padding:0 20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:22px 26px;margin:18px 0;box-shadow:0 2px 10px rgba(31,36,48,.05)}
+  h2{font-size:19px;margin:6px 0 14px;padding-bottom:10px;border-bottom:2px solid var(--line)}
+  h3{font-size:15px;margin:18px 0 8px}
+  .meta-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px 22px;font-size:14px}
+  .meta-grid div b{color:var(--sub);font-weight:600;margin-right:8px}
+  code{background:var(--chip);border-radius:5px;padding:1px 7px;font-size:13px;
+    font-family:Consolas,"Courier New",monospace}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin:8px 0}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#f8fafc;font-weight:600;white-space:nowrap}
+  td.c{text-align:center;white-space:nowrap}
+  .tag{display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:600;white-space:nowrap}
+  .pass{color:var(--pass);background:var(--pass-bg)}
+  .fail{color:var(--fail);background:var(--fail-bg)}
+  .warn{color:var(--warn);background:var(--warn-bg)}
+  .info{color:var(--info);background:var(--info-bg)}
+  .block{background:var(--info-bg);border-left:4px solid var(--info);border-radius:0 8px 8px 0;
+    padding:12px 16px;margin:12px 0;font-size:13.5px}
+  .block.failbox{background:var(--fail-bg);border-left-color:var(--fail)}
+  ul{margin:6px 0;padding-left:22px}
+  li{margin:4px 0}
+  .small{color:var(--sub);font-size:12.5px}
+  .sum{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px}
+  .sum div{flex:1;min-width:150px;border:1px solid var(--line);border-radius:10px;padding:12px 16px;background:#fbfcfe}
+  .sum b{display:block;font-size:24px;line-height:1.2}
+  .sum .n-pass{color:var(--pass)} .sum .n-fail{color:var(--fail)} .sum .n-warn{color:var(--warn)} .sum .n-sub{color:var(--sub)}
+  .chain{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
+  .chain span{background:var(--chip);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:13px}
+  .chain b{color:var(--sub)}
+</style>
+</head>
+<body>
+<div class="hero">
+  <h1>ComfyBridge 完整测试报告</h1>
+  <p>测试范围：管理台全页面真机点击测试 · 双端启动与部署 · 版本/节点同步 · 基础生图链路 · GGUF 量化模型专项（云端直下 / 节点同步 / 云端生图 / 队列监测）</p>
+  <p>测试方式：浏览器自动化真实点击 + API 实调（非静态走查） · 测试日期：2026-10-13（Asia/Shanghai）</p>
+</div>
+<div class="wrap">
+
+  <div class="card">
+    <h2>一、总体结论</h2>
+    <p>全天测试覆盖「<b>环境搭建 → 管理台功能 → 生图业务 → GGUF 扩展链路</b>」四层，全部端到端真实跑通：
+    Modal Runner 成功部署并与本地完成版本/节点对齐；管理台 11 个页面 34 项交互用例全部通过；
+    基础 krea2 云端生图（78.9s）与 GGUF 量化生图（111.0s）均 done 且输出自动回传落盘；
+    过程中发现 1 个第三方节点架构限制（已换用正确加载器解决）与 3 个 P3 轻微问题，<b>未发现桥接器阻断或严重缺陷</b>。</p>
+    <div class="sum">
+      <div><b class="n-pass">43</b>通过用例</div>
+      <div><b class="n-fail">1</b>失败（第三方节点限制，已规避）</div>
+      <div><b class="n-warn">3</b>P3 轻微问题</div>
+      <div><b class="n-pass">0</b>阻断 / 严重缺陷</div>
+      <div><b class="n-sub">≈ $0.09</b>测试云端消耗</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>二、测试环境</h2>
+    <div class="meta-grid">
+      <div><b>桥接器</b>uvicorn <code>127.0.0.1:8189</code>（回环监听，无管理令牌）</div>
+      <div><b>前端</b>Vite 5.4.21 <code>localhost:5173</code>（/api 代理 8189）</div>
+      <div><b>本地 ComfyUI</b>v0.39.2 · RTX 4060 Laptop · Python 3.13 · 经桥接器接管启停</div>
+      <div><b>云端 Runner</b>modal app <code>comfyui-l40s</code> · L40S · ComfyUI 0.39.2 · Linux · Python 3.12</div>
+      <div><b>数据卷</b>comfyui-data · 31.7 GiB / 78 文件 · 1024 GB 水位正常</div>
+      <div><b>工具链</b>Node 24.20.0 · pnpm 12.10.1 · uv · modal client 1.5.5</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>三、环境准备与部署验证（6/6 通过）</h2>
+    <table>
+      <thead><tr><th style="width:170px">环节</th><th>真实操作与证据</th><th style="width:70px">结果</th></tr></thead>
+      <tbody>
+      <tr>
+        <td><b>服务启动</b></td>
+        <td>后端 uvicorn + 前端 Vite 启动，健康接口与代理验证 200。<span class="small">（发现 node 不在系统 PATH 的环境问题 #P3-1，注入后解决）</span></td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>本地 ComfyUI 接管启停</b></td>
+        <td>经 <code>POST /launch/local/start</code> 拉起（17.5s 就绪）→ 设置页按钮联动正确 → <code>/local/stop</code> 停止 → 8188 离线，闭环验证。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>Modal Runner 部署</b></td>
+        <td>此前列表无任何应用。经合并入口 <code>/nodes/image/rebuild{align_version:true}</code> 一次 deploy 同时完成
+          <b>节点依赖固化 + 版本 pin 对齐</b>，9.7s 部署成功，应用状态 deployed，固定 Web URL 生成。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>版本同步</b></td>
+        <td>本地权威版本 0.39.2 → 锁文件 pin v0.39.2 随镜像部署；直连云端 <code>/system_stats</code> 实测
+          <b>cloud ComfyUI 0.39.2 @ L40S</b>，drift=false。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>节点同步（基础）</b></td>
+        <td>节点文件 hash 两端一致（comfybridge-openai-image 包 + websocket_image_save.py）；依赖预检无冲突并烧进镜像层。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>节点在场索引</b></td>
+        <td>强制刷新触发云端冷启动：本地 978 = 云端 978；GGUF 专项后最终 <b>997 = 997</b>（+19 来自两套 GGUF 节点）。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>四、管理台全页面真机点击测试（34/34 通过）</h2>
+    <table>
+      <thead><tr><th style="width:110px">页面</th><th>真实操作与证据</th><th style="width:70px">结果</th></tr></thead>
+      <tbody>
+      <tr>
+        <td><b>仪表盘</b></td>
+        <td>今日统计 / 通道状态 / 排队表 / 最近完成表（148 条 15 页）正常；「任务」抽屉开关正常；「预热」弹出 <b>$1.95/h 费用二次确认</b>，取消不发请求；出图界面链接离线时桥接根返回 502（语义正确）。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>路由规则</b></td>
+        <td>内置规则链 3 条展示正确；「添加规则」可编辑行生成/删除正常；「干跑」空输入校验提示正确（未保存，避免改配置）。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>节点管理</b></td>
+        <td>本地/差异矩阵 Tab 离线指引明确；对齐历史展开 1 条记录（无需变更）。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>工作流</b></td>
+        <td>本地清单 2 个工作流（hash/大小齐全）、重新扫描正常；同步矩阵均「已同步」；运行统计 148 次 / 成功 66 / 云端 125 / 估算 $1.8625。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>模型卷</b></td>
+        <td>凭证态与数据卷显示正确；checkpoints 对比出仅本地占位文件，上传/下载按钮按状态启停；分类下拉 8 项切换后计数即时联动。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>数据卷</b></td>
+        <td>总览真实拉取 31.7 GiB / 78 文件 / 1 卷；「重新统计」二次遍历收敛；云端直下、目录浏览、回收站、任务区块齐全。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>媒体库</b></td>
+        <td>44 个文件；文件名过滤即时收敛；缩略图详情 Modal（大小/时间/预览/原文件链接）正常。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>成本报表</b></td>
+        <td>按工作流 / 按主模型切换联动（表头与聚合行变化）；趋势图渲染；CSV 导出真实请求 <code>200 text/csv</code> 中文表头正确；月度对账 5 天数据。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>日志</b></td>
+        <td>148 条分页、云/本地标识、prompt_id 复制；后端筛选 <b>148 → 19 条</b>并恢复；请求详情抽屉含完整 <b>决策链路 cloud_model→modal</b>；实时控制台双面板离线态文案正确。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>系统状态</b></td>
+        <td>首检因启动期 Modal 限流短暂失败（有留痕）；「重新自检」通过：已安装 / 已登录 / modal 1.5.5 / CLI 路径正确。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>设置</b></td>
+        <td>配置向导 5 步状态检测正确、可分步进入；「扫描本机」真实遍历 D/E 盘 33954 目录发现 2 个完整安装、选中回填；「校验」通过（v0.39.2）；启动命令 Tab 74 行参数表 + 启停按钮联动；桥接/Modal/护栏/设置同步 4 Tab 正常，token 脱敏回显。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>404 路由</b></td>
+        <td><code>/no-such-page</code> 渲染「404 页面不存在」。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>五、生图链路测试</h2>
+
+    <h3>5.1 基础链路：krea2 云端生图（通过）</h3>
+    <p>经 <code>:8189/prompt</code>（隐私确认头）提交 krea2 文生图（云端专有模型强制走 Modal，1024×1024 / 8 步 euler-simple）：</p>
+    <table>
+      <thead><tr><th>时间</th><th>状态（8189 实测）</th></tr></thead>
+      <tbody>
+        <tr><td>13:09:28</td><td>queued（cloud_model → modal 规则命中）</td></tr>
+        <tr><td>13:09:36</td><td>running</td></tr>
+        <tr><td>13:10:56</td><td><b>done · 78.9s</b></td></tr>
+      </tbody>
+    </table>
+    <p>输出 <code>bridge_smoke_20261013_00001_.png</code>（1.0 MB）自动回传落盘并目检与提示词一致。</p>
+
+    <h3>5.2 GGUF 量化专项链路</h3>
+    <div class="chain">
+      <span>① 本地装节点</span><b>→</b>
+      <span>② 云端直下模型</span><b>→</b>
+      <span>③ 节点同步云端</span><b>→</b>
+      <span>④ 冷启动识别</span><b>→</b>
+      <span>⑤ GGUF 生图</span><b>→</b>
+      <span>⑥ 队列监测</span>
+    </div>
+    <table>
+      <thead><tr><th style="width:150px">环节</th><th>真实操作与证据</th><th style="width:70px">结果</th></tr></thead>
+      <tbody>
+      <tr>
+        <td><b>① 本地安装节点</b></td>
+        <td>克隆 <b>city96/ComfyUI-GGUF</b>（6ea2651，ghfast 镜像、origin 修正官方）与 <b>calcuis/gguf v0.0.75</b>（9712158）至 custom_nodes/；本地 venv 装 <code>gguf 0.19.0 + sentencepiece + protobuf</code>；经桥接器重启后两套节点类全部注册（6 + 13 类）。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>② 云端直下模型</b></td>
+        <td>本地无法直连 HF，用一次性 Modal 云端探针（用完即删）检索并校验仓库，选定 <code>gguf-org/krea-2-gguf/krea2_turbo-iq4_xs.gguf</code>（6.35 GB，与卷上 qwen3vl 编码器 + qwen VAE 配套）。经 <code>POST /volume/download</code> 云端直下落 <code>models/diffusion_models</code>（任务 4bfd288a2c4c），约 1 分钟 done。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>③ 节点同步云端</b></td>
+        <td><code>/nodes/sync</code> 整包上传（staging 排除 .git/__pycache__）：ComfyUI-GGUF（a0f594f0de29，13:26）、gguf（b45865df6dcb，13:49）各 1/1 ok，manifest 合并、日志留痕。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>④ 冷启动识别</b></td>
+        <td>停容器+预热，冷启动 33.9s / 32.1s；云端 <code>LoaderGGUF</code> 就位且 gguf_name 直接列出 krea2_turbo-iq4_xs.gguf（新文件 + 依赖兜底安装生效）。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>⑤ GGUF 云端生图</b></td>
+        <td>LoaderGGUF(iq4_xs) + CLIPLoader(qwen3vl_4b) + VAELoader(qwen_image_vae)，1024×1024 / seed 777，显式 X-Bridge-Backend: modal。<b>13:54:22 queued → 13:54:52 running → 13:56:43 done · 111.0s（含首次卷加载）· GPU 71.58s · $0.0388</b>。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      <tr>
+        <td><b>⑥ 队列/进度监测</b></td>
+        <td>执行期轮询 <code>/api/v1/requests</code> 与 <code>/api/v1/jobs</code> 跟踪状态机；结束后 <code>/api/v1/jobs</code> running=0、云端 <code>/queue</code> running/pending 均空；请求 #156 记录完整（manual→modal、model_name、gpu_seconds、est_cost、graph_hash）。输出 <code>bridge_gguf_smoke_20261013_00001_.png</code>（1.26 MB）回传落盘目检合格。</td>
+        <td class="c"><span class="tag pass">通过</span></td>
+      </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>六、发现的问题汇总</h2>
+    <table>
+      <thead><tr><th style="width:48px">#</th><th>问题</th><th>证据 / 处置</th><th style="width:90px">定性</th></tr></thead>
+      <tbody>
+      <tr>
+        <td class="c">1</td>
+        <td><b>city96/ComfyUI-GGUF 不支持 krea2 架构</b></td>
+        <td>
+          <div class="block failbox">首次 GGUF 生图（prompt_id 6082264b）error（25.1s）：<code>Unknown model architecture!</code></div>
+          源码排查确认 city96 版无 krea 映射；按量化仓库 README 定位 <b>calcuis/gguf v0.0.75</b>
+          （PIG_ARCH_LIST 白名单含 krea2，节点类 LoaderGGUF），安装→同步→冷启动后生图成功。
+          <b>结论：krea2 GGUF 工作流必须使用 calcuis 的 LoaderGGUF</b>；两套节点并存不冲突。
+        </td>
+        <td><span class="tag warn">第三方限制<br>已规避</span></td>
+      </tr>
+      <tr>
+        <td class="c">2</td>
+        <td class="c">P3-1</td>
+        <td><b>dev.ps1 启动依赖 node 在 PATH</b>：本机 node 安装于 <code>E:\node\version\v24.20.0</code> 但不在系统 PATH，<code>pnpm dev</code> 直接执行报错；需注入 PATH 后启动。</td>
+        <td><span class="tag info">环境/脚本</span></td>
+      </tr>
+      <tr>
+        <td class="c">3</td>
+        <td class="c">P3-2</td>
+        <td><b>启动期 Modal API 限流</b>：VolumeListFiles rate limit 使节点在场索引、系统状态首检短暂失败；已有留痕与处理建议，重试即恢复。</td>
+        <td><span class="tag info">平台侧</span></td>
+      </tr>
+      <tr>
+        <td class="c">4</td>
+        <td class="c">P3-3</td>
+        <td><b>antd 弃用告警</b>：<code>[antd: Modal] destroyOnClose is deprecated</code>（仅控制台，不影响功能），择机替换为 destroyOnHidden。</td>
+        <td><span class="tag info">代码卫生</span></td>
+      </tr>
+      </tbody>
+    </table>
+    <p class="small">说明：开发模式控制台偶现 <code>net::ERR_ABORTED</code>（events/stream 等）系 React StrictMode 双挂载中止首个请求所致，生产构建不存在，非缺陷。</p>
+  </div>
+
+  <div class="card">
+    <h2>七、关键数据一览</h2>
+    <table>
+      <thead><tr><th>项目</th><th>数值</th></tr></thead>
+      <tbody>
+        <tr><td>Modal 部署</td><td>app comfyui-l40s · deploy 9.7s（镜像层缓存命中）· 固化 1 节点依赖 + 版本对齐一次完成</td></tr>
+        <tr><td>版本对齐</td><td>本地 0.39.2 = 云端 0.39.2（pin v0.39.2，drift=false）</td></tr>
+        <tr><td>节点类对齐</td><td>978（基线）→ 997 = 997（两套 GGUF 节点 +19 类）</td></tr>
+        <tr><td>基础生图</td><td>prompt_id 15f096f6 · 78.9s · done · 输出 1.0 MB 回传</td></tr>
+        <tr><td>云端直下模型</td><td>krea2_turbo-iq4_xs.gguf · 6.35 GB → models/diffusion_models（任务 4bfd288a2c4c）</td></tr>
+        <tr><td>GGUF 节点同步</td><td>ComfyUI-GGUF（a0f594f0de29）+ gguf（b45865df6dcb）· 各 1/1 ok</td></tr>
+        <tr><td>GGUF 冷启动</td><td>33.9s / 32.1s（节点识别 + 依赖兜底安装 + 卷上新模型可见）</td></tr>
+        <tr><td>GGUF 生图</td><td>prompt_id 589bf430 · 111.0s · GPU 71.58s · $0.0388 · done · 输出 1.26 MB 回传</td></tr>
+        <tr><td>数据卷水位</td><td>31.7 GiB / 78 文件 / 1024 GB 额度正常（GGUF 落卷后）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>八、遗留与建议</h2>
+    <ul>
+      <li><b>节点选型写入运维文档</b>：krea2 架构 GGUF 须用 calcuis/gguf 的 LoaderGGUF；city96 版适用于其支持列表内架构（flux/sdxl 等）。</li>
+      <li><b>启动脚本健壮性</b>：dev.ps1 可加入 node PATH 探测/注入，或在安装文档中注明 Node ≥ 18 且需在 PATH。</li>
+      <li><b>限流退避（可选）</b>：启动期对 Modal 控制面只读命令增加更长退避，降低首检失败概率。</li>
+      <li><b>镜像固化（可选优化）</b>：calcuis/gguf 自带连接器无需 pip 依赖，暂无需重建镜像；后续引入带 requirements 的节点时经「镜像重建」烧进镜像层。</li>
+      <li><b>本轮未覆盖</b>（依赖真实费用或并发场景）：预热确定执行的真实冷启动计费验证、多任务并发排队、大分辨率上云阈值触发、隐私确认首次弹窗（本轮带头直通）、跨站 Origin 403 与管理令牌鉴权（回环部署无令牌）。</li>
+      <li><b>收尾状态</b>：测试结束后本地 ComfyUI 经桥接器 API 停止、桥接器与前端关闭，三端口验证离线；Modal 应用无常驻容器，闲置自动缩容到零。</li>
+    </ul>
+  </div>
+
+</div>
+</body>
+</html>

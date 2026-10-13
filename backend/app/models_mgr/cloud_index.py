@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import shutil
 import time
 
 from ..core.config import modal_configured, model_dirs_resolved

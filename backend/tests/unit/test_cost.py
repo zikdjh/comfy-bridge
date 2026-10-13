@@ -61,7 +61,7 @@ def tmp_db(monkeypatch, tmp_path):
 def test_record_cost_and_totals(tmp_db):
     from datetime import datetime, timedelta
 
-    now = datetime.now()
+    now = datetime.now().astimezone()
     _insert("modal", 0.5, 900.0, now - timedelta(days=2))
     _insert("modal", 0.25, 450.0, now)
     _insert("local", None, None, now)  # 本地请求不产生成本记录
@@ -80,14 +80,18 @@ def test_record_cost_and_totals(tmp_db):
 def test_cost_daily_groups_by_local_date(tmp_db):
     from datetime import datetime, timedelta
 
-    now = datetime.now()
-    _insert("modal", 0.10, 100.0, now - timedelta(days=1, hours=2))
-    _insert("modal", 0.20, 200.0, now - timedelta(days=1, hours=-1))
+    now = datetime.now().astimezone()
+    # 用本地零点定位「昨天」，避免 now 接近零点时相对偏移跨到前天。
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    yesterday_late = midnight - timedelta(hours=1)   # 昨天 23:00
+    yesterday_early = yesterday_late - timedelta(hours=12)  # 昨天 11:00
+    _insert("modal", 0.10, 100.0, yesterday_early)
+    _insert("modal", 0.20, 200.0, yesterday_late)
     _insert("modal", 0.40, 400.0, now)
 
     daily = store.cost_daily(30)
     assert len(daily) == 2
-    assert daily[0]["date"] == (now - timedelta(days=1)).strftime("%Y-%m-%d")
+    assert daily[0]["date"] == yesterday_late.strftime("%Y-%m-%d")
     assert daily[0]["requests"] == 2
     assert daily[0]["est_cost_usd"] == pytest.approx(0.30)
     assert daily[-1]["date"] == now.strftime("%Y-%m-%d")
@@ -97,7 +101,7 @@ def test_cost_daily_groups_by_local_date(tmp_db):
 def test_record_cost_idempotent_overwrite(tmp_db):
     from datetime import datetime
 
-    pid = _insert("modal", 0.5, 900.0, datetime.now())
+    pid = _insert("modal", 0.5, 900.0, datetime.now().astimezone())
     store.record_cost(pid, 10.0, 0.01)  # 同 prompt_id 重复入账 = 覆盖
     assert store.cost_totals()["est_cost_usd"] == pytest.approx(0.01)
 
@@ -143,13 +147,13 @@ def test_budget_state_thresholds(tmp_db, monkeypatch):
     from datetime import datetime
 
     _patch_budget_settings(monkeypatch, monthly_budget_usd=0.5)
-    _insert("modal", 0.49, 900.0, datetime.now())
+    _insert("modal", 0.49, 900.0, datetime.now().astimezone())
     state = cost_svc.budget_state()
     assert state["enabled"] is True
     assert state["exceeded"] is False
     assert state["remaining_usd"] == pytest.approx(0.01)
 
-    _insert("modal", 0.02, 100.0, datetime.now())
+    _insert("modal", 0.02, 100.0, datetime.now().astimezone())
     state = cost_svc.budget_state()
     assert state["exceeded"] is True  # 0.51 >= 0.5
     assert state["remaining_usd"] == 0.0
@@ -159,7 +163,7 @@ def test_budget_state_disabled_when_limit_zero(tmp_db, monkeypatch):
     from datetime import datetime
 
     _patch_budget_settings(monkeypatch, monthly_budget_usd=0)
-    _insert("modal", 10.0, 9000.0, datetime.now())
+    _insert("modal", 10.0, 9000.0, datetime.now().astimezone())
     state = cost_svc.budget_state()
     assert state["enabled"] is False
     assert state["exceeded"] is False
@@ -170,7 +174,7 @@ def test_summary_shape(tmp_db, monkeypatch):
     from datetime import datetime
 
     _patch_budget_settings(monkeypatch, monthly_budget_usd=30.0)
-    _insert("modal", 1.0, 3600.0, datetime.now())
+    _insert("modal", 1.0, 3600.0, datetime.now().astimezone())
     s = cost_svc.summary()
     assert s["gpu_type"] == cost_svc.GPU_TYPE
     assert s["today"]["requests"] == 1
@@ -264,7 +268,7 @@ async def test_fetch_cli_error_strips_noise_and_short_caches(monkeypatch, fresh_
 async def test_afull_summary_includes_modal(monkeypatch, tmp_db):
     from datetime import datetime
 
-    _insert("modal", 1.0, 3600.0, datetime.now())
+    _insert("modal", 1.0, 3600.0, datetime.now().astimezone())
 
     async def fake_fetch(force=False):
         return {"ok": True, "metered_cost_usd": 5.97, "credits_applied_usd": 5.5}
@@ -395,6 +399,8 @@ async def test_areconcile_merges_both_sides(monkeypatch, tmp_db):
     assert data["local"]["est_cost_usd"] == pytest.approx(0.4)
     assert data["modal"]["gpu_usd"] == pytest.approx(0.5)
     assert data["ratio_gpu_vs_est"] == pytest.approx(1.25)
+    assert data["diverged"] is False
+    assert data["divergence_message"] is None
     assert {r["date"] for r in data["daily"]} == {"2026-09-15", "2026-09-20"}  # 并集
     row15 = next(r for r in data["daily"] if r["date"] == "2026-09-15")
     assert row15["local_usd"] == pytest.approx(0.4) and row15["modal_gpu_usd"] == pytest.approx(0.5)
@@ -419,6 +425,46 @@ async def test_areconcile_modal_failure_keeps_local(monkeypatch, tmp_db):
     assert data["local"]["est_cost_usd"] == pytest.approx(0.4)  # 本地侧照常展示
     assert data["daily"] and data["daily"][0]["modal_gpu_usd"] == 0.0
     assert data["ratio_gpu_vs_est"] is None
+
+
+async def test_areconcile_flags_ratio_divergence(monkeypatch, tmp_db):
+    from datetime import UTC, datetime
+
+    from app.cost import reconciliation
+
+    _insert("modal", 1.0, 3600.0, datetime(2026, 9, 15, 12, tzinfo=UTC))
+
+    async def high_report(start, end, force=False):
+        return {
+            "ok": True, "gpu_usd": 3.0, "total_usd": 3.0,
+            "resources": {"L40S": 3.0}, "apps": [], "daily": {},
+        }
+
+    monkeypatch.setattr(reconciliation.modal_billing, "report", high_report)
+    data = await reconciliation.areconcile("2026-09")
+    assert data["ratio_gpu_vs_est"] == pytest.approx(3.0)
+    assert data["diverged"] is True
+    assert "gpu_hourly_rate_usd" in (data["divergence_message"] or "")
+    assert "Modal" in (data["divergence_message"] or "")
+
+
+async def test_areconcile_ratio_at_warn_boundary_not_flagged(monkeypatch, tmp_db):
+    from datetime import UTC, datetime
+
+    from app.cost import reconciliation
+
+    _insert("modal", 1.0, 3600.0, datetime(2026, 9, 15, 12, tzinfo=UTC))
+
+    async def boundary_report(start, end, force=False):
+        return {
+            "ok": True, "gpu_usd": 1.5, "total_usd": 1.5,
+            "resources": {"L40S": 1.5}, "apps": [], "daily": {},
+        }
+
+    monkeypatch.setattr(reconciliation.modal_billing, "report", boundary_report)
+    data = await reconciliation.areconcile("2026-09")
+    assert data["ratio_gpu_vs_est"] == pytest.approx(1.5)
+    assert data["diverged"] is False
 
 
 # ---------------------------------------------------------------- 报表 v2：账单明细 CLI

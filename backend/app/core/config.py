@@ -43,6 +43,9 @@ class LocalConfig(BaseModel):
     # 桥接器接管启动用的基础命令（argv，可执行文件 + main.py + 基础参数）；
     # 空 = 保存/启动时自动探测当前实例命令行，探测不到回退 venv python -s main.py
     launch_command: list[str] = []
+    # Node.js 可执行文件路径（可选）：开发前端（pnpm/Vite）依赖 node，PATH 探测不到时
+    # 可在设置页手动指定；留空 = 检测接口自动按 PATH → 常见安装目录快扫兜底
+    node_path: str = ""
 
 
 class RoutingRule(BaseModel):
@@ -78,10 +81,34 @@ class BridgeConfig(BaseModel):
     # 提交前预校验（M3-5 余项）：off=不校验（默认，历史行为）/ strict=拦截 / ask=拦截+可操作选项 /
     # auto=缺模型且本地有副本时自动上传云端卷后放行（缺节点仍拦截）。未知取值按 off。
     preflight: str = "off"
+    # 云端提交前隐私确认（P2-5）：首次把工作流分流到 Modal 时返回一次数据边界说明，
+    # 调用方带 X-Bridge-Privacy-Confirmed: 1 重试放行；关闭后不再拦截（可在设置页撤销）。
+    privacy_confirm: bool = True
+    # /object_info 两端合并策略：
+    # - local-first（默认）：同名 class_type 完全使用本地 schema，只追加云端独有节点 + 云端模型名；
+    # - union：同名 class_type 保留本地 schema，但把云端独有的模型组合项并入本地 schema；
+    # - local-only：完全不合并云端 class_type / 模型名（排障用）。
+    object_info_merge: str = "local-first"
     # —— 自定义路由规则链（M3，规划文档 §3.1）——
     # 空列表 = 沿用内置 gen_type/size 规则（历史行为不变）；非空 = 自定义链按序求值并
     # 替换内置那两条；manual/tag/cloud_model/default 四步固定不参与 CRUD。
     rules: list[RoutingRule] = []
+
+
+class AccountProfile(BaseModel):
+    """单个 Modal 账号档案（[[modal.accounts]] 数组项）。"""
+
+    name: str = ""
+    token_id: str = ""      # ak-...
+    token_secret: str = ""  # as-...
+    environment: str = ""   # Modal 环境，空 = 默认环境
+    proxy_token_id: str = ""      # wk-...
+    proxy_token_secret: str = ""  # ws-...
+    volume: str = "comfyui-data"
+    app_name: str = "comfyui-l40s"
+    web_url: str = ""
+    task_timeout: int = 3600
+    extra_launch_args: list[str] = []
 
 
 class ModalConfig(BaseModel):
@@ -105,6 +132,10 @@ class ModalConfig(BaseModel):
     # 云端 ComfyUI 追加启动参数：保存时经 modal volume put 写入数据卷
     # /config/launch_args.json，容器冷启动时由 runner.py 读取追加
     extra_launch_args: list[str] = []
+    # 账号档案注册表（多账号维护，docs/ComfyBridge-设计-多账号维护.html）：[[modal.accounts]]。
+    # [modal] 本体始终是「当前活跃账号的生效视图」；激活 = 把档案字段整体复制进本体。
+    # 1 账号 = 1 份凭据：token_id 唯一，轮换 = 覆盖写回档案，不做多凭据并存。
+    accounts: list[AccountProfile] = []
 
 
 class AppConfig(BaseModel):

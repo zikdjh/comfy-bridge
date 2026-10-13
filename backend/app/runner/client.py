@@ -39,6 +39,11 @@ def deployed_state() -> str | None:
     return _state["state"] if time.monotonic() - _state["fetched_ms"] < _STATE_TTL else None
 
 
+def invalidate_state() -> None:
+    """账号切换后强制下轮重新探测（app_name/web_url 已随账号变化）。"""
+    _state.update(fetched_ms=0.0, state=None)
+
+
 async def refresh_state() -> str | None:
     """`modal app list --json` 探测应用部署状态（单飞）。"""
     app_name = get_settings().modal.app_name
@@ -91,7 +96,12 @@ def proxy_headers() -> dict[str, str]:
 
 def _client() -> httpx.AsyncClient:
     # 鉴权头默认注入全部云端请求；connect 15s（Modal 边缘快连）；read 覆盖冷启动 600s + 余量
-    return httpx.AsyncClient(timeout=httpx.Timeout(660.0, connect=15.0), headers=proxy_headers())
+    # trust_env=False：不拾取系统 HTTP(S)_PROXY，云端直连走 Modal 边缘网络。
+    return httpx.AsyncClient(
+        timeout=httpx.Timeout(660.0, connect=15.0),
+        headers=proxy_headers(),
+        trust_env=False,
+    )
 
 
 async def fetch_object_info() -> dict:
@@ -111,6 +121,33 @@ async def post_prompt(payload: dict) -> dict:
         resp = await cli.post(f"{url}/prompt", json=payload)
     if resp.status_code != 200:
         raise RuntimeError(f"云端提交被拒（HTTP {resp.status_code}）: {resp.text[:300]}")
+    return resp.json()
+
+
+async def post_input_file(
+    filename: str, data: bytes, *, subfolder: str = "", overwrite: bool = True
+) -> dict:
+    """把输入文件写进运行中容器的 input/ 目录（ComfyUI `/upload/image`）。
+
+    必须走容器内的 ComfyUI，而不是外部 `modal volume put`：Modal Volume 是快照
+    语义，外部写入对**已经在运行**的容器不可见（load 时报 Invalid image file），
+    而容器内写入立刻可见；文件随容器正常退出提交回卷，持久化语义不变。
+    ComfyUI 该端点只落原始字节，不做图片解码校验（校验发生在 LoadImage 节点），
+    因此对非图片输入同样适用。
+
+    subfolder 为 input/ 内的相对子目录（对应工作流里的 "sub/name.png"）。
+    """
+    url = web_url()
+    files = {"image": (filename, data, "application/octet-stream")}
+    form = {"type": "input", "overwrite": "true" if overwrite else "false"}
+    if subfolder:
+        form["subfolder"] = subfolder
+    async with _client() as cli:
+        resp = await cli.post(f"{url}/upload/image", files=files, data=form)
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"云端输入上传失败（HTTP {resp.status_code}）: {filename} {resp.text[:200]}"
+        )
     return resp.json()
 
 
@@ -167,7 +204,7 @@ async def post_interrupt() -> None:
     async with _client() as cli:
         try:
             await cli.post(f"{url}/interrupt", timeout=httpx.Timeout(20.0, connect=10.0))
-        except httpx.HTTPError as exc:  # noqa: BLE001 —— 中断尽力而为
+        except httpx.HTTPError as exc:
             logger.warning("云端 /interrupt 失败: %s", exc)
 
 

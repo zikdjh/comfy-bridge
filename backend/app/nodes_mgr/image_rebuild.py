@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 
 from ..core.config import get_settings
-from . import deploy, lockfile, version_align
+from . import deploy, lockfile, resolve, version_align
 from .scan import scan_custom_nodes
 
 
@@ -28,6 +28,9 @@ async def start_rebuild(align_version: bool = False) -> dict:
     """
     scan = await asyncio.to_thread(scan_custom_nodes)
     lock = lockfile.generate(scan)
+    precheck = await asyncio.to_thread(resolve.precheck, lock["nodes"])
+    if precheck["status"] == "blocked":
+        raise resolve.DependencyConflictError(precheck)
     script = lockfile.render_install_script(lock)
     backup = lockfile.backup_current()
 

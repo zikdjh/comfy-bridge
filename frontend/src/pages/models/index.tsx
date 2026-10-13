@@ -16,6 +16,7 @@ import { CloudDownloadOutlined, CloudUploadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { message } from "antd";
 import { EmptyGuide } from "../../components/common/EmptyGuide";
+import { ModelUploadCard } from "../../components/models/ModelUploadCard";
 import {
   useCancelJob,
   useStartSync,
@@ -271,6 +272,8 @@ export default function ModelsPage() {
           </Typography.Text>
         )}
       </Card>
+
+      <ModelUploadCard categories={meta.data?.categories ?? Object.keys({ checkpoints: 1 })} />
     </Space>
   );
 }

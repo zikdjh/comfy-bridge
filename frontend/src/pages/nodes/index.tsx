@@ -25,6 +25,7 @@ import { CheckCircleOutlined, CloseCircleOutlined, CloudUploadOutlined, SyncOutl
 import type { ColumnsType } from "antd/es/table";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  checkNodeDependencies,
   removeCloudNodes,
   rebuildNodeImage,
   refreshNodeDiff,
@@ -33,7 +34,7 @@ import {
   useNodeDiff,
   useNodeVersion,
 } from "../../api/nodes";
-import type { NodeDiffRow, VersionJob } from "../../api/nodes";
+import type { DependencyPrecheck, NodeDiffRow, VersionJob } from "../../api/nodes";
 import { stopModalContainers } from "../../api/launch";
 import { openJobDrawer, useJob } from "../../api/jobs";
 import { warmupModal } from "../../api/health";
@@ -43,6 +44,18 @@ import dayjs from "dayjs";
 /* ---------------- 本地清单（真实数据） ---------------- */
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100, 200];
+
+function dependencyPrecheckError(result: DependencyPrecheck): string {
+  const lines = [result.detail ?? "依赖预检未通过"];
+  for (const conflict of result.conflicts.slice(0, 5)) {
+    const nodes = conflict.nodes.join("、") || "未知节点";
+    lines.push(`${nodes}：${conflict.reason}`);
+    if (conflict.requirements.length > 0) {
+      lines.push(`约束：${conflict.requirements.join("；")}`);
+    }
+  }
+  return lines.join("\n");
+}
 
 function ClassTypeTable({ classTypes }: { classTypes: string[] }) {
   const [keyword, setKeyword] = useState("");
@@ -349,6 +362,22 @@ function DiffMatrix() {
 
   const rebuildImage = async () => {
     try {
+      const precheck = await checkNodeDependencies();
+      if (precheck.status === "blocked") {
+        Modal.error({
+          title: "节点依赖预检未通过",
+          width: 720,
+          content: (
+            <pre style={{ maxHeight: 320, overflow: "auto", whiteSpace: "pre-wrap" }}>
+              {dependencyPrecheckError(precheck)}
+            </pre>
+          ),
+        });
+        return;
+      }
+      if (precheck.status === "unavailable") {
+        message.warning(precheck.detail ?? "本机无法完成权威依赖解析，将由远端 deploy 兜底");
+      }
       const res = await rebuildNodeImage(true);
       if (res.ok) {
         message.success("重建任务已启动：固化节点依赖 + 版本对齐一次完成（约数分钟）");
@@ -538,6 +567,39 @@ function DiffMatrix() {
         <Alert type="warning" showIcon message="云端 class_type 对比失败" description={diff.class_types.error} />
       )}
       {(() => {
+        const conflicts = diff?.class_types.conflicts ?? {};
+        const names = Object.keys(conflicts);
+        if (names.length === 0) return null;
+        return (
+          <Alert
+            type="warning"
+            showIcon
+            message={`检测到 ${names.length} 个同名 class_type 的 schema 冲突`}
+            description={
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span>
+                  当前合并策略：{diff?.class_types.merge_strategy ?? "local-only"}。
+                  同名节点始终使用本地 schema，冲突仅作诊断，不会覆盖本地节点定义。
+                </span>
+                {names.slice(0, 5).map((name) => (
+                  <Typography.Text key={name} style={{ fontSize: 12 }}>
+                    <Typography.Text code>{name}</Typography.Text>
+                    {" — "}
+                    {conflicts[name].slice(0, 8).join("、")}
+                    {conflicts[name].length > 8 ? "…" : ""}
+                  </Typography.Text>
+                ))}
+                {names.length > 5 && (
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    …等 {names.length} 个，完整路径见 API /api/v1/nodes/diff?deep=1
+                  </Typography.Text>
+                )}
+              </div>
+            }
+          />
+        );
+      })()}
+      {(() => {
         // 反向同步提示（M2 收尾）：云端独有节点只给安装线索，不自动改本地环境
         const cloudOnly = (diff?.rows ?? []).filter((r) => r.cloud && !r.local);
         if (cloudOnly.length === 0) return null;
@@ -725,6 +787,22 @@ function VersionBanner() {
       onOk: async () => {
         setAligning(true);
         try {
+          const precheck = await checkNodeDependencies();
+          if (precheck.status === "blocked") {
+            Modal.error({
+              title: "节点依赖预检未通过",
+              width: 720,
+              content: (
+                <pre style={{ maxHeight: 320, overflow: "auto", whiteSpace: "pre-wrap" }}>
+                  {dependencyPrecheckError(precheck)}
+                </pre>
+              ),
+            });
+            return;
+          }
+          if (precheck.status === "unavailable") {
+            message.warning(precheck.detail ?? "本机无法完成权威依赖解析，将由远端 deploy 兜底");
+          }
           const res = await rebuildNodeImage(true);
           if (res.ok) {
             message.success("重建任务已启动（固化 + 版本对齐一次完成，约数分钟）");

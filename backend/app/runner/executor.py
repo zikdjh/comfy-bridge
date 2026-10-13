@@ -1,7 +1,7 @@
 """modal 路由请求的后台执行器（M1 Runner 通道）。
 
 prompt_submit 提前应答 200 + 桥接 prompt_id 后，本模块接力完成：
-  上传输入文件（modal volume put → 卷 input/，无需等冷启动）
+  上传输入文件（云端 ComfyUI /upload/image → 运行中容器的 input/，立即可见）
   → 提交云端 ComfyUI /prompt（首个请求等待容器冷启动，startup_timeout 600s）
   → WS 实时转发 progress/executing/status 到浏览器（云端 prompt_id 映射回桥接 id）
   → 完成后按 /history 把输出经 /view 拉回落本地 output_dir（媒体库自动可见）
@@ -15,6 +15,7 @@ prompt_submit 提前应答 200 + 桥接 prompt_id 后，本模块接力完成：
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 from pathlib import Path
@@ -25,9 +26,9 @@ from ..core import config
 from ..cost import arecord_cost
 from ..logs import store
 from ..modal_volume import client as modal_cli
+from ..proxy.ws_relay import send_event
 from . import client as runner_client
 from . import console
-from ..proxy.ws_relay import send_event
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,14 @@ _OUTPUT_BUCKETS = ("images", "gifs", "video", "audio")
 # 取 120s（读超时 8s × 若干拍 + 执行收尾），到期仍无条目按无输出工作流收尾。
 _SUCCESS_GRACE_S = 120.0
 
+# WS 泵存活期间，Modal 边缘只处理这一条连接：其它 HTTP（/history、/queue）会排队
+# 直到泵结束。真机实测（2026-10-11）：云端 0.02s 就中断结束的请求因未广播终态事件，
+# 泵一直挂着 → /history 永远读超时 → 请求被挂到 task_timeout(3600s)。因此每隔
+# _WS_PROBE_INTERVAL_S 主动收泵一拍，用权威 /history 判定是否已终态。
+_WS_PROBE_INTERVAL_S = 45.0
+# 收泵后给云端 HTTP 处理留出的窗口，再决定是否重挂泵继续实时转发。
+_PUMP_RESUME_DELAY_S = 3.0
+
 # bridge_prompt_id → 任务态（client_id / modal_pid / task）
 _TASKS: dict[str, dict] = {}
 
@@ -62,7 +71,13 @@ def dispatch(prompt_id: str, payload: dict) -> bool:
     """启动云端执行任务（重复提交同一 prompt_id 拒绝）。"""
     if prompt_id in _TASKS:
         return False
-    state: dict = {"client_id": payload.get("client_id"), "modal_pid": None, "task": None}
+    state: dict = {
+        "client_id": payload.get("client_id"),
+        "modal_pid": None,
+        "task": None,
+        "pump": None,              # 当前 WS 泵任务（跟踪循环维护，供中断时收泵）
+        "pump_pause_until": 0.0,   # 控制请求窗口：此时刻前不重挂泵
+    }
     _TASKS[prompt_id] = state
     state["task"] = asyncio.create_task(_run(prompt_id, payload))
     return True
@@ -73,7 +88,25 @@ def interrupt_all() -> None:
     for state in _TASKS.values():
         task = state.get("task")
         if task and not task.done():
-            asyncio.get_running_loop().create_task(runner_client.post_interrupt())
+            asyncio.get_running_loop().create_task(_interrupt_task(state))
+
+
+async def _interrupt_task(state: dict) -> None:
+    """先收掉 WS 泵再发 /interrupt。
+
+    真机实测（2026-10-11）：泵存活期间云端只处理该 WS，`/interrupt` 会排队到读超时
+    （httpx.ReadTimeout 消息为空，日志只留「云端 /interrupt 失败:」），中断从未送达，
+    请求只能等云端自己跑完。收泵 → 发中断 → 跟踪循环稍后重挂泵。
+    """
+    loop = asyncio.get_running_loop()
+    state["pump_pause_until"] = loop.time() + _PUMP_RESUME_DELAY_S
+    pump = state.get("pump")
+    if pump is not None and not pump.done():
+        pump.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await pump
+    state["pump"] = None
+    await runner_client.post_interrupt()
 
 
 # ------------------------------------------------------------------ 主流程
@@ -102,6 +135,7 @@ async def _run(prompt_id: str, payload: dict) -> None:
             f"[{prompt_id[:8]}] 云端已受理 modal_pid={state['modal_pid'][:8]}"
             f"（等待 {waited:.1f}s，含容器冷启动）"
         )
+        await store.aset_modal_pid(prompt_id, state["modal_pid"])
         await store.aupdate_status(prompt_id, "running")
         send_event(state["client_id"], {
             "type": "execution_start",
@@ -111,7 +145,7 @@ async def _run(prompt_id: str, payload: dict) -> None:
         await _finish(prompt_id, state, kind, entry, detail)
     except asyncio.CancelledError:
         raise
-    except Exception as exc:  # noqa: BLE001 —— 任何环节失败都收敛到 error 终态
+    except Exception as exc:
         logger.exception("[%s] 云端执行失败", prompt_id[:8])
         await _finish(prompt_id, state, "error", None, str(exc))
     finally:
@@ -122,9 +156,15 @@ async def _run(prompt_id: str, payload: dict) -> None:
 
 
 async def _upload_inputs(payload: dict) -> None:
-    """把 prompt 引用的本地输入文件推到数据卷 input/（云端同路径可读）。
+    """把 prompt 引用的本地输入文件推入云端容器的 input/。
 
-    本地没有的输入视为云端卷已有（云端工作流场景），缺失时由云端校验兜底报错。
+    两条通道：优先走云端 ComfyUI `/upload/image`（写入运行中容器的卷视图，
+    立刻可见）；端点不可用时回落 `modal volume put`（写卷持久化，但要等下一次
+    容器冷启动才可见）。真机实测（2026-10-11）：只做 volume put 时，已在运行的
+    容器拿着旧快照，LoadImage 校验报 "Invalid image file"——这正是本函数必须先
+    走容器内通道的原因。
+
+    本地没有的输入视为云端已有（云端工作流场景），缺失时由云端校验兜底报错。
     """
     names = _collect_input_files(payload.get("prompt") or {})
     if not names:
@@ -136,7 +176,8 @@ async def _upload_inputs(payload: dict) -> None:
         console.log(f"[{pid}] 输入 {len(missing)} 个本地缺失，假定已在云端卷（缺失由云端校验兜底）")
     to_upload = [n for n in names if (input_root / n).is_file()]
     if to_upload:
-        console.log(f"[{pid}] 上传输入文件 {len(to_upload)} 个 → 数据卷 input/")
+        console.log(f"[{pid}] 上传输入文件 {len(to_upload)} 个 → 云端 input/")
+    pushed = 0
     for name in to_upload:
         # 输入名来自提交方工作流：只允许 input/ 内的相对路径，
         # 防 .. / 绝对路径把 input 外的本地文件推上云端卷
@@ -145,8 +186,29 @@ async def _upload_inputs(payload: dict) -> None:
             logger.warning("跳过越界输入引用: %r", name)
             continue
         local = input_root / name
-        await modal_cli.run("volume", "put", modal_cli.volume_name(), "-f", str(local), f"input/{name}")
-        logger.info("输入已上传数据卷: %s", name)
+        channel = await _push_input(name, local)
+        pushed += 1
+        logger.info("输入已推送云端(%s): %s", channel, name)
+    if pushed and pushed == len(to_upload):
+        console.log(f"[{pid}] 输入文件推送完成 {pushed} 个")
+
+
+async def _push_input(name: str, local: Path) -> str:
+    """推送单个输入文件，返回实际通道名（comfy / volume）。"""
+    rel = name.replace("\\", "/")
+    subfolder, _, filename = rel.rpartition("/")
+    try:
+        data = local.read_bytes()
+    except OSError as exc:
+        logger.warning("读取本地输入失败，回落 volume put: %s (%s)", rel, exc)
+    else:
+        try:
+            await runner_client.post_input_file(filename, data, subfolder=subfolder)
+            return "comfy"
+        except Exception as exc:  # noqa: BLE001 —— 端点缺失/容器未起都回落，不阻断执行
+            logger.warning("云端 /upload/image 失败，回落 volume put: %s (%s)", rel, exc)
+    await modal_cli.run("volume", "put", modal_cli.volume_name(), "-f", str(local), f"input/{rel}")
+    return "volume"
 
 
 def _collect_input_files(prompt: dict) -> list[str]:
@@ -184,14 +246,29 @@ async def _track(prompt_id: str, state: dict) -> tuple[str, dict | None, str]:
         terminal["detail"] = detail
         done.set()
 
-    ws_task = None
-    if state.get("client_id"):
-        ws_task = asyncio.create_task(
+    def spawn_pump() -> asyncio.Task:
+        return asyncio.create_task(
             _ws_pump(state["client_id"], modal_pid, prompt_id, on_terminal)
         )
+
+    ws_task = spawn_pump() if state.get("client_id") else None
+    state["pump"] = ws_task
     try:
-        deadline = asyncio.get_running_loop().time() + config.get_settings().modal.task_timeout
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + config.get_settings().modal.task_timeout
+        probe_at = loop.time() + _WS_PROBE_INTERVAL_S
+        resume_at = 0.0
         while True:
+            # 定期收泵一拍：泵存活期间云端只处理该 WS，/history 会一直排队（真机实测），
+            # 提前中断且未广播终态的请求会因此挂到 task_timeout。收泵后立刻做权威判定。
+            if ws_task is not None and (loop.time() >= probe_at or ws_task.done()):
+                ws_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await ws_task
+                ws_task = None
+                state["pump"] = None
+                resume_at = loop.time() + _PUMP_RESUME_DELAY_S
+                probe_at = loop.time() + _WS_PROBE_INTERVAL_S
             entry = await runner_client.get_history(modal_pid)
             logs = await runner_client.fetch_container_logs()  # 失败/缩容返回空
             if entry is not None:
@@ -207,6 +284,7 @@ async def _track(prompt_id: str, state: dict) -> tuple[str, dict | None, str]:
                 if ws_task is not None:
                     ws_task.cancel()
                     ws_task = None
+                    state["pump"] = None
                 if terminal["kind"] == _TERMINAL_STATUS["execution_success"]:
                     grace_end = asyncio.get_running_loop().time() + _SUCCESS_GRACE_S
                     while True:
@@ -218,12 +296,17 @@ async def _track(prompt_id: str, state: dict) -> tuple[str, dict | None, str]:
                             return "success", None, ""
                         await asyncio.sleep(2.5)
                 return terminal["kind"], None, terminal.get("detail") or ""
-            if asyncio.get_running_loop().time() >= deadline:
+            if loop.time() >= deadline:
                 raise TimeoutError(f"云端执行超时（> {config.get_settings().modal.task_timeout}s）")
+            if (ws_task is None and state.get("client_id")
+                    and loop.time() >= max(resume_at, state.get("pump_pause_until", 0.0))):
+                ws_task = spawn_pump()  # 云端仍在执行：重挂泵继续实时转发
+                state["pump"] = ws_task
             await asyncio.sleep(2.5)
     finally:
         if ws_task:
             ws_task.cancel()
+        state["pump"] = None
 
 
 def _drain_container_logs(state: dict, entries: list[dict]) -> None:
@@ -263,6 +346,7 @@ async def _ws_pump(client_id: str, modal_pid: str, bridge_pid: str,
         async with websockets.connect(
             runner_client.ws_url(client_id), max_size=None, additional_headers=runner_client.proxy_headers(),
             compression=None,
+            proxy=None,  # 云端 WS 不走本机系统代理（与 httpx trust_env=False 同口径）
         ) as up:
             last_logged = [0.0]  # 进度节流（同批多步事件只按时间采样写控制台）
             async for raw in up:
@@ -329,7 +413,7 @@ async def _finish(prompt_id: str, state: dict, kind: str, entry: dict | None, de
         count = await _download_outputs(outputs)
         logger.info("[%s] 输出回传完成：%d 个文件", prompt_id[:8], count)
         console.log(f"[{prompt_id[:8]}] 执行完成，输出回传 {count} 个文件")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("[%s] 输出回传失败", prompt_id[:8])
         err = f"输出回传失败: {exc}"[:500]
         console.log(f"[{prompt_id[:8]}] 执行失败：{err}", "error")

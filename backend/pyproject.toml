@@ -6,6 +6,9 @@ build-backend = "hatchling.build"
 name = "comfy-bridge"
 version = "0.1.0"
 description = "ComfyBridge - 本地 ComfyUI 与 Modal 云端 GPU 的桥接器"
+# PEP 639 SPDX 表达式；backend/LICENSE 是仓库根 LICENSE 的构建镜像
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
@@ -13,6 +16,8 @@ dependencies = [
     "httpx>=0.27",
     "websockets>=12",
     "pydantic>=2.7",
+    # 依赖预检静态解析 requirements/specifier；不依赖 pip 内部实现
+    "packaging>=24",
     # modal 仅作子进程调用（CLI：volume/app/container；账单：子进程内用其 gRPC 客户端查 WorkspaceBillingSummary），
     # 后端主进程不 import 其 SDK（副作用重：事件循环策略、日志钩子）
     "modal>=0.70",
@@ -52,6 +57,12 @@ dev = [
 
 [tool.ruff]
 line-length = 100
+
+# mypy 存量已清零（P3-1 收尾），CI 按「零错误」门禁执行：
+# 只检查自身代码，第三方 SDK 缺失的类型存根不参与判定
+[tool.mypy]
+ignore_missing_imports = true
+files = ["app"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

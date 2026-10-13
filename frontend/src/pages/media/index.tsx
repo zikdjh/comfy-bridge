@@ -228,7 +228,7 @@ export default function MediaPage() {
             </Space>
           )
         }
-        destroyOnClose
+        destroyOnHidden
       >
         {selected &&
           (selected.kind === "image" ? (

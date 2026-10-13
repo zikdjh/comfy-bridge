@@ -26,6 +26,7 @@ import re
 import subprocess
 import time
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -122,7 +123,7 @@ def _push_modal_args(args: list[str]) -> dict:
     try:
         proc = subprocess.run(
             ["modal", "volume", "put", settings.modal.volume, "-f", str(src), VOLUME_ARGS_FILE],
-            capture_output=True, text=True, timeout=180,
+            capture_output=True, text=True, timeout=180, check=False,
             env={**os.environ, **auth_env()},
         )
     except Exception as exc:  # noqa: BLE001
@@ -154,15 +155,15 @@ async def write_launch(body: LaunchBody) -> dict:
             local_proc.canonical_from_detection(det, Path(get_settings().local.comfy_root))
             if det else []
         )
-    clean = AppConfig(
-        local={
+    clean = AppConfig.model_validate({
+        "local": {
             **current.local.model_dump(),
             "extra_launch_args": local_extra,
             "launch_command": launch_command,
         },
-        bridge=current.bridge.model_dump(),
-        modal={**current.modal.model_dump(), "extra_launch_args": modal_extra},
-    )
+        "bridge": current.bridge.model_dump(),
+        "modal": {**current.modal.model_dump(), "extra_launch_args": modal_extra},
+    })
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     CONFIG_PATH.write_text(
         _dump_toml({
@@ -217,7 +218,7 @@ def _container_rows() -> tuple[list[dict], int, str | None]:
     try:
         proc = subprocess.run(
             ["modal", "container", "list", "--json"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90, check=False,
             env={**os.environ, **auth_env()},
         )
     except Exception as exc:  # noqa: BLE001
@@ -261,7 +262,7 @@ def _list_modal_containers() -> dict:
         return _containers_cache[1]
     own, unknown, error = _container_rows()
     if error:
-        data = {"ok": False, "count": None, "containers": [], "detail": error}
+        data: dict[str, Any] = {"ok": False, "count": None, "containers": [], "detail": error}
     else:
         containers = []
         for row in own:
@@ -303,7 +304,7 @@ def _stop_modal_containers() -> dict:
         try:
             s = subprocess.run(
                 ["modal", "container", "stop", cid, "-y"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90, check=False,
                 env={**os.environ, **auth_env()},
             )
         except Exception as exc:  # noqa: BLE001

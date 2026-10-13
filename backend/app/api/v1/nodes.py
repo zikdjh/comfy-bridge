@@ -12,6 +12,9 @@
 - POST /nodes/cloud/remove      从云端数据卷移除节点（volume rm）
 - GET  /nodes/version           本地 ComfyUI 版本 vs 云端镜像 pin 对照 + 部署任务状态
 - POST /nodes/version/align     版本对齐（本地为权威）：写 pin 锁文件 → modal deploy 重建镜像
+- GET  /nodes/dependency-precheck
+                               重建前依赖预检：静态约束 + pip dry-run resolver，返回
+                               ok / blocked / unavailable 及涉及的节点与约束
 - POST /nodes/image/rebuild     镜像重建：固化（M2-2，nodes.lock.yaml + install_nodes.sh 依赖预装）
                                 + 可选版本对齐（align_version）合并为一次 modal deploy，失败自动回滚
                                 （部署任务体与互斥见 nodes_mgr.deploy，与 version/align 共用单飞通道）
@@ -25,12 +28,14 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import shutil
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -40,8 +45,17 @@ from ...core.config import custom_nodes_dir, get_settings, modal_configured
 from ...modal_volume import client as volume_cli
 from ...modal_volume.client import ModalCliError
 from ...models_mgr import node_presence
-from ...nodes_mgr import deploy, diff_cache, image_rebuild, manager_api, version_align
+from ...nodes_mgr import (
+    deploy,
+    diff_cache,
+    image_rebuild,
+    lockfile,
+    manager_api,
+    resolve,
+    version_align,
+)
 from ...nodes_mgr.scan import DISABLED_SUFFIX, scan_custom_nodes
+from ...proxy import object_info as object_info_merge
 from ...runner import client as runner_client
 from ...sync import jobs
 
@@ -56,7 +70,7 @@ def _manifest(scan: dict | None = None) -> dict:
     scan = scan or scan_custom_nodes()
     return {
         "schema": 1,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "packages": sorted(
             [
                 {
@@ -134,6 +148,15 @@ async def _local_class_types() -> list[str] | None:
         return None
 
 
+async def _local_object_info() -> dict | None:
+    """本地全量 object_info schema；本地服务未启动返回 None。"""
+    try:
+        info = await comfy_client.fetch_object_info()
+        return info if isinstance(info, dict) else None
+    except Exception:  # noqa: BLE001 —— 服务未启动是正常状态
+        return None
+
+
 @router.get("/nodes/local")
 async def nodes_local() -> dict:
     settings = get_settings().local
@@ -148,12 +171,10 @@ async def nodes_local() -> dict:
     except Exception as exc:  # noqa: BLE001
         error = str(exc) or type(exc).__name__
 
-    try:
+    with contextlib.suppress(Exception):  # 取版本失败不影响在线判定
         stats = await comfy_client.fetch_system_stats()
         version = stats.get("system", {}).get("comfyui_version")
         online = True
-    except Exception:  # noqa: BLE001
-        pass
 
     # Manager API 兜底（M2-1 余项）：在线且装有 ComfyUI-Manager 时增强目录扫描，
     # 补非 git 包的 repo/版本/展示名；离线或失败静默跳过，不影响主清单
@@ -182,7 +203,7 @@ def _safe_name(name: str) -> bool:
 
 async def _cloud_listing() -> dict:
     """数据卷 custom_nodes/ 的一层清单；目录不存在（新卷/容器未启动过）视为空。"""
-    view = {
+    view: dict[str, Any] = {
         "ok": False,
         "error": None,
         "volume": volume_cli.volume_name(),
@@ -384,21 +405,42 @@ async def nodes_diff(
         # 只有 force=1 或块缺失才重拉
         class_types = None if force else diff_cache.load_class_types()
         ct_hit = class_types is not None
+        cloud_schemas: dict | None = None
         if class_types is None:
-            class_types = {"local": await _local_class_types(), "cloud": None, "error": None}
+            local_doc = await _local_object_info()
+            class_types = {
+                "local": sorted(local_doc.keys()) if local_doc is not None else None,
+                "cloud": None,
+                "error": None,
+                "conflicts": {},
+                "merge_strategy": object_info_merge.effective_strategy(),
+            }
             if matrix.get("ok"):
                 try:
                     info = await runner_client.fetch_object_info()
                     class_types["cloud"] = sorted(info.keys())
+                    diagnostics = object_info_merge.set_cloud_schemas(info, local_doc or {})
+                    class_types["conflicts"] = diagnostics["conflicts"]
+                    cloud_schemas = object_info_merge.cloud_schemas_snapshot()
                 except Exception as exc:  # noqa: BLE001 —— 冷启动超时/容器不可达
                     class_types["error"] = str(exc) or type(exc).__name__
             diff_cache.save_class_types(class_types)
+            if cloud_schemas is not None:
+                diff_cache.save_cloud_schemas(cloud_schemas)
+        else:
+            object_info_merge.restore_cloud_schemas(
+                diff_cache.load_cloud_schemas(),
+                class_types.get("conflicts") or {},
+            )
+            class_types["merge_strategy"] = object_info_merge.effective_strategy()
+        object_info_merge.invalidate_merge_cache()
         class_types["cached"] = ct_hit
         class_types["cached_at"] = class_types.get("cached_at") if ct_hit else None
     else:
         class_types = {
-            "local": await _local_class_types(), "cloud": None,
-            "error": None, "cached": False, "cached_at": None,
+            "local": await _local_class_types(), "cloud": None, "error": None,
+            "conflicts": {}, "merge_strategy": object_info_merge.effective_strategy(),
+            "cached": False, "cached_at": None,
         }
 
     return {**matrix, "class_types": class_types}
@@ -482,7 +524,7 @@ async def _sync_body(handle, names: list[str]) -> None:
                     }
             await _write_cloud_manifest({
                 "schema": 1,
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "packages": sorted(
                     (v for v in combined.values() if v["kind"] == "pkg"),
                     key=lambda p: p["name"],
@@ -543,7 +585,7 @@ async def nodes_cloud_remove(body: NamesBody) -> dict:
             manifest["single_files"] = [
                 p for p in manifest.get("single_files", []) if p["name"] not in successful
             ]
-            manifest["generated_at"] = datetime.now(timezone.utc).isoformat()
+            manifest["generated_at"] = datetime.now(UTC).isoformat()
             await _write_cloud_manifest(manifest)
     return {"ok": bool(results) and all(r["ok"] for r in results), "results": results}
 
@@ -584,6 +626,14 @@ async def nodes_version_align() -> dict:
     return {"ok": job["state"] in ("running", "ok"), "job": job}
 
 
+@router.get("/nodes/dependency-precheck")
+async def nodes_dependency_precheck(force: bool = Query(False)) -> dict:
+    """镜像重建前的节点依赖预检（本地计算，不触发 Modal 容器或 deploy）。"""
+    scan = await asyncio.to_thread(scan_custom_nodes)
+    lock = lockfile.generate(scan)
+    return await asyncio.to_thread(resolve.precheck, lock["nodes"], force=force)
+
+
 @router.post("/nodes/image/rebuild")
 async def nodes_image_rebuild(body: RebuildBody | None = None) -> dict:
     """镜像重建：固化本地节点依赖进镜像；align_version=True 时并入库内 ComfyUI 版本对齐（一次 deploy）。"""
@@ -591,6 +641,8 @@ async def nodes_image_rebuild(body: RebuildBody | None = None) -> dict:
         raise HTTPException(status_code=400, detail="未配置 Modal 凭证（设置 → Modal）")
     try:
         job = await image_rebuild.start_rebuild(align_version=bool(body and body.align_version))
+    except resolve.DependencyConflictError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"ok": job["state"] in ("running", "ok"), "job": job}

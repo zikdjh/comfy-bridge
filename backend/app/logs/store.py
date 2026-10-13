@@ -13,6 +13,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 GRAPH_DIR = DATA_DIR / "graphs"
@@ -35,6 +36,7 @@ CREATE TABLE IF NOT EXISTS requests (
   status TEXT NOT NULL DEFAULT 'queued',
   rule_trace TEXT,
   error TEXT,
+  modal_pid TEXT,
   started_ms INTEGER,
   finished_ms INTEGER,
   gpu_seconds REAL,
@@ -46,6 +48,7 @@ CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status);
 
 # 老库迁移：逐列补齐（ALTER ADD COLUMN 不支持 IF NOT EXISTS，先查 table_info）
 _MIGRATE_COLUMNS = {
+    "modal_pid": "ALTER TABLE requests ADD COLUMN modal_pid TEXT",
     "gpu_seconds": "ALTER TABLE requests ADD COLUMN gpu_seconds REAL",
     "est_cost_usd": "ALTER TABLE requests ADD COLUMN est_cost_usd REAL",
     "model_name": "ALTER TABLE requests ADD COLUMN model_name TEXT",
@@ -77,19 +80,47 @@ def init_db() -> None:
         _get_conn()
 
 
-def close_stale_pending(note: str = "桥接重启，执行跟踪丢失") -> int:
-    """启动时把遗留的 queued/running 记录关成 cancelled。
+def close_stale_pending(note: str = "桥接重启，本地执行跟踪丢失") -> int:
+    """启动时关闭本地侧遗留的 queued/running 记录。
 
-    执行跟踪（本地后台监视 / Modal 执行器）都在进程内存里，桥接一旦重启
-    这些记录永远等不到终态，留着会把仪表盘“运行中任务”撑成僵尸列表。
+    执行跟踪（本地后台监视 / Modal 执行器）都在进程内存里，桥接一旦重启本地
+    请求永远等不到终态。云端（modal_pid 非空）请求仍在 Modal 上跑，真实结局
+    交给 `pending_modal_reconcile()` 取出后由 reconcile 任务对账，这里不能关。
+    终态统一补 finished_ms —— 真机缺陷 LV-06：旧实现直接 UPDATE，留下的
+    cancelled 记录没有时长（bd506f9e，duration_ms 为空）。
     """
     with _lock:
         cur = _get_conn().execute(
-            "UPDATE requests SET status = 'cancelled', error = ? WHERE status IN ('queued', 'running')",
-            (note,),
+            """UPDATE requests
+               SET status = 'cancelled', error = ?, finished_ms = ?
+               WHERE status IN ('queued', 'running')
+                 AND (modal_pid IS NULL OR modal_pid = '')""",
+            (note, int(time.time() * 1000)),
         )
         _get_conn().commit()
         return cur.rowcount
+
+
+def pending_modal_reconcile() -> list[dict]:
+    """重启后遗留的云端在跑记录（modal_pid 已持久化、状态未终态）。"""
+    with _lock:
+        rows = _get_conn().execute(
+            """SELECT prompt_id, modal_pid, started_ms FROM requests
+               WHERE status IN ('queued', 'running')
+                 AND modal_pid IS NOT NULL AND modal_pid != ''
+               ORDER BY created_ms DESC"""
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def set_modal_pid(prompt_id: str, modal_pid: str) -> None:
+    """云端受理后立即持久化映射（重启对账依赖它，不能只留在内存）。"""
+    with _lock:
+        _get_conn().execute(
+            "UPDATE requests SET modal_pid = ? WHERE prompt_id = ?",
+            (modal_pid, prompt_id),
+        )
+        _get_conn().commit()
 
 
 def close_db() -> None:
@@ -115,16 +146,17 @@ def _row_to_dict(row: sqlite3.Row) -> dict:
 def insert_request(record: dict) -> int:
     with _lock:
         conn = _get_conn()
+        record = {**record, "modal_pid": record.get("modal_pid")}
         cur = conn.execute(
             """INSERT INTO requests
                (prompt_id, created_at, created_ms, backend, final_backend, gen_type,
-                workflow_name, model_name, graph_hash, graph_file, client_id, status, rule_trace, error)
+                workflow_name, model_name, graph_hash, graph_file, client_id, status, rule_trace, error, modal_pid)
                VALUES (:prompt_id, :created_at, :created_ms, :backend, :final_backend, :gen_type,
-                       :workflow_name, :model_name, :graph_hash, :graph_file, :client_id, :status, :rule_trace, :error)""",
+                       :workflow_name, :model_name, :graph_hash, :graph_file, :client_id, :status, :rule_trace, :error, :modal_pid)""",
             record,
         )
         conn.commit()
-        return int(cur.lastrowid)
+        return int(cur.lastrowid or 0)
 
 
 def update_status(prompt_id: str, status: str, error: str | None = None) -> None:
@@ -334,7 +366,8 @@ def set_model_name(req_id: int, model_name: str | None) -> None:
 
 def list_requests(limit: int = 50, backend: str | None = None, status: str | None = None) -> list[dict]:
     sql = "SELECT * FROM requests"
-    conds, params = [], []
+    conds: list[str] = []
+    params: list[Any] = []
     if backend and backend != "all":
         conds.append("backend = ?")
         params.append(backend)
@@ -353,7 +386,8 @@ def list_requests(limit: int = 50, backend: str | None = None, status: str | Non
 def count_requests(backend: str | None = None, status: str | None = None) -> int:
     """过滤条件下的请求总数（/requests 的 total 用；list_requests 受 limit 截断）。"""
     sql = "SELECT COUNT(*) FROM requests"
-    conds, params = [], []
+    conds: list[str] = []
+    params: list[Any] = []
     if backend and backend != "all":
         conds.append("backend = ?")
         params.append(backend)
@@ -378,6 +412,20 @@ def count_active_modal() -> int:
             "SELECT COUNT(*) FROM requests WHERE final_backend = 'modal' AND status IN ('queued', 'running')"
         ).fetchone()
     return n
+
+
+def list_active() -> list[dict]:
+    """在途任务（queued/running，不分端）：/queue 合成与队列面板数据源。"""
+    with _lock:
+        rows = _get_conn().execute(
+            "SELECT prompt_id, client_id, status, workflow_name, model_name, final_backend "
+            "FROM requests WHERE status IN ('queued', 'running') ORDER BY id ASC"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+async def alist_active() -> list[dict]:
+    return await asyncio.to_thread(list_active)
 
 
 def get_request(req_id: int) -> dict | None:
@@ -431,6 +479,31 @@ async def aupdate_status(prompt_id: str, status: str, error: str | None = None) 
     await asyncio.to_thread(update_status, prompt_id, status, error)
 
 
+async def areconcile_finish(
+    prompt_id: str, *, status: str, error: str | None = None, started_ms: int | None
+) -> None:
+    """重启对账回写：绕开状态机幂等锁（记录已被启动清理关单）。
+
+    正常执行走 update_status（终态后忽略后续事件）；对账发生在启动清理之后，
+    记录已是 cancelled，必须强制改写为云端真实结局并补全时间线。
+    """
+    def _do() -> None:
+        _get_conn().execute(
+            """UPDATE requests
+               SET status = ?, error = COALESCE(?, error), started_ms = COALESCE(started_ms, ?),
+                   finished_ms = ?
+               WHERE prompt_id = ?""",
+            (status, error, started_ms, int(time.time() * 1000), prompt_id),
+        )
+        _get_conn().commit()
+
+    await asyncio.to_thread(_do)
+
+
+async def aset_modal_pid(prompt_id: str, modal_pid: str) -> None:
+    await asyncio.to_thread(set_modal_pid, prompt_id, modal_pid)
+
+
 async def arecord_cost(prompt_id: str, gpu_seconds: float, est_cost_usd: float) -> None:
     await asyncio.to_thread(record_cost, prompt_id, gpu_seconds, est_cost_usd)
 
@@ -464,4 +537,5 @@ def now_ms() -> int:
 
 
 def now_iso() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    # astimezone()：拿到本地墙钟时间并附 tzinfo，规避 DTZ005 又不改变落库格式
+    return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]

@@ -37,7 +37,7 @@ async def main():
         req = urllib.request.Request(BASE + "/prompt", data=json.dumps(
             {"prompt_id": "", "client_id": CID, "prompt": PROMPT}).encode(),
             headers={"content-type": "application/json"}, method="POST")
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: ASYNC210 —— 手动回归脚本，顺序提交无需异步 HTTP
             ack = json.loads(resp.read())
         pid = ack["prompt_id"]
         print("submit:", resp.status, pid)
@@ -47,7 +47,7 @@ async def main():
         while time.monotonic() < deadline and not done_flag:
             try:
                 raw = await asyncio.wait_for(ws.recv(), timeout=10)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 rec = None
                 recs = get("/api/v1/requests?limit=3")["items"]
                 rec = next((r for r in recs if r["prompt_id"] == pid), {})

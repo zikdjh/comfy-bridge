@@ -13,21 +13,26 @@
 """
 
 import asyncio
+import contextlib
+import json
 import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import StreamingResponse
 from starlette.websockets import WebSocket
 
 from .api.v1 import api_router
+from .core.management_auth import install_management_auth
 from .gui_static import mount_gui
+from .logs import store as logs_store
 from .logs.store import close_db, close_stale_pending, init_db
 from .models_mgr import cloud_index
+from .proxy import local_tracker
 from .proxy.object_info import handle_object_info
 from .proxy.passthrough import close_upstream_client, forward_request, get_upstream_client
 from .proxy.prompt_submit import handle_prompt_submit
 from .proxy.ws_relay import relay_local_ws
+from .runner import reconcile
 
 # 应用日志（uvicorn 自己的 access/error logger 不传播，不会重复）
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
@@ -43,10 +48,15 @@ async def lifespan(_: FastAPI):
     warm = asyncio.create_task(_warm_cloud_index())
     warm_presence = asyncio.create_task(_warm_node_presence())
     warm_backfill = asyncio.create_task(_warm_model_backfill())
+    trash_cleanup = asyncio.create_task(_trash_cleanup_loop())
+    reconcile.start()
     yield
     warm.cancel()
     warm_presence.cancel()
     warm_backfill.cancel()
+    trash_cleanup.cancel()
+    await reconcile.stop()
+    await local_tracker.aclose()
     await close_upstream_client()
     close_db()
 
@@ -82,7 +92,20 @@ async def _warm_model_backfill() -> None:
             logging.getLogger(__name__).info("已回填 %d 条历史请求的主模型字段", n)
 
 
+async def _trash_cleanup_loop() -> None:
+    """每小时清理一次超过保留期的回收站目录；失败只记日志。"""
+    from .volume_mgr import deletion
+
+    while True:
+        try:
+            await deletion.cleanup_all_expired_trash()
+        except Exception as exc:  # noqa: BLE001
+            logging.getLogger(__name__).warning("回收站后台清理失败: %s", exc)
+        await asyncio.sleep(3600)
+
+
 app = FastAPI(title="ComfyBridge", version="0.1.0", lifespan=lifespan)
+install_management_auth(app)
 app.include_router(api_router)
 
 # 管理面 GUI 挂 /bridge（前端产物存在才挂）：必须在 catch-all 透传之前注册，
@@ -100,14 +123,14 @@ async def ws_proxy(websocket: WebSocket) -> None:
 # 前端新版本实际提交 /api/prompt，两条路径必须一并接管。
 @app.post("/prompt", include_in_schema=False)
 @app.post("/api/prompt", include_in_schema=False)
-async def prompt_submit(request: Request) -> StreamingResponse:
+async def prompt_submit(request: Request) -> Response:
     return await handle_prompt_submit(request)
 
 
 # 中断：本地照常透传；云端有在跑任务时尽力转发 /interrupt（执行器 → execution_interrupted）
 @app.post("/interrupt", include_in_schema=False)
 @app.post("/api/interrupt", include_in_schema=False)
-async def interrupt(request: Request) -> StreamingResponse:
+async def interrupt(request: Request) -> Response:
     from .runner import executor
 
     executor.interrupt_all()
@@ -116,7 +139,7 @@ async def interrupt(request: Request) -> StreamingResponse:
 
 # 根路径不落入 catch-all（path 为空），显式透传 —— ComfyUI 前端挂载于此
 @app.get("/", include_in_schema=False)
-async def passthrough_root(request: Request) -> StreamingResponse:
+async def passthrough_root(request: Request) -> Response:
     return await forward_request(request)
 
 
@@ -134,11 +157,45 @@ async def object_info_node(request: Request, node_type: str) -> Response:
     return await handle_object_info(request, node_type)
 
 
+# 队列合成：本地 ComfyUI /queue + 在途云端任务（queued/running）。ComfyUI 前端的
+# 队列面板（Running / Queue Pending 区块）由该端点驱动；不合成时用户在浏览器上
+# 看不到已提交给云端执行器的任务（它们不占用本地队列）。
+@app.get("/queue", include_in_schema=False)
+@app.get("/api/queue", include_in_schema=False)
+async def synthetic_queue(request: Request) -> Response:
+    local = await forward_request(request)
+    running_local: list = []
+    pending_local: list = []
+    if local.status_code == 200:
+        with contextlib.suppress(Exception):
+            data = json.loads(bytes(local.body))
+            running_local = list(data.get("queue_running") or [])
+            pending_local = list(data.get("queue_pending") or [])
+    cloud_rows = [r for r in await logs_store.alist_active() if r.get("final_backend") == "modal"]
+    cloud_running = [
+        [r["prompt_id"], r["prompt_id"], None, r.get("client_id") or "", None, None, r.get("model_name") or ""]
+        for r in cloud_rows
+        if r.get("status") == "running"
+    ]
+    cloud_pending = [
+        [r["prompt_id"], r["prompt_id"], None, r.get("client_id") or "", None, None, r.get("model_name") or ""]
+        for r in cloud_rows
+        if r.get("status") == "queued"
+    ]
+    return Response(
+        content=json.dumps({
+            "queue_running": running_local + cloud_running,
+            "queue_pending": pending_local + cloud_pending,
+        }, ensure_ascii=False).encode(),
+        media_type="application/json",
+    )
+
+
 # 其余端点（含静态前端资源、/history、/view、/upload 等）原样透传本地 ComfyUI
 @app.api_route(
     "/{path:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
     include_in_schema=False,
 )
-async def passthrough(path: str, request: Request) -> StreamingResponse:
+async def passthrough(path: str, request: Request) -> Response:
     return await forward_request(request)

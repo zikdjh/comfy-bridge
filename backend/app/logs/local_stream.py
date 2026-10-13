@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import re
 import uuid
@@ -31,7 +32,7 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 _LEVEL_RE = re.compile(r"\[(DEBUG|DETAIL|INFO|WARNING|ERROR|CRITICAL)\]")
 
 # ws 空闲多久做一次断连检查 / 心跳注释帧（SSE 经代理时防空闲超时）
-_WS_IDLE_TIMEOUT = 15.0
+_WS_IDLE_TIMEOUT = 2.0
 _RECONNECT_DELAY = 2.0
 _CONNECT_TIMEOUT = 5.0
 
@@ -83,7 +84,7 @@ async def _log_events_impl(request, tail: int = 300, client_ids: list[str] | Non
             # 每轮先取快照：首次连接给历史缓冲，断线重连后也靠它补齐缺口
             try:
                 snapshot = await fetch_snapshot(client)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 —— 任意读取失败都转为 SSE 状态事件
                 yield _sse("status", {"online": False, "error": f"无法读取本地 ComfyUI 日志：{exc}"})
                 if await _sleep_or_disconnected(request, _RECONNECT_DELAY):
                     return
@@ -99,7 +100,7 @@ async def _log_events_impl(request, tail: int = 300, client_ids: list[str] | Non
                     while True:
                         try:
                             raw = await asyncio.wait_for(ws.recv(), timeout=_WS_IDLE_TIMEOUT)
-                        except asyncio.TimeoutError:
+                        except TimeoutError:
                             if await request.is_disconnected():
                                 return
                             yield ": ping\n\n"
@@ -115,7 +116,7 @@ async def _log_events_impl(request, tail: int = 300, client_ids: list[str] | Non
                         entries = [normalize_entry(e) for e in msg.get("data", {}).get("entries", [])]
                         if entries:
                             yield _sse("append", {"entries": entries})
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 —— WS 断线/解析失败统一转状态并重连
                 yield _sse("status", {"online": False, "error": str(exc)})
 
             if await _sleep_or_disconnected(request, _RECONNECT_DELAY):
@@ -135,9 +136,7 @@ async def local_log_events(request, tail: int = 300) -> AsyncIterator[str]:
             yield chunk
     finally:
         for cid in client_ids:
-            try:
+            with contextlib.suppress(Exception):  # ComfyUI 已下线等场景，清理失败不抛
                 base = get_settings().local.comfy_url.rstrip("/")
                 async with httpx.AsyncClient(base_url=base, timeout=_CONNECT_TIMEOUT) as client:
                     await _subscribe(client, cid, False)
-            except Exception:  # noqa: BLE001 —— ComfyUI 已下线等场景，清理失败不抛
-                pass

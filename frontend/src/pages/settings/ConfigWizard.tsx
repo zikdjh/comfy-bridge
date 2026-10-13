@@ -212,7 +212,7 @@ export function ConfigWizard({ open, onClose }: Props) {
             ) : null}
           </Space>
         }
-        destroyOnClose
+        destroyOnHidden
       >
         <Steps
           size="small"

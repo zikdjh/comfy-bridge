@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>方案A探针：原生 Job Queue（/api/jobs）集成可行性（只读结论） · ComfyBridge 文档</title>
+<style>
+  :root {
+    --bg: #f6f7fb; --card: #ffffff; --ink: #1f2430; --ink-soft: #5a6272;
+    --line: #e4e7ef; --accent: #4f5be8; --accent-soft: #eef0fe;
+    --code-bg: #14161f; --code-ink: #e6e9f2;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 70px; }
+  body {
+    margin: 0; font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.75; font-size: 15px;
+  }
+  code, pre { font-family: "JetBrains Mono", Consolas, "Cascadia Code", monospace; }
+  header.hero {
+    background: linear-gradient(135deg, #232a63 0%, #4f5be8 55%, #8a7bff 100%);
+    color: #fff; padding: 34px 24px 26px; text-align: center;
+  }
+  header.hero h1 { margin: 0 0 8px; font-size: 25px; letter-spacing: 1px; }
+  header.hero .meta { font-size: 12.5px; opacity: .82; margin-top: 8px; }
+  nav.toc {
+    position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,.95);
+    backdrop-filter: blur(6px); border-bottom: 1px solid var(--line);
+    padding: 9px 16px; display: flex; flex-wrap: wrap; gap: 5px 12px;
+    justify-content: center; font-size: 13.5px;
+  }
+  nav.toc a { color: var(--ink-soft); text-decoration: none; padding: 3px 8px; border-radius: 6px; }
+  nav.toc a:hover { color: var(--accent); background: var(--accent-soft); }
+  main { max-width: 1000px; margin: 0 auto; padding: 26px 20px 40px; }
+  h2 {
+    font-size: 20px; margin: 40px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--accent); line-height: 1.4;
+  }
+  main > h2:first-child { margin-top: 0; }
+  h3 { font-size: 16.5px; margin: 24px 0 8px; }
+  h4 { font-size: 14.5px; margin: 18px 0 6px; color: #4353d8; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 26px; }
+  li { margin: 4px 0; }
+  li input[type="checkbox"] { margin-right: 6px; vertical-align: -2px; }
+  blockquote {
+    margin: 12px 0; padding: 10px 16px; background: var(--accent-soft);
+    border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; color: #3a4160;
+  }
+  blockquote p { margin: 4px 0; }
+  pre {
+    position: relative; background: var(--code-bg); color: var(--code-ink);
+    border-radius: 10px; padding: 30px 16px 13px; overflow-x: auto;
+    font-size: 13px; line-height: 1.6; margin: 12px 0;
+  }
+  pre .lang {
+    position: absolute; top: 6px; right: 12px; font-size: 11px; opacity: .55;
+    text-transform: uppercase; letter-spacing: 1px; font-family: system-ui, sans-serif;
+  }
+  code {
+    background: #f0f2fa; color: #33398f; padding: 1.5px 6px;
+    border-radius: 5px; font-size: 13px;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  table {
+    width: 100%; border-collapse: collapse; background: var(--card);
+    font-size: 13.5px; margin: 12px 0;
+  }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  thead th { background: var(--accent-soft); color: #4353d8; font-weight: 600; }
+  tbody tr:nth-child(even) { background: #fafbfe; }
+  td code, th code { background: #f0f2fa; color: #33398f; }
+  hr { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
+  a { color: var(--accent); }
+  del { color: var(--ink-soft); }
+  .footer { text-align: center; color: var(--ink-soft); font-size: 12.5px; padding: 18px; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header class="hero">
+  <h1>方案A探针：原生 Job Queue（/api/jobs）集成可行性（只读结论）</h1>
+  <div class="meta">ComfyBridge 文档 · 生成于 2026-10-13</div>
+</header>
+<nav class="toc"><a href="#c1">1. 原生机制实测（v0.39.2）</a><a href="#c2">2. 关键发现：原生 jobs 条目没有 display name</a><a href="#c3">3. 注入路径评估（三条路都不理想）</a><a href="#c4">4. 与方案B对比</a><a href="#c5">5. 结论与建议</a></nav>
+<main>
+<blockquote><p>探针时间：2026-10-11 · 分支 <code>feature/round2-r2-08-jobqueue-probe</code> · 只读分析，未改桥接器行为<br>对象：本地 ComfyUI v0.39.2 <code>comfy_execution/jobs.py</code> + <code>server.py /api/jobs</code><br>目的：回答 R2-08——是否值得把云端任务塞进 ComfyUI 原生 Job Queue 面板</p></blockquote><h2 id="c1">1. 原生机制实测（v0.39.2）</h2><ul><li><strong>数据源</strong>：<code>GET /api/jobs</code> 由 <code>PromptQueue.get_current_queue_volatile()</code> + <code>get_history()</code> 生成，<code>get_all_jobs()</code> 归一化成统一 job dict（含 <code>execution_start_time / end_time / preview_output / workflow_id</code>）。</li><li><strong>真机验证</strong>：本地 8188 直连 <code>/api/jobs?limit=3</code> 返回历史任务完整 JSON； 经桥接器 8189 透传同样正常（catch-all 命中，无需额外接线）。</li><li><strong>前端驱动</strong>：新版 ComfyUI 前端（Job Queue 面板）读取该端点；<code>prompt_id</code> 必须是规范小写 UUID（<code>validate_job_id</code>）——桥接器改写 prompt_id 时已遵守。</li></ul><h2 id="c2">2. 关键发现：原生 jobs 条目没有 display name</h2><p><code>normalize_queue_item</code> / <code>normalize_history_item</code> 的字段只有 <code>id / status / priority / create_time / workflow_id / outputs...</code>—— <strong>没有 workflow name 字段</strong>。原生面板显示的名字来自 <code>workflow_id</code> （用户在画布保存过的工作流 ID，前端再查本地库显示）。</p><p>这意味着：<strong>即使把云端任务注入 <code>/api/jobs</code>，原生面板也只能显示一串 workflow_id 或空白</strong>，除非给 <code>extra_data.extra_pnginfo.workflow</code> 塞入 完整 workflow JSON（体积大）或伪造 workflow_id（前端查不到会显示更糟）。 方案B悬浮面板读桥接器请求记录的 <code>workflow_name</code>，显示效果反而更好。</p><h2 id="c3">3. 注入路径评估（三条路都不理想）</h2><table><thead><tr><th>路径</th><th>做法</th><th>结论</th></tr></thead><tbody><tr><td>① 改写 <code>/api/jobs</code> 响应</td><td>桥接器接管该端点，本地 jobs + 云端记录合成</td><td><strong>可行且最干净</strong>。但：云端条目缺原生必需字段（preview/outputs_count 等，可填 0），且 <code>workflow_id</code> 显示问题如 §2；前端面板会对 synthetic 条目「取消」操作发 <code>POST /api/jobs/{id}/cancel</code>——本地队列里没有该 id，返回 no-op，取消按钮无效（体验缺陷）</td></tr><tr><td>② 向 PromptQueue 注入假任务</td><td>启动时 hook <code>PromptQueue</code>，把云端任务 put 进本地队列</td><td><strong>不可行</strong>。假任务会被本地执行器真的执行（找不到模型直接报错），污染执行链路</td></tr><tr><td>③ WS status 合成</td><td>已实现（<code>_rewrite_status_queue_remaining</code>）</td><td>这是当前方案B的一部分，原生面板顶部计数已含云端任务</td></tr></tbody></table><h2 id="c4">4. 与方案B对比</h2><table><thead><tr><th>维度</th><th>方案B（现状：悬浮面板）</th><th>方案A（接管 /api/jobs）</th></tr></thead><tbody><tr><td>工作流名显示</td><td>✅ 真名</td><td>❌ 只有 workflow_id/空</td></tr><tr><td>取消云端任务</td><td>❌ 暂无（可加）</td><td>⚠️ 按钮存在但无效</td></tr><tr><td>与原生面板一致性</td><td>独立悬浮，不动原生</td><td>深度融合，但 synthetic 条目缺字段</td></tr><tr><td>实现成本</td><td>已完成</td><td>后端接管 + 字段补齐 + 前端联动测试，约 2-3 天</td></tr><tr><td>升级兼容</td><td>不依赖原生面板内部</td><td>依赖 ComfyUI <code>/api/jobs</code> 私有 schema，<strong>前端每次升级都可能破坏</strong></td></tr></tbody></table><h2 id="c5">5. 结论与建议</h2><p><strong>不建议现在投入方案A</strong>。决定性理由是 §2：原生 jobs 条目没有工作流名， 注入后显示效果反而不如方案B；叠加 §3① 的取消按钮失效问题，用户体验 净收益接近零，而升级兼容成本长期存在。</p><p>方案B的两条增强（低成本，可纳入后续小修）：</p><ol><li>悬浮面板任务行加「取消」按钮 → 调桥接器 <code>/interrupt</code>（按 prompt_id 转发云端）；</li><li>悬浮面板按 prompt_id 排序（队列序）而非按创建时间倒序，与原生面板序一致。</li></ol><p>R2-08 可关闭：方案B为长期形态，方案A仅保留本文档作为决策依据。</p>
+</main>
+<div class="footer">ComfyBridge · 本地 ComfyUI × Modal 云端 GPU 桥接器</div>
+</body>
+</html>

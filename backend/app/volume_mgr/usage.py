@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from typing import Any
 
 from ..modal_volume import client as modal_cli
 from ..modal_volume.client import ModalCliError
@@ -22,6 +23,7 @@ _OVER_BYTES = 1024 * 1024**3
 
 _LOCK = asyncio.Lock()
 _CACHE: dict = {
+    "generation": 0,        # 账号切换失效计数：代际不匹配的计算结果直接丢弃
     "computing": False,
     "computed_mono": -1e9,  # 上次完成的单调时钟
     "computed_ms": 0,       # 上次完成的墙钟（给前端展示）
@@ -52,6 +54,22 @@ def get_usage(force: bool = False) -> dict:
     return _snapshot()
 
 
+def invalidate_cache() -> None:
+    """账号切换后清空卷用量快照（volume 已随账号变化，docs/ComfyBridge-设计-多账号维护.html §3.3）。
+
+    generation 自增让在途的旧账号计算在写回前被判定过期丢弃。
+    """
+    _CACHE["generation"] = int(_CACHE.get("generation", 0)) + 1
+    _CACHE.update(
+        computing=False,
+        computed_mono=-1e9,
+        computed_ms=0,
+        volumes=[],
+        total_bytes=0,
+        file_count=0,
+        error=None,
+    )
+
 def _snapshot() -> dict:
     return {
         "computing": _CACHE["computing"],
@@ -66,12 +84,15 @@ def _snapshot() -> dict:
 
 async def _compute() -> None:
     async with _LOCK:
+        gen = _CACHE["generation"]
         try:
             out = await modal_cli.run("volume", "list", "--json")
             rows = modal_cli.cli_json_list(out)
             names = [str(r.get("name")) for r in rows if r.get("name")]
             results = await asyncio.gather(*(_volume_usage(n, r) for n, r in zip(names, rows)))
             volumes = sorted(results, key=lambda v: v["total_bytes"], reverse=True)
+            if _CACHE["generation"] != gen:  # 计算期间发生账号切换，结果作废
+                return
             _CACHE.update(
                 volumes=volumes,
                 total_bytes=sum(v["total_bytes"] for v in volumes),
@@ -89,7 +110,7 @@ async def _compute() -> None:
 
 
 async def _volume_usage(name: str, row: dict) -> dict:
-    entry = {
+    entry: dict[str, Any] = {
         "name": name,
         "created_at": str(row.get("created_at") or ""),
         "total_bytes": 0,

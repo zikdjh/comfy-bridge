@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyBridge 安装与首次使用 · ComfyBridge 文档</title>
+<style>
+  :root {
+    --bg: #f6f7fb; --card: #ffffff; --ink: #1f2430; --ink-soft: #5a6272;
+    --line: #e4e7ef; --accent: #4f5be8; --accent-soft: #eef0fe;
+    --code-bg: #14161f; --code-ink: #e6e9f2;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 70px; }
+  body {
+    margin: 0; font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.75; font-size: 15px;
+  }
+  code, pre { font-family: "JetBrains Mono", Consolas, "Cascadia Code", monospace; }
+  header.hero {
+    background: linear-gradient(135deg, #232a63 0%, #4f5be8 55%, #8a7bff 100%);
+    color: #fff; padding: 34px 24px 26px; text-align: center;
+  }
+  header.hero h1 { margin: 0 0 8px; font-size: 25px; letter-spacing: 1px; }
+  header.hero .meta { font-size: 12.5px; opacity: .82; margin-top: 8px; }
+  nav.toc {
+    position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,.95);
+    backdrop-filter: blur(6px); border-bottom: 1px solid var(--line);
+    padding: 9px 16px; display: flex; flex-wrap: wrap; gap: 5px 12px;
+    justify-content: center; font-size: 13.5px;
+  }
+  nav.toc a { color: var(--ink-soft); text-decoration: none; padding: 3px 8px; border-radius: 6px; }
+  nav.toc a:hover { color: var(--accent); background: var(--accent-soft); }
+  main { max-width: 1000px; margin: 0 auto; padding: 26px 20px 40px; }
+  h2 {
+    font-size: 20px; margin: 40px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--accent); line-height: 1.4;
+  }
+  main > h2:first-child { margin-top: 0; }
+  h3 { font-size: 16.5px; margin: 24px 0 8px; }
+  h4 { font-size: 14.5px; margin: 18px 0 6px; color: #4353d8; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 26px; }
+  li { margin: 4px 0; }
+  li input[type="checkbox"] { margin-right: 6px; vertical-align: -2px; }
+  blockquote {
+    margin: 12px 0; padding: 10px 16px; background: var(--accent-soft);
+    border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; color: #3a4160;
+  }
+  blockquote p { margin: 4px 0; }
+  pre {
+    position: relative; background: var(--code-bg); color: var(--code-ink);
+    border-radius: 10px; padding: 30px 16px 13px; overflow-x: auto;
+    font-size: 13px; line-height: 1.6; margin: 12px 0;
+  }
+  pre .lang {
+    position: absolute; top: 6px; right: 12px; font-size: 11px; opacity: .55;
+    text-transform: uppercase; letter-spacing: 1px; font-family: system-ui, sans-serif;
+  }
+  code {
+    background: #f0f2fa; color: #33398f; padding: 1.5px 6px;
+    border-radius: 5px; font-size: 13px;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  table {
+    width: 100%; border-collapse: collapse; background: var(--card);
+    font-size: 13.5px; margin: 12px 0;
+  }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  thead th { background: var(--accent-soft); color: #4353d8; font-weight: 600; }
+  tbody tr:nth-child(even) { background: #fafbfe; }
+  td code, th code { background: #f0f2fa; color: #33398f; }
+  hr { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
+  a { color: var(--accent); }
+  del { color: var(--ink-soft); }
+  .footer { text-align: center; color: var(--ink-soft); font-size: 12.5px; padding: 18px; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header class="hero">
+  <h1>ComfyBridge 安装与首次使用</h1>
+  <div class="meta">ComfyBridge 文档 · 生成于 2026-10-13</div>
+</header>
+<nav class="toc"><a href="#c1">1. 前置条件</a><a href="#c2">2. 安装 ComfyBridge</a><a href="#c3">3. 启动与确认</a><a href="#c4">4. 配置本地 ComfyUI</a><a href="#c5">5. 配置 Modal 与 Runner</a><a href="#c6">6. 首次出图</a><a href="#c7">7. 常见下一步</a><a href="#c8">8. 安全与数据边界</a></nav>
+<main>
+<p>本文面向首次在新机器上安装 ComfyBridge 的用户，命令均以 Windows PowerShell 为准。 开发态运行见仓库根目录 <code>README.md</code>；本文只描述打包后的安装态。</p><h2 id="c1">1. 前置条件</h2><table><thead><tr><th>项目</th><th>要求</th></tr></thead><tbody><tr><td>操作系统</td><td>Windows 10/11 x64</td></tr><tr><td>Python</td><td>3.11 或更高；只用 <code>pipx</code> 安装时无需全局开发依赖</td></tr><tr><td>本地 ComfyUI</td><td>已能正常启动并可访问，默认 <code>http://127.0.0.1:8188</code></td></tr><tr><td>Modal 账户</td><td>已创建账户，可生成 API Token，并具备部署应用的权限</td></tr><tr><td>pipx</td><td>推荐；也可用 <code>python -m venv</code> 加 <code>pip</code> 替代</td></tr><tr><td>Node.js（仅开发态）</td><td>仅源码开发运行前端（<code>dev.ps1</code> / <code>pnpm dev</code>）需要 Node ≥ 18 且 <code>node.exe</code> 在 PATH；wheel 安装态不需要。可在管理台「设置 → 本地」的 Node.js 环境卡片自动检测或手动指定路径</td></tr></tbody></table><p>如果只需要先验证本地桥接，可暂不配置 Modal；要跑云端生成则必须完成第 4、5 节。</p><h2 id="c2">2. 安装 ComfyBridge</h2><h3>2.1 安装 pipx</h3><pre><span class="lang">powershell</span><code>python -m pip install --user pipx
+python -m pipx ensurepath</code></pre><p>关闭并重新打开 PowerShell，使 <code>PATH</code> 生效。</p><h3>2.2 安装 wheel</h3><p>从发布产物安装：</p><pre><span class="lang">powershell</span><code>pipx install "C:\path\to\comfy_bridge-0.1.0-py3-none-any.whl"</code></pre><p>确认命令可用：</p><pre><span class="lang">powershell</span><code>comfy-bridge --help</code></pre><p>wheel 已内嵌管理台和 Modal Runner 副本，不需要另装 Node.js 或前端依赖。</p><h3>2.3 升级</h3><pre><span class="lang">powershell</span><code>pipx install --force "C:\path\to\comfy_bridge-&lt;新版本&gt;-py3-none-any.whl"</code></pre><p>升级前可备份 <code>~/.comfybridge/</code>；配置、数据库、缓存和版本对齐历史都保存在该目录。</p><h3>2.4 卸载</h3><pre><span class="lang">powershell</span><code>pipx uninstall comfy-bridge</code></pre><p>卸载不会删除 <code>~/.comfybridge/</code>。确认不再使用后再手动删除该目录；其中可能含有 Modal 凭证、请求日志和本地数据库。</p><h2 id="c3">3. 启动与确认</h2><pre><span class="lang">powershell</span><code>comfy-bridge</code></pre><p>默认监听 <code>http://127.0.0.1:8189</code>，管理台地址为 <code>http://127.0.0.1:8189/bridge/</code>。数据面仍在根路径，原有 ComfyUI 地址只需从 <code>:8188</code> 改为 <code>:8189</code>。</p><p>首次启动会创建 <code>~/.comfybridge/config.toml</code>。也可以先复制字段说明：</p><pre><span class="lang">powershell</span><code>New-Item -ItemType Directory -Force "$HOME\.comfybridge" | Out-Null
+Copy-Item "C:\path\to\source\backend\config.example.toml" "$HOME\.comfybridge\config.toml"</code></pre><p>回环地址部署无需管理令牌。若确实要从局域网访问，必须先设置长随机令牌：</p><pre><span class="lang">powershell</span><code>$env:CB_MANAGEMENT_TOKEN = "&lt;随机长令牌&gt;"
+comfy-bridge --host 0.0.0.0</code></pre><p>不要直接把服务暴露到公网。局域网部署至少还要配合 Windows 防火墙和可信网络限制。</p><h2 id="c4">4. 配置本地 ComfyUI</h2><h3>4.1 向导方式</h3><ol><li>打开 <code>http://127.0.0.1:8189/bridge/</code>。</li><li>按首次配置向导依次执行“检测 → Modal 凭证 → 本地 ComfyUI → 云端 Runner → 完成”。</li><li>本地 ComfyUI 步骤填写仓库根目录，例如 <code>D:\ComfyUI\ComfyUI</code>，填写后执行校验。</li><li>输出目录填写本地 ComfyUI 的 <code>output</code> 目录，例如 <code>D:\ComfyUI\output</code>。</li></ol><h3>4.2 配置文件方式</h3><p>编辑 <code>~/.comfybridge/config.toml</code>：</p><pre><span class="lang">toml</span><code>[local]
+comfy_url = "http://127.0.0.1:8188"
+comfy_root = "D:/ComfyUI/ComfyUI"
+output_dir = "D:/ComfyUI/output"</code></pre><p>保存后在管理台“设置 → 本地”重新加载，或重启 <code>comfy-bridge</code>。<code>comfy_root</code> 必须包含 <code>main.py</code>、<code>nodes.py</code> 和 <code>comfy/</code> 等必需目录；管理台校验会拒绝不完整目录。</p><h3>4.3 验证</h3><p>启动本地 ComfyUI 后访问：</p><pre><span class="lang">powershell</span><code>Invoke-RestMethod http://127.0.0.1:8189/api/v1/health | ConvertTo-Json -Depth 6</code></pre><p>确认 <code>local.online</code> 为 <code>true</code>。若为 <code>false</code>，先检查 <code>comfy_url</code> 和本地服务端口。</p><h2 id="c5">5. 配置 Modal 与 Runner</h2><h3>5.1 安装并登录 Modal CLI</h3><pre><span class="lang">powershell</span><code>python -m pipx install modal
+modal token new</code></pre><p>也可以从 Modal 控制台生成 <code>ak-...</code> 与 <code>as-...</code> 凭证。</p><h3>5.2 创建代理鉴权凭证</h3><p>Runner 端点开启了 <code>requires_proxy_auth</code>。在 Modal 控制台的 Proxy Auth Tokens 页面 创建一对独立凭证：</p><ul><li><code>wk-...</code> 填入管理台“设置 → Modal → proxy_token_id”；</li><li><code>ws-...</code> 填入 <code>proxy_token_secret</code>。</li></ul><p>代理凭证与账户 API Token 不是同一套，不能混用。</p><h3>5.3 在管理台填写凭证</h3><p>进入“设置 → Modal”，填写：</p><ul><li><code>token_id</code> / <code>token_secret</code>：账户 API Token，用于部署、卷和账单操作；</li><li><code>proxy_token_id</code> / <code>proxy_token_secret</code>：Runner 代理鉴权凭证；</li><li><code>volume</code>：默认 <code>comfyui-data</code>；</li><li><code>app_name</code>：默认 <code>comfyui-l40s</code>；</li><li><code>runner_enabled</code>：保持开启。</li></ul><p>保存后可先用“测试”或刷新状态确认 CLI 已登录且配置被后端读取。</p><h3>5.4 部署 Runner</h3><p>安装态应通过管理台执行部署：进入“设置 → Modal”，确认凭证保存后点击“部署 Runner”。 该入口调用 wheel 内自带的 Runner 副本，不需要另存源码。</p><p>只有开发态或需要手工排障时，才直接使用仓库源码：</p><pre><span class="lang">powershell</span><code>modal deploy "C:\path\to\modal-runner\runner.py"</code></pre><p>部署输出中的固定 Web URL 形如：</p><pre><span class="lang">text</span><code>https://&lt;workspace&gt;--comfyui-l40s-comfyui.modal.run</code></pre><p>把该地址填入“设置 → Modal → web_url”。管理台“仪表盘”或“设置”页的 Runner 状态变为 就绪后，表示桥接器已经能拉起云端容器。</p><p>如果使用手工部署，Modal Runner 副本仍在 pipx 包内；管理台的节点同步、版本对齐和 数据卷任务都会调用包内副本，不需要额外维护第二份源码。</p><h2 id="c6">6. 首次出图</h2><ol><li>在本地 ComfyUI 中准备一个简单的文生图工作流，并确认本地能跑通。</li><li>先不强制上云，运行一次本地请求，确认本地节点和输出目录正常。</li><li>在管理台“路由”页创建或启用规则，让目标工作流走 <code>modal</code>；也可以暂时设置 <code>bridge.default_backend = "modal"</code>。</li><li>在 ComfyUI 界面提交工作流。</li><li>打开“日志”页，确认请求最终目标为 Modal、时间线出现提交/执行/回传，且输出进入历史画廊。</li><li>回到本地输出目录，确认云端结果已回传到 <code>output\modal\</code> 等子目录。</li></ol><p>第一次云端执行会经历冷启动，通常需要数十秒到数分钟。首次验证建议使用低分辨率、少步数的 小型工作流，避免在准备阶段产生不必要费用。</p><h2 id="c7">7. 常见下一步</h2><ul><li>节点一致性：进入“节点”页查看两端差异，再决定同步或重建镜像。</li><li>模型：进入“数据卷”页导入或下载模型；当前上传能力仍是整文件上传。</li><li>预算：进入“设置 → 桥接”设置月度预算和云端并发上限。</li><li>实时排查：日志页和设置页的本地/Modal 日志 SSE 可直接查看执行输出。</li><li>Node.js 环境（开发态）：进入“设置 → 本地”查看 Node.js 环境卡片，点击「检测」可自动按 手动指定路径 → PATH → 常见安装目录 顺序定位 <code>node.exe</code> 并回显版本；PATH 找不到时在卡片里手动指定路径保存（写入 <code>~/.comfybridge/config.toml</code> 的 <code>[local].node_path</code>，保存即热生效）。wheel 安装态无需 Node。</li><li>发布前验证：按 <code>backend/tests/live/README.md</code> 准备真实两端 live 冒烟。</li></ul><h2 id="c8">8. 安全与数据边界</h2><ul><li>默认只监听 <code>127.0.0.1</code>；非回环监听必须配置 <code>CB_MANAGEMENT_TOKEN</code> 或 <code>~/.comfybridge/management_token</code>。</li><li>不要在公网直接开放 <code>8189</code>。需要远程访问时使用可信网络或反向代理，并继续保留令牌。</li><li>生成请求上云时，工作流图、输入文件和必要元数据会发送到 Modal；日志和输出默认保存在本机。</li><li><code>~/.comfybridge/config.toml</code> 含凭证，不要提交到 Git，也不要粘贴到公开 issue。</li><li>预算护栏是本地估算和拦截，不是 Modal 账户级硬上限；账户侧仍应配置预算告警。</li></ul>
+</main>
+<div class="footer">ComfyBridge · 本地 ComfyUI × Modal 云端 GPU 桥接器</div>
+</body>
+</html>

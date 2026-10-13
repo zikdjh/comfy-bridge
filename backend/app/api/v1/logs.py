@@ -22,7 +22,7 @@ async def local_logs(tail: int = Query(default=300, ge=1, le=500)) -> dict:
         try:
             entries = await fetch_snapshot(client)
             return {"online": True, "entries": entries[-tail:]}
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 —— 读取失败转为 offline 载荷返回
             return {"online": False, "entries": [], "error": str(exc)}
 
 

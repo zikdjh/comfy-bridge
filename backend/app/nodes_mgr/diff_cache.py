@@ -76,6 +76,16 @@ def load_matrix(max_age_ms: float = _TTL_MS) -> dict | None:
     return out
 
 
+def invalidate_all() -> None:
+    """账号切换后整体重置（内存 + 落盘文件）：缓存口径是「本地 vs 当前云端」，云端已变。"""
+    global _doc
+    _doc = None
+    try:
+        _path().unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning("节点差异缓存重置失败: %s", exc)
+
+
 def save_matrix(payload: dict) -> None:
     """只缓存成功计算（ok=True）的矩阵；app_state 属于运行时状态，不进缓存（每次现取）。"""
     if not payload.get("ok"):
@@ -105,8 +115,25 @@ def save_class_types(ct: dict) -> None:
         "local": ct.get("local"),
         "cloud": ct.get("cloud"),
         "error": ct.get("error"),
+        "conflicts": ct.get("conflicts") or {},
+        "merge_strategy": ct.get("merge_strategy"),
     }
     doc["class_types_ms"] = time.time() * 1000
+    _save()
+
+
+def load_cloud_schemas() -> dict:
+    """deep 对比时缓存的云端完整 object_info；缺失或损坏时返回空字典。"""
+    doc = _load()
+    schemas = doc.get("cloud_schemas")
+    return copy.deepcopy(schemas) if isinstance(schemas, dict) else {}
+
+
+def save_cloud_schemas(schemas: dict) -> None:
+    """持久化云端完整 schema，供后端重启后 /object_info 合并复用。"""
+    doc = _load()
+    doc["cloud_schemas"] = schemas if isinstance(schemas, dict) else {}
+    doc["cloud_schemas_ms"] = time.time() * 1000
     _save()
 
 

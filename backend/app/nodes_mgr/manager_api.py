@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import re
 import time
+from typing import Any
 
 import httpx
 
@@ -112,7 +113,7 @@ async def fetch_index() -> dict:
         if _cache and time.time() < _cache[0]:
             return _cache[1]
         base = get_settings().local.comfy_url
-        result = {"online": False, "index": None, "entries": 0, "error": None}
+        result: dict[str, Any] = {"online": False, "index": None, "entries": 0, "error": None}
         if "://" not in base:
             result["error"] = "本地 ComfyUI 地址未配置"
         else:

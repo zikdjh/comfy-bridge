@@ -25,6 +25,37 @@ export interface HealthResponse {
   bridge?: { url: string; listen: string };
 }
 
+export interface ModalCliFailure {
+  category: "not_installed" | "not_logged_in" | "network" | "permission" | "rate_limited" | "uncertain" | "command";
+  label: string;
+  message: string;
+  retryable: boolean;
+  next_action: string | null;
+  command: string | null;
+  exit_code: number | null;
+  ts_ms?: number;
+}
+
+export interface ModalCliHealth {
+  found: boolean;
+  path: string | null;
+  version: string | null;
+  logged_in: boolean | null;
+  latency_ms: number | null;
+  app_state: string | null;
+  error: ModalCliFailure | null;
+  last_failure: ModalCliFailure | null;
+  last_success_ms: number | null;
+}
+
+export function useModalCliHealth() {
+  return useQuery({
+    queryKey: ["health", "modal-cli"],
+    queryFn: ({ signal }) => apiGet<ModalCliHealth>("/api/v1/health/modal-cli", signal),
+    refetchInterval: 30_000,
+  });
+}
+
 export function useHealth() {
   return useQuery({
     queryKey: ["health"],

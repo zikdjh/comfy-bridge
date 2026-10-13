@@ -41,6 +41,32 @@ export interface SyncJobDto {
   files: { name: string; status: string; error?: string | null }[];
 }
 
+export interface UploadSession {
+  id: string;
+  filename: string;
+  volume: string;
+  category: string | null;
+  dest_dir: string | null;
+  remote_dir: string;
+  remote_path: string;
+  size: number;
+  md5: string;
+  actual_md5: string | null;
+  chunk_size: number;
+  total_chunks: number;
+  uploaded_chunks: number[];
+  missing_chunks: number[];
+  missing_count: number;
+  uploaded_bytes: number;
+  ready: boolean;
+  status: "receiving" | "verifying" | "pushing" | "done" | "error";
+  error_stage: "verify" | "push" | null;
+  error: string | null;
+  created_ms: number;
+  updated_ms: number;
+  finished_ms: number | null;
+}
+
 export function useVolumeMeta() {
   return useQuery({
     queryKey: ["volume-meta"],
@@ -92,4 +118,66 @@ export function useCancelJob() {
     await apiSend(`/api/v1/modal-volume/jobs/${jobId}/cancel`, "POST");
     await qc.invalidateQueries({ queryKey: ["sync-jobs"] });
   };
+}
+
+export function initUpload(input: {
+  filename: string;
+  size: number;
+  md5: string;
+  category?: string;
+  volume?: string;
+}) {
+  return apiSend<{ upload: UploadSession }>("/api/v1/uploads/init", "POST", input);
+}
+
+export function useUploadSessions() {
+  return useQuery({
+    queryKey: ["uploads"],
+    queryFn: ({ signal }) =>
+      apiGet<{ uploads: UploadSession[] }>("/api/v1/uploads", signal),
+    refetchInterval: (query) =>
+      query.state.data?.uploads.some((u) =>
+        ["receiving", "verifying", "pushing"].includes(u.status),
+      )
+        ? 2_000
+        : 10_000,
+  });
+}
+
+export function getUpload(uploadId: string) {
+  return apiGet<{ upload: UploadSession }>(`/api/v1/uploads/${uploadId}`);
+}
+
+export function putUploadChunk(
+  uploadId: string,
+  index: number,
+  data: Blob,
+  chunkMd5: string,
+) {
+  return fetch(`/api/v1/uploads/${uploadId}/chunks/${index}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/octet-stream",
+      "x-chunk-md5": chunkMd5,
+      Accept: "application/json",
+    },
+    body: data,
+  }).then(async (res) => {
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new Error(`${res.status} ${res.statusText}${detail ? `: ${detail.slice(0, 200)}` : ""}`);
+    }
+    return (await res.json()) as { upload: UploadSession };
+  });
+}
+
+export function completeUpload(uploadId: string) {
+  return apiSend<{ upload: UploadSession }>(
+    `/api/v1/uploads/${uploadId}/complete`,
+    "POST",
+  );
+}
+
+export function deleteUpload(uploadId: string) {
+  return apiSend<{ deleted: boolean }>(`/api/v1/uploads/${uploadId}`, "DELETE");
 }

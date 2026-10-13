@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import re
 import subprocess
@@ -28,7 +29,7 @@ _OPS_FILE = runner_assets.runner_file("volume_ops.py")
 _LOG_KEEP = 20          # 每作业保留的最近输出行数
 _JOBS_KEEP = 50         # 作业表保留上限
 _NAME_RE = re.compile(r"^[a-z][a-z0-9-]{2,31}$")
-_JOBS: dict[str, "MoveJob"] = {}
+_JOBS: dict[str, MoveJob] = {}
 
 
 def now_ms() -> int:
@@ -191,7 +192,7 @@ async def _run(job: MoveJob) -> None:
         for t in (out_task, err_task):
             try:
                 await asyncio.wait_for(asyncio.shield(t), timeout=10)
-            except (asyncio.TimeoutError, Exception):  # noqa: BLE001
+            except (TimeoutError, Exception):  # noqa: BLE001
                 t.cancel()
         job._proc = None
 
@@ -227,7 +228,5 @@ async def _run(job: MoveJob) -> None:
         if job.finished_ms is None:
             job.finished_ms = now_ms()
         _trim_jobs()
-        try:  # 移动后卷内容已变，强制重算用量
+        with contextlib.suppress(Exception):  # 统计失败不影响作业结果
             usage.get_usage(force=True)
-        except Exception:  # noqa: BLE001 —— 统计失败不影响作业结果
-            pass

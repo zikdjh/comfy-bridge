@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-import asyncio
+import contextlib
 import json
 import uuid
 
@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 
 from .. import cost as cost_svc
 from ..core.config import get_settings
+from ..events import publish
 from ..logs import store
 from ..models_mgr import cloud_index, local_index, node_presence
 from ..models_mgr.presence import classify_model_refs
@@ -23,8 +24,9 @@ from ..routing.engine import classify_graph, decide, extract_primary_model
 from ..runner import client as runner_client
 from ..runner import console as runner_console
 from ..runner import executor
-from . import precheck
-from .passthrough import get_upstream_client
+from . import local_tracker, precheck
+from . import privacy as privacy_gate
+from .passthrough import get_upstream_client, upstream_headers
 
 
 def _extract_manual_backend(payload: dict) -> str | None:
@@ -49,12 +51,18 @@ def _extract_workflow_name(payload: dict) -> str | None:
     return None
 
 
+def _workflow_name_fallback(request: Request) -> str | None:
+    """API 直提交（无 extra_data）时允许用请求头传工作流名。"""
+    value = (request.headers.get("x-bridge-workflow-name") or "").strip()
+    return value[:200] or None
+
+
 async def handle_prompt_submit(request: Request) -> Response:
     raw = await request.body()
     try:
         payload = json.loads(raw)
         assert isinstance(payload, dict)
-    except Exception:
+    except Exception:  # noqa: BLE001 —— 非 JSON 载荷交本地原样报错，保持协议兼容
         # 非 JSON 载荷：交给本地 ComfyUI 原样报错，保持协议兼容
         return await _forward_raw(request, raw)
 
@@ -73,18 +81,35 @@ async def handle_prompt_submit(request: Request) -> Response:
         facts.get("model_refs") or [], local_names, cloud_index.snapshot()
     )
     budget = await cost_svc.abudget_state()  # 月度预算护栏现状（决策前采集，纯本地 SQL）
+    workflow_name = _extract_workflow_name(payload) or _workflow_name_fallback(request)
     decision = decide(
         facts,
-        workflow_name=_extract_workflow_name(payload),
+        workflow_name=workflow_name,
         manual_backend=request.headers.get("x-bridge-backend") or _extract_manual_backend(payload),
         models={"cloud_only": cloud_only, "missing": missing},
         budget=budget,
         presence=node_presence.snapshot(),
         cloud_active=await store.acount_active_modal(),  # 并发护栏计数（本请求尚未入库，不含自身）
     )
+
+    # 提交前隐私确认（P2-5）：首次把工作流分流到 Modal 时先返回数据边界说明，
+    # 调用方带确认头重试放行。放在落库/改写 prompt_id 之前，避免把确认拦截记成执行。
+    privacy = privacy_gate.challenge(request)
+    if decision.final_backend == "modal" and privacy is not None:
+        return JSONResponse(status_code=409, content=privacy)
+
     if decision.backend == "modal" and budget.get("exceeded"):
         # 超限告警：护栏已把请求拉回本地/拒绝，控制台与 trace 双留痕（M4-1「并通知」）
         runner_console.log(f"[预算护栏] {decision.fallback}", "warning")
+        publish("cost_alert", {
+            "action": "budget_exceeded",
+            "used_usd": budget.get("used_usd"),
+            "monthly_usd": budget.get("monthly_usd"),
+            "on_exceed": budget.get("on_exceed"),
+            "fallback": decision.fallback,
+            "workflow_name": workflow_name,
+            "prompt_id": payload.get("prompt_id"),
+        })
 
     # —— 提交前预校验（M3-5 余项）：目标端缺节点/缺模型提前拦截或自动供给（off = 历史行为）——
     preflight_mode = get_settings().bridge.preflight
@@ -136,7 +161,7 @@ async def handle_prompt_submit(request: Request) -> Response:
         "backend": decision.backend,
         "final_backend": decision.final_backend,
         "gen_type": decision.gen_type,
-        "workflow_name": _extract_workflow_name(payload),
+        "workflow_name": workflow_name,
         "model_name": extract_primary_model(prompt),
         "graph_hash": graph_hash,
         "graph_file": graph_file,
@@ -211,13 +236,16 @@ async def handle_prompt_submit(request: Request) -> Response:
         error = f"提交被 ComfyUI 拒绝（HTTP {up.status_code}）: {up.text[:300]}"
         await store.aupdate_status(prompt_id, "error", error)
     else:
-        try:
+        node_errors: dict = {}
+        with contextlib.suppress(Exception):  # 响应非 JSON 时跳过节点校验回写
             ack = up.json()
             node_errors = ack.get("node_errors") or {}
             if node_errors:
                 await store.aupdate_status(prompt_id, "error", f"节点校验失败: {json.dumps(node_errors, ensure_ascii=False)[:300]}")
-        except Exception:
-            pass
+        if not node_errors:
+            # 本地请求终态跟踪：浏览器 WS 中继是快路径，但没有浏览器（纯 HTTP /
+            # 断线）时记录会永远停在 queued，这里用 /history 轮询兜底收敛。
+            local_tracker.dispatch(prompt_id)
 
     return Response(content=up.content, status_code=up.status_code,
                     media_type=up.headers.get("content-type", "application/json"))
@@ -225,8 +253,7 @@ async def handle_prompt_submit(request: Request) -> Response:
 
 async def _forward_raw(request: Request, raw: bytes) -> Response:
     client = get_upstream_client()
-    headers = [(k, v) for k, v in request.headers.items() if k.lower() not in
-               {"host", "content-length", "connection", "keep-alive", "transfer-encoding"}]
+    headers = upstream_headers(request)
     try:
         up = await client.request(request.method,
                                   f"{get_settings().local.comfy_url.rstrip('/')}{request.url.path}",

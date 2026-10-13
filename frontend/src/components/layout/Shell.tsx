@@ -10,6 +10,7 @@ import {
   PartitionOutlined,
   PictureOutlined,
   PieChartOutlined,
+  SafetyCertificateOutlined,
   SettingOutlined,
   UnorderedListOutlined,
 } from "@ant-design/icons";
@@ -21,7 +22,9 @@ import { useConfig } from "../../api/config";
 import { LOCAL_COMFY_URL } from "../../theme";
 import { ConfigWizard, WIZARD_DONE_KEY } from "../../pages/settings/ConfigWizard";
 import { JobDrawer } from "../common/JobDrawer";
-import { JOB_DRAWER_EVENT, useJobs } from "../../api/jobs";
+import { JOB_DRAWER_EVENT, useJobs, type JobsSnapshot, type SyncJob } from "../../api/jobs";
+import { openBridgeEventStream } from "../../api/events";
+import { useQueryClient } from "@tanstack/react-query";
 
 const { Sider, Header, Content } = Layout;
 
@@ -35,6 +38,7 @@ const NAV_ITEMS: MenuProps["items"] = [
   { key: "/media", icon: <FileImageOutlined />, label: "媒体库" },
   { key: "/cost", icon: <PieChartOutlined />, label: "成本报表" },
   { key: "/logs", icon: <UnorderedListOutlined />, label: "日志" },
+  { key: "/status", icon: <SafetyCertificateOutlined />, label: "系统状态" },
   { key: "/settings", icon: <SettingOutlined />, label: "设置" },
 ];
 
@@ -57,6 +61,7 @@ function StatusPill({ title, sub, state, tooltip }: { title: string; sub: string
 export function Shell() {
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const [collapsed, setCollapsed] = useState(false);
   const { data: health, isLoading } = useHealth();
 
@@ -76,6 +81,7 @@ export function Shell() {
   const { data: jobsData } = useJobs();
   const [jobsOpen, setJobsOpen] = useState(false);
   const [jobFocusId, setJobFocusId] = useState<string | null>(null);
+  const [eventStreamOnline, setEventStreamOnline] = useState(false);
   useEffect(() => {
     const onOpen = (ev: Event) => {
       const jobId = (ev as CustomEvent<{ jobId?: string }>).detail?.jobId ?? null;
@@ -86,6 +92,42 @@ export function Shell() {
     return () => window.removeEventListener(JOB_DRAWER_EVENT, onOpen);
   }, []);
   const runningJobs = jobsData?.running ?? 0;
+
+  // —— 统一事件流（P1-5）：推送直接回写查询缓存；断线由 EventSource 自动重连并轮询兜底 ——
+  useEffect(() => {
+    const upsertJob = (job: SyncJob) => {
+      queryClient.setQueryData<JobsSnapshot>(["jobs"], (old) => {
+        const jobs = old?.jobs ?? [];
+        const next = [job, ...jobs.filter((item) => item.id !== job.id)];
+        return { jobs: next, running: next.filter((item) => item.state === "running").length };
+      });
+      queryClient.setQueryData(["jobs", job.id], job);
+    };
+
+    return openBridgeEventStream({
+      onStatus: (online) => setEventStreamOnline(online),
+      onEvent: (item) => {
+        if (item.event === "resync") {
+          void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+          void queryClient.invalidateQueries({ queryKey: ["cost-summary"] });
+          void queryClient.invalidateQueries({ queryKey: ["nodes", "version"] });
+          return;
+        }
+        if (item.event === "job" || item.event === "node_sync") {
+          const job = (item.data as { job?: SyncJob } | null)?.job;
+          if (job?.id) upsertJob(job);
+          return;
+        }
+        if (item.event === "deploy") {
+          void queryClient.invalidateQueries({ queryKey: ["nodes", "version"] });
+          return;
+        }
+        if (item.event === "cost_alert") {
+          void queryClient.invalidateQueries({ queryKey: ["cost-summary"] });
+        }
+      },
+    });
+  }, [queryClient]);
   useEffect(() => {
     if (!needSetup || wizardDismissed) return;
     const timer = window.setTimeout(() => setWizardOpen(true), 600);
@@ -134,10 +176,10 @@ export function Shell() {
     <Tag color="processing">预算 ${budget.used_usd.toFixed(2)}/${budget.monthly_usd.toFixed(2)}</Tag>
   );
   const budgetTooltip = !budget?.enabled
-    ? "月度预算护栏未启用：在仪表盘「本月额度」卡片设置上限后，超限请求将自动回落本地或拒绝"
+    ? "月度预算护栏未启用：在仪表盘「本月额度」卡片设置上限后，超限请求将自动回落本地或拒绝。这是本地估算护栏，不是 Modal 账户级硬上限"
     : budget.exceeded
-      ? `本月云端估算 $${budget.used_usd.toFixed(2)} 已达上限 $${budget.monthly_usd.toFixed(2)}：新云端请求将${budget.on_exceed === "reject" ? "被拒绝" : "回落本地"}`
-      : `本月云端估算 $${budget.used_usd.toFixed(2)} / 上限 $${budget.monthly_usd.toFixed(2)}（估算 = GPU 单价 × 请求墙钟秒数）`;
+      ? `本月云端估算 $${budget.used_usd.toFixed(2)} 已达上限 $${budget.monthly_usd.toFixed(2)}：新云端请求将${budget.on_exceed === "reject" ? "被拒绝" : "回落本地"}。这是本地估算护栏，不是 Modal 账户级硬上限`
+      : `本月云端估算 $${budget.used_usd.toFixed(2)} / 上限 $${budget.monthly_usd.toFixed(2)}（估算 = GPU 单价 × 请求墙钟秒数；本地护栏，不是 Modal 账户级硬上限）`;
   const modalLine = cost?.modal?.ok
     ? `；Modal 账单本期消耗 $${(cost.modal.metered_cost_usd ?? 0).toFixed(2)}（UTC 月）`
     : "";
@@ -204,11 +246,16 @@ export function Shell() {
             <Tooltip title={budgetTooltip + modalLine} placement="bottom">
               {budgetTag}
             </Tooltip>
-            <Badge count={runningJobs} size="small" offset={[-2, 2]}>
-              <Button icon={<UnorderedListOutlined />} onClick={() => { setJobFocusId(null); setJobsOpen(true); }}>
-                任务
-              </Button>
-            </Badge>
+            <Tooltip
+              title={eventStreamOnline ? "任务状态实时推送已连接" : "事件流不可用，任务状态每 15 秒轮询兜底"}
+              placement="bottom"
+            >
+              <Badge count={runningJobs} size="small" offset={[-2, 2]}>
+                <Button icon={<UnorderedListOutlined />} onClick={() => { setJobFocusId(null); setJobsOpen(true); }}>
+                  任务
+                </Button>
+              </Badge>
+            </Tooltip>
             <Tooltip title={`经桥接器 ${bridgeUrl}（生成请求将被拦截路由）`} placement="bottom">
               <Button type="primary" ghost icon={<PictureOutlined />} href={bridgeUrl} target="_blank">
                 前往出图界面

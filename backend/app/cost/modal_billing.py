@@ -19,13 +19,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import shutil
 import time
 from datetime import UTC, datetime
 
 from ..core.constants import GPU_TYPE
-from ..modal_volume.client import auth_env
+from ..modal_volume.client import cli_env
 
 _TTL_OK = 120.0
 _TTL_FAIL = 20.0
@@ -92,7 +91,7 @@ async def fetch(force: bool = False) -> dict:
             *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env={**os.environ, "PYTHONWARNINGS": "ignore", **auth_env()},
+            env=cli_env(),
         )
     except FileNotFoundError:
         data = {"ok": False, "error": "找不到 modal CLI（请安装：pip install modal，并确认在 PATH 中）"}
@@ -132,7 +131,7 @@ def parse_report(raw: bytes) -> dict:
     except (ValueError, UnicodeDecodeError) as exc:
         return {"ok": False, "error": f"账单明细 CLI 输出解析失败: {exc}"[:300]}
     if not isinstance(rows, list):
-        return {"ok": False, "error": "账单明细 CLI 返回异常数据"}[:300]
+        return {"ok": False, "error": "账单明细 CLI 返回异常数据"}
 
     def f(text) -> float:
         try:
@@ -188,7 +187,7 @@ async def report(start_date: str, end_date: str, force: bool = False) -> dict:
             *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env={**os.environ, "PYTHONWARNINGS": "ignore", **auth_env()},
+            env=cli_env(),
         )
     except FileNotFoundError:
         data = {"ok": False, "error": "找不到 modal CLI（请安装：pip install modal，并确认在 PATH 中）"}

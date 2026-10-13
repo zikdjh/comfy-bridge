@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Card, Form, Input, InputNumber, Popconfirm, Select, Space, Table, Tabs, Tag, Typography } from "antd";
+import { Alert, Button, Card, Form, Input, InputNumber, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Typography } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { message } from "antd";
-import { useConfig, useSaveConfig, validateComfyRoot } from "../../api/config";
+import { useConfig, useSaveConfig, fetchNodeEnv, validateComfyRoot } from "../../api/config";
+import type { NodeEnvDto } from "../../api/config";
 import { LaunchArgsPanel } from "./LaunchArgsPanel";
 import { ComfyScanModal } from "./ComfyScanModal";
 import { SettingsSyncTab } from "./SettingsSyncTab";
 import { ConfigWizard } from "./ConfigWizard";
+import AccountProfilesCard from "./AccountProfilesCard";
 
 export default function SettingsPage() {
   const { data: config, isLoading } = useConfig();
@@ -20,6 +22,24 @@ export default function SettingsPage() {
   const [scanOpen, setScanOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [nodeEnv, setNodeEnv] = useState<NodeEnvDto | null>(null);
+  const [nodeChecking, setNodeChecking] = useState(false);
+
+  /** Node.js 环境检测：手动指定路径 → PATH → 常见安装目录快扫（dev.ps1/pnpm 前置条件可视化） */
+  const checkNode = async () => {
+    setNodeChecking(true);
+    try {
+      setNodeEnv(await fetchNodeEnv());
+    } catch (err) {
+      message.error(`Node 检测失败：${err instanceof Error ? err.message : err}`);
+    } finally {
+      setNodeChecking(false);
+    }
+  };
+
+  useEffect(() => {
+    checkNode();
+  }, []);
 
   /** 手动指定目录的即时完整性校验（保存时后端还会再强制校验一次） */
   const checkRoot = async () => {
@@ -56,6 +76,7 @@ export default function SettingsPage() {
       comfyRoot: config.local.comfy_root,
       comfyUrl: config.local.comfy_url,
       outputDir: config.local.output_dir,
+      nodePath: config.local.node_path ?? "",
       modelsDirs: Object.entries(config.local.models_dirs).map(([category, path]) => ({ category, path })),
     });
     bridgeForm.setFieldsValue({
@@ -64,6 +85,8 @@ export default function SettingsPage() {
       videoBackend: config.bridge.video_backend,
       largeSidePixels: config.bridge.large_side_pixels,
       preflight: config.bridge.preflight,
+      privacyConfirm: config.bridge.privacy_confirm,
+      objectInfoMerge: config.bridge.object_info_merge,
     });
     modalForm.setFieldsValue({
       tokenId: config.modal.token_id,
@@ -87,6 +110,7 @@ export default function SettingsPage() {
     comfyRoot: string;
     comfyUrl: string;
     outputDir: string;
+    nodePath?: string;
     modelsDirs?: { category: string; path: string }[];
   }) => {
     try {
@@ -114,10 +138,12 @@ export default function SettingsPage() {
           comfy_root: values.comfyRoot.trim(),
           comfy_url: values.comfyUrl,
           output_dir: values.outputDir,
+          node_path: (values.nodePath ?? "").trim(),
           models_dirs: modelsDirs,
         },
       });
       message.success("已保存并热生效");
+      checkNode();
     } catch (err) {
       message.error(`保存失败：${err instanceof Error ? err.message : err}`);
     }
@@ -129,6 +155,8 @@ export default function SettingsPage() {
     videoBackend: string;
     largeSidePixels: number | null;
     preflight: string;
+    privacyConfirm: boolean;
+    objectInfoMerge: string;
   }) => {
     try {
       await saveConfig({
@@ -138,6 +166,8 @@ export default function SettingsPage() {
           video_backend: values.videoBackend,
           large_side_pixels: values.largeSidePixels ?? 0,
           preflight: values.preflight,
+          privacy_confirm: values.privacyConfirm,
+          object_info_merge: values.objectInfoMerge,
         },
       });
       message.success("已保存（监听地址需重启桥接器进程生效，路由参数立即生效）");
@@ -266,6 +296,37 @@ export default function SettingsPage() {
                 >
                   <Input />
                 </Form.Item>
+                <Form.Item
+                  label="Node.js 路径（可选）"
+                  name="nodePath"
+                  extra="开发前端（pnpm/Vite）依赖 node；留空 = 自动按 PATH 与常见安装目录检测。手动指定后保存，检测将优先使用该路径"
+                >
+                  <Input allowClear placeholder="如 E:\node\version\v24.20.0\node.exe，留空自动检测" />
+                </Form.Item>
+                <Form.Item label="Node.js 环境">
+                  <Space wrap>
+                    <Button size="small" loading={nodeChecking} onClick={checkNode}>检测</Button>
+                    {nodeEnv === null ? (
+                      <Typography.Text type="secondary">未检测</Typography.Text>
+                    ) : nodeEnv.ok ? (
+                      <Typography.Text>
+                        <Tag color="success">{nodeEnv.version}</Tag>
+                        <Tag>
+                          {nodeEnv.source === "config"
+                            ? "手动指定"
+                            : nodeEnv.source === "PATH"
+                              ? "PATH 自动"
+                              : "目录扫描"}
+                        </Tag>
+                        <Typography.Text code copyable={{ text: nodeEnv.path ?? "" }}>
+                          {nodeEnv.path}
+                        </Typography.Text>
+                      </Typography.Text>
+                    ) : (
+                      <Typography.Text type="danger">{nodeEnv.error}</Typography.Text>
+                    )}
+                  </Space>
+                </Form.Item>
                 <Form.Item label="本地模型目录映射（分类 → 路径）">
                   <Form.List name="modelsDirs">
                     {(fields, { add, remove }) => (
@@ -359,6 +420,27 @@ export default function SettingsPage() {
                     ]}
                   />
                 </Form.Item>
+                <Form.Item
+                  label="云端提交前隐私确认"
+                  name="privacyConfirm"
+                  valuePropName="checked"
+                  extra="开启后，首次把工作流分流到 Modal 会返回一次数据边界说明（图快照/输入文件/元数据/云端日志将离开本机），确认后放行。关闭可撤销，之后云端请求不再提示。"
+                >
+                  <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+                </Form.Item>
+                <Form.Item
+                  label="/object_info 合并策略"
+                  name="objectInfoMerge"
+                  extra="local-first = 同名节点以本地 schema 为准并追加云端独有节点（默认，最稳）；union = 同名节点保留本地结构，但把云端独有模型并入本地模型下拉；local-only = 完全使用本地清单。切换后立即清空合并缓存。"
+                >
+                  <Select
+                    options={[
+                      { value: "local-first", label: "local-first —— 本地优先（默认）" },
+                      { value: "union", label: "union —— 本地结构 + 云端模型并集" },
+                      { value: "local-only", label: "local-only —— 仅本地" },
+                    ]}
+                  />
+                </Form.Item>
                 <Button type="primary" htmlType="submit">保存</Button>
               </Form>
             ),
@@ -432,6 +514,7 @@ export default function SettingsPage() {
                     </Space>
                   </Form>
                 </Card>
+                <AccountProfilesCard />
                 <Card size="small" title="执行参数">
                   <Form
                     layout="vertical"
@@ -472,7 +555,7 @@ export default function SettingsPage() {
                   type="info"
                   showIcon
                   style={{ maxWidth: 640 }}
-                  message="「云端不可用动作」「单次运行超时」与「月度预算护栏」均已生效：预算按本月云端估算花费（单价 × 请求墙钟秒数）判定，超限请求自动回落本地或拒绝；使用曲线与快捷设置见仪表盘「额度与成本」卡片。云端最大并发护栏已生效：在途云端任务（排队/执行中）达到上限时，按「云端不可用动作」回落本地或拒绝。"
+                  message="「云端不可用动作」「单次运行超时」与「月度预算护栏」均已生效：预算按本月云端估算花费（单价 × 请求墙钟秒数）判定，超限请求自动回落本地或拒绝；使用曲线与快捷设置见仪表盘「额度与成本」卡片。云端最大并发护栏已生效：在途云端任务（排队/执行中）达到上限时，按「云端不可用动作」回落本地或拒绝。注意：预算是 ComfyBridge 本地护栏，只约束经桥接器的请求，不是 Modal 账户级硬上限；请同时在 Modal 平台设置预算与消费告警。"
                 />
                 <Form
                   layout="vertical"
@@ -503,7 +586,7 @@ export default function SettingsPage() {
                   <Form.Item
                     label="月度预算上限（USD）"
                     name="monthlyBudgetUsd"
-                    extra="0 = 关闭护栏；本月云端估算花费达到上限时触发超限动作。Modal Starter 每月赠 $30 免费额度可作参考"
+                    extra="0 = 关闭护栏；本月云端估算花费达到上限时触发超限动作。这是本地估算护栏，不阻断绕过桥接器或 Modal 侧其他消费；账户级上限请在 Modal 平台设置。Modal Starter 每月赠 $30 免费额度可作参考"
                   >
                     <InputNumber min={0} step={5} prefix="$" style={{ width: 160 }} />
                   </Form.Item>

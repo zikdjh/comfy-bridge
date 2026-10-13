@@ -15,20 +15,26 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..core.config import model_dirs_resolved
+from ..core.job_store import default_store
 from ..models_mgr import cloud_index
 from . import client
 
-_JOBS: dict[str, "SyncJob"] = {}
+_NAMESPACE = "modal_volume_sync"
 _MAX_FINISHED = 50  # 已完成作业保留上限（每条含全量 files 明细，防止只进不出）
 
 
+def _store():
+    return default_store()
+
+
 def _trim_jobs() -> None:
-    finished = sorted(
-        (j for j in _JOBS.values() if j.status != "running"),
-        key=lambda j: j.created_ms,
+    _store().prune(
+        _NAMESPACE,
+        _MAX_FINISHED,
+        is_running=lambda job: job.status == "running",
+        created_at=lambda job: job.created_ms,
+        include_running=False,
     )
-    for j in finished[: max(0, len(finished) - _MAX_FINISHED)]:
-        _JOBS.pop(j.id, None)
 
 
 def now_ms() -> int:
@@ -75,11 +81,11 @@ class SyncJob:
 
 
 def get_job(job_id: str) -> SyncJob | None:
-    return _JOBS.get(job_id)
+    return _store().get(_NAMESPACE, job_id)
 
 
 def list_jobs(limit: int = 50) -> list[SyncJob]:
-    jobs = sorted(_JOBS.values(), key=lambda j: j.created_ms, reverse=True)
+    jobs = sorted(_store().list(_NAMESPACE), key=lambda j: j.created_ms, reverse=True)
     return jobs[:limit]
 
 
@@ -105,20 +111,21 @@ def create_job(direction: str, category: str, names: list[str]) -> SyncJob:
         category=category,
         files=[SyncFile(name=n) for n in clean],
     )
-    _JOBS[job.id] = job
+    _store().create(_NAMESPACE, job.id, job)
     _trim_jobs()
     asyncio.get_running_loop().create_task(_run_job(job))
     return job
 
 
 async def cancel_job(job_id: str) -> bool:
-    job = _JOBS.get(job_id)
+    job = _store().get(_NAMESPACE, job_id)
     if job is None or job.status != "running":
         return False
     job._cancel = True
     proc = job._proc
     if proc is not None and proc.poll() is None:
         proc.terminate()
+    _store().save(_NAMESPACE, job_id, job)
     return True
 
 
@@ -140,6 +147,7 @@ async def _run_job(job: SyncJob) -> None:
                     src = local_root / f.name
                     if not src.is_file():
                         f.status, f.error = "error", "本地文件不存在"
+                        _store().save(_NAMESPACE, job.id, job)
                         continue
                     remote = f"models/{job.category}/{f.name}"
                     proc = client._popen(
@@ -162,6 +170,7 @@ async def _run_job(job: SyncJob) -> None:
                     f.status = "done"
             except Exception as exc:  # noqa: BLE001 —— 单文件失败不拖垮作业
                 f.status, f.error = "error", str(exc)[:300]
+            _store().save(_NAMESPACE, job.id, job)
     finally:
         if job._proc is not None:
             _terminate(job._proc)
@@ -173,7 +182,9 @@ async def _run_job(job: SyncJob) -> None:
                 job.error = f"{len(failed)}/{len(job.files)} 个文件失败：{failed[0].error or ''}"
         if job.finished_ms is None:
             job.finished_ms = now_ms()
+        _store().save(_NAMESPACE, job.id, job)
         try:  # 同步完成后云端清单已变，强制重建模型索引
             await cloud_index.refresh(force=True)
         except Exception as exc:  # noqa: BLE001 —— 重建失败不影响作业结果
             job.error = job.error or f"云端模型索引重建失败: {exc}"
+            _store().save(_NAMESPACE, job.id, job)

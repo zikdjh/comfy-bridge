@@ -61,11 +61,12 @@ def scan(
     presence 端集合为空 = 索引不可用（服务离线/未刷新），节点校验降级跳过并在 note 说明。
     """
     side = "cloud" if target == "modal" else "local"  # 后端名 → node_presence 缓存键
-    classes = {
-        node.get("class_type")
-        for node in (prompt or {}).values()
-        if isinstance(node, dict) and isinstance(node.get("class_type"), str) and node.get("class_type")
-    }
+    classes: set[str] = set()
+    for node in (prompt or {}).values():
+        if isinstance(node, dict):
+            class_type = node.get("class_type")
+            if isinstance(class_type, str) and class_type:
+                classes.add(class_type)
     known = (presence or {}).get(side) or set()
     missing_nodes = sorted(classes - known) if known else []
     note = None if known else f"{target} 端节点在场索引为空，已跳过节点校验"

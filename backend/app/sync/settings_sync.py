@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 # 键名含这些片段（不区分大小写）的值视为凭证类：API 回显一律掩码（红线），推拉仍用真实值
 SENSITIVE_KEY_FRAGMENTS = ("api_key", "apikey", "token", "secret", "password")
 
@@ -73,7 +75,7 @@ def diff_settings(local: dict, cloud: dict) -> list[dict]:
 
 
 def apply_directions(
-    local: dict, cloud: dict, directions: dict[str, str]
+    local: dict, cloud: dict, directions: Mapping[str, str]
 ) -> tuple[dict, dict, list[str], list[str], list[str]]:
     """按 {键: push|pull} 合并两端设置，返回 (new_local, new_cloud, pushed, pulled, skipped)。
 
