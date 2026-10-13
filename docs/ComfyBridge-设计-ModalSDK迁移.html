@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyBridge Modal SDK 迁移改造方案 · ComfyBridge 文档</title>
+<style>
+  :root {
+    --bg: #f6f7fb; --card: #ffffff; --ink: #1f2430; --ink-soft: #5a6272;
+    --line: #e4e7ef; --accent: #4f5be8; --accent-soft: #eef0fe;
+    --code-bg: #14161f; --code-ink: #e6e9f2;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 70px; }
+  body {
+    margin: 0; font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.75; font-size: 15px;
+  }
+  code, pre { font-family: "JetBrains Mono", Consolas, "Cascadia Code", monospace; }
+  header.hero {
+    background: linear-gradient(135deg, #232a63 0%, #4f5be8 55%, #8a7bff 100%);
+    color: #fff; padding: 34px 24px 26px; text-align: center;
+  }
+  header.hero h1 { margin: 0 0 8px; font-size: 25px; letter-spacing: 1px; }
+  header.hero .meta { font-size: 12.5px; opacity: .82; margin-top: 8px; }
+  nav.toc {
+    position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,.95);
+    backdrop-filter: blur(6px); border-bottom: 1px solid var(--line);
+    padding: 9px 16px; display: flex; flex-wrap: wrap; gap: 5px 12px;
+    justify-content: center; font-size: 13.5px;
+  }
+  nav.toc a { color: var(--ink-soft); text-decoration: none; padding: 3px 8px; border-radius: 6px; }
+  nav.toc a:hover { color: var(--accent); background: var(--accent-soft); }
+  main { max-width: 1000px; margin: 0 auto; padding: 26px 20px 40px; }
+  h2 {
+    font-size: 20px; margin: 40px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--accent); line-height: 1.4;
+  }
+  main > h2:first-child { margin-top: 0; }
+  h3 { font-size: 16.5px; margin: 24px 0 8px; }
+  h4 { font-size: 14.5px; margin: 18px 0 6px; color: #4353d8; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 26px; }
+  li { margin: 4px 0; }
+  li input[type="checkbox"] { margin-right: 6px; vertical-align: -2px; }
+  blockquote {
+    margin: 12px 0; padding: 10px 16px; background: var(--accent-soft);
+    border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; color: #3a4160;
+  }
+  blockquote p { margin: 4px 0; }
+  pre {
+    position: relative; background: var(--code-bg); color: var(--code-ink);
+    border-radius: 10px; padding: 30px 16px 13px; overflow-x: auto;
+    font-size: 13px; line-height: 1.6; margin: 12px 0;
+  }
+  pre .lang {
+    position: absolute; top: 6px; right: 12px; font-size: 11px; opacity: .55;
+    text-transform: uppercase; letter-spacing: 1px; font-family: system-ui, sans-serif;
+  }
+  code {
+    background: #f0f2fa; color: #33398f; padding: 1.5px 6px;
+    border-radius: 5px; font-size: 13px;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  table {
+    width: 100%; border-collapse: collapse; background: var(--card);
+    font-size: 13.5px; margin: 12px 0;
+  }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  thead th { background: var(--accent-soft); color: #4353d8; font-weight: 600; }
+  tbody tr:nth-child(even) { background: #fafbfe; }
+  td code, th code { background: #f0f2fa; color: #33398f; }
+  hr { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
+  a { color: var(--accent); }
+  del { color: var(--ink-soft); }
+  .footer { text-align: center; color: var(--ink-soft); font-size: 12.5px; padding: 18px; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header class="hero">
+  <h1>ComfyBridge Modal SDK 迁移改造方案</h1>
+  <div class="meta">基线：feature/modal-sdk-migration（<code>b4d9cb2</code>，2026-10-13） · 下一阶段开发入口</div>
+</header>
+
+<nav class="toc">
+  <a href="#c1">1. 背景与目标</a>
+  <a href="#c2">2. 现状盘点：CLI 调用面</a>
+  <a href="#c3">3. SDK API 对照（modal 1.5.5 实测核对）</a>
+  <a href="#c4">4. 目标架构与模块设计</a>
+  <a href="#c5">5. 分批迁移计划</a>
+  <a href="#c6">6. 风险与对策</a>
+  <a href="#c7">7. 验收标准</a>
+  <a href="#c8">8. 回滚与兼容</a>
+</nav>
+
+<main>
+  <h2 id="c1">1. 背景与目标</h2>
+  <p>当前后端与 Modal 控制面的全部交互（卷操作、应用状态、账单查询、部署）都走
+    <code>modal</code> CLI 子进程。这是历史决策：早期为规避「后端主进程 import modal SDK
+    的副作用」与「代理链路问题」而选择子进程隔离。</p>
+  <p>CLI 路线在真机运行中暴露出一类系统性成本——<b>文本面</b>：所有结果都从 stdout
+    解析而来，已经积累了一串 quirk 修复：</p>
+  <ul>
+    <li>GBK / UTF-8：<code>modal deploy</code> 成功路径打印 <code>✓ / 🔨 / 🎉</code>，
+      中文控制台默认 GBK 触发 <code>UnicodeEncodeError</code>，进程以非零码退出，
+      曾导致「部署成功却判失败并回滚版本 pin」（LV-02，见《真机验收缺陷清单》）；</li>
+    <li>双重转义：<code>volume ls --json</code> 对非 ASCII 文件名先转义一次、
+      <code>json.loads</code> 后名字仍是字面 <code>\uXXXX</code> 序列，
+      需要 <code>_unescape_cli_name()</code> 还原；</li>
+    <li>banner 混入：CLI 输出混有 DeprecationWarning 等日志行，
+      <code>cli_json_list()</code> 只能靠「定位首个 <code>[</code>」截取 JSON 数组；</li>
+    <li>错误分类靠文本匹配：<code>_classify_error()</code> 对 stdout/stderr 做
+      关键字匹配（"rate limit"、"401"、"connection refused"...），无法确定的归为
+      <code>command</code>，天然保守且有漏判面；</li>
+    <li>子进程开销：每次调用 fork 一个 Python 解释器（启动期首检、30s 轮询的账单查询、
+      逐节点上传都要反复付出）；超时需强杀子进程，远端状态不确定。</li>
+  </ul>
+  <p><b>目标</b>：控制面数据操作（卷读/写/删、卷 CRUD、应用状态、账单查询）改为
+    Modal Python SDK 直调，消除文本解析层与子进程开销；保留类型化错误分类、
+    只读退避重试、诊断留痕三件套契约。<code>modal deploy</code> 与两处
+    <code>modal run</code> 流式作业在 P1 保留 CLI（理由见 §5 批次 4）。</p>
+  <blockquote><p>红线不变：凭证只存 <code>~/.comfybridge/config.toml</code> 或环境变量，
+    绝不写入代码库、命令回显或提交；API 响应对凭证一律掩码。</p></blockquote>
+
+  <h2 id="c2">2. 现状盘点：CLI 调用面</h2>
+  <p>全部交互收敛在 <code>backend/app/modal_volume/client.py</code> 的
+    <code>run(*args, timeout)</code> 缝隙上（错误分类 / 只读退避 / 诊断留痕都在这里），
+    调用方分 14 个文件、约 32 处：</p>
+  <table>
+    <thead><tr><th>命令族</th><th>调用方（文件 · 用途）</th><th>读/写</th></tr></thead>
+    <tbody>
+      <tr><td><code>volume ls --json</code></td>
+        <td><code>modal_volume/client.py</code> list_dir/list_files（卷浏览、递归收集）；
+          <code>volume_mgr/usage.py</code>（用量统计）</td><td>读</td></tr>
+      <tr><td><code>volume list --json</code></td>
+        <td><code>volume_mgr/usage.py</code>（卷清单）；
+          <code>volume_mgr/deletion.py</code>、<code>api/v1/volume.py</code>（卷存在性）</td><td>读</td></tr>
+      <tr><td><code>volume get</code></td>
+        <td><code>api/v1/nodes.py</code>（manifest / 节点目录下载）；
+          <code>api/v1/settings_sync.py</code>、<code>sync/workflows_sync.py</code>、
+          <code>api/v1/workflows.py</code>（设置/工作流拉取）；
+          <code>modal_volume/jobs.py</code>（模型卷同步）</td><td>读</td></tr>
+      <tr><td><code>volume put [-f]</code></td>
+        <td><code>api/v1/nodes.py</code>（节点上传 / manifest 写入）；
+          <code>api/v1/settings_sync.py</code>、<code>sync/workflows_sync.py</code>（推送）；
+          <code>runner/executor.py</code>（输入上传兜底通道）；
+          <code>models_mgr/uploader.py</code>（分块上传最终落卷）；
+          <code>proxy/precheck.py</code>（节点依赖预检上传）；
+          <code>modal_volume/jobs.py</code>（模型卷同步）</td><td>写</td></tr>
+      <tr><td><code>volume rm [-r]</code></td>
+        <td><code>api/v1/nodes.py</code>（移除节点）；
+          <code>volume_mgr/deletion.py</code>（回收站永久清理 / 软删除落卷）</td><td>写</td></tr>
+      <tr><td><code>volume create / delete -y</code></td>
+        <td><code>api/v1/volume.py</code>（数据卷管理）</td><td>写</td></tr>
+      <tr><td><code>app list --json</code></td>
+        <td><code>api/v1/health.py</code>（启动自检：登录态 / 应用状态 / 延迟）；
+          <code>runner/client.py</code>（ensure_state 部署状态保鲜）</td><td>读</td></tr>
+      <tr><td><code>modal run &lt;file&gt;::&lt;func&gt;</code>（流式）</td>
+        <td><code>volume_mgr/downloads.py</code>（<code>download_model</code> 云端直下）；
+          <code>volume_mgr/moves.py</code>（<code>move_entries</code> 卷内移动）；
+          日志经管道泵回 <code>job.log_tail</code>，含 <code>CB_MODAL_VOLUME</code> 重定向</td><td>写</td></tr>
+      <tr><td><code>billing summary --for YYYY-MM --json</code> / <code>billing report</code></td>
+        <td><code>cost/modal_billing.py</code>（账单实时查询 / 月度对账，独立子进程，缓存 120s/20s）</td><td>读</td></tr>
+      <tr><td><code>deploy runner.py</code></td>
+        <td><code>nodes_mgr/deploy.py</code>（镜像固化 / 版本对齐，独立子进程 + 互斥 + 失败回滚）</td><td>写</td></tr>
+      <tr><td><code>--version</code></td>
+        <td><code>api/v1/health.py</code>（启动自检）</td><td>读</td></tr>
+    </tbody>
+  </table>
+  <p>已有单测通过 <code>monkeypatch</code> 替换 <code>_run_once</code> / <code>Popen</code>
+    隔离真实 CLI（9 个测试文件），迁移时这层 mock 是主要同步面。</p>
+
+  <h2 id="c3">3. SDK API 对照（modal 1.5.5 实测核对）</h2>
+  <p>以下对照以 venv 内实际安装的 <code>modal 1.5.5</code> 源码为基准核对
+    （<code>site-packages/modal/volume.py</code>、<code>app.py</code>、
+    <code>_workspace.py</code>、<code>types.py</code>、<code>client.py</code>），
+    不凭文档记忆：</p>
+  <table>
+    <thead><tr><th>CLI 现状</th><th>SDK 直调</th><th>返回 / 备注</th></tr></thead>
+    <tbody>
+      <tr><td><code>volume ls &lt;vol&gt; [--json]</code></td>
+        <td><code>vol = modal.Volume.from_name(name)</code>；
+          <code>await vol.listdir(path, recursive=False)</code></td>
+        <td><code>list[FileEntry]</code>；<code>FileEntry</code> 字段
+          <code>path / type(FileEntryType) / mtime(int) / size(int)</code>，
+          结构化替代 <code>_unescape_cli_name</code> 与 size 文本解析；
+          双重转义来源已定位：CLI <code>ls --json</code> 对 <code>entry.path</code>
+          做 <code>unicode_escape</code> 编码（cli/volume.py），SDK 直调天然无此层；
+          CLI <code>ls</code> 内部即调 <code>vol.listdir(path)</code>（同源），
+          根路径行为以批次 1 实测为准，调用方既有「省略路径才列根」兜底先保留</td></tr>
+      <tr><td><code>volume list --json</code></td>
+        <td><code>await modal.Volume.objects.list()</code></td>
+        <td><code>list[Volume]</code> hydrated 句柄（v1.1.2+），新→旧排序；
+          <code>vol.name</code> 取名，替代 JSON 行匹配</td></tr>
+      <tr><td><code>volume create &lt;name&gt;</code></td>
+        <td><code>await modal.Volume.objects.create(name)</code></td>
+        <td>v1.1.2+；已存在抛 <code>AlreadyExistsError</code>
+          （<code>allow_existing=True</code> 可静默）</td></tr>
+      <tr><td><code>volume delete &lt;name&gt; -y</code></td>
+        <td><code>await modal.Volume.objects.delete(name)</code></td>
+        <td>整卷删除；<code>allow_missing=True</code> 幂等</td></tr>
+      <tr><td><code>volume put &lt;vol&gt; [-f] local remote</code></td>
+        <td><code>await vol.put_file(local_path, remote_path)</code></td>
+        <td>单个文件；目录用 <code>put_directory(local_dir, remote_path)</code>；
+          staging 排除（<code>.git</code>/<code>__pycache__</code>）需在调用方预过滤</td></tr>
+      <tr><td><code>volume get &lt;vol&gt; remote local [--force]</code></td>
+        <td><code>async for chunk in vol.read_file(remote)</code> 落盘</td>
+        <td>字节流；可顺带做下载进度回调（CLI 做不到）</td></tr>
+      <tr><td><code>volume rm &lt;vol&gt; rel [-r]</code></td>
+        <td><code>await vol.remove_file(path, recursive=...)</code></td>
+        <td>不存在时抛 <code>NotFoundError</code>（幂等语义由调用方处理）</td></tr>
+      <tr><td><code>app list --json</code>（找 app_name 状态）</td>
+        <td><code>app = await modal.App.lookup(app_name, client=...)</code></td>
+        <td>已部署返回 App，未部署抛 <code>NotFoundError</code>；
+          1.5.5 无公开 <code>App.objects.list()</code>（CLI 内部用
+          <code>api_pb2.AppListRequest</code>），如需 deployed/stopped 细粒度状态，
+          按既有「实现偏差」口径记录后用内部 stub（与 CLI 同源）</td></tr>
+      <tr><td><code>billing summary --for YYYY-MM --json</code></td>
+        <td><code>ws = await modal.Workspace.from_context(client)</code>；
+          <code>await ws.billing.summary(cycle="YYYY-MM")</code></td>
+        <td><code>WorkspaceBillingSummary</code> dataclass：
+          <code>metered_cost / billed_cost / metered_cost_breakdown / adjustments</code>
+          均为 <code>Decimal</code>，直接替代 JSON 解析与 float 换算</td></tr>
+      <tr><td><code>billing report</code></td>
+        <td><code>await ws.billing.report(start, end, resolution="d")</code></td>
+        <td><code>list[BillingReportItem]</code> 流式返回</td></tr>
+      <tr><td><code>deploy runner.py</code></td>
+        <td>P1 保留 CLI；P2 可选 <code>App.deploy()</code>（官方「programmatic
+          alternative」，需 importlib 加载 runner.py 后调用，支持
+          <code>name/tag/strategy</code>）</td>
+        <td>理由见 §5 批次 4</td></tr>
+      <tr><td><code>modal run ...</code>（流式作业）</td>
+        <td>P1 保留 CLI；P2 评估 <code>Function.remote()</code> + 日志轮询</td>
+        <td>理由见 §5 批次 4</td></tr>
+    </tbody>
+  </table>
+  <h3>凭证与客户端</h3>
+  <p><code>await modal.Client.from_credentials(token_id, token_secret)</code> 与
+    <code>await modal.Client.from_env()</code> 均为 async classmethod；所有对象方法
+    （<code>from_name / objects.* / lookup / from_context</code>）都接受
+    <code>client=...</code> 注入。这正好承接现有 <code>auth_env()</code> 的语义：</p>
+  <pre><span class="lang">python</span><code># 未配置 → from_env()（回落 ~/.modal.toml，与 CLI 行为一致）
+# 已配置 → from_credentials(token_id, token_secret)（与 auth_env 注入等价）
+# 账号切换 → 重建 client，替代 reset_runtime_state() 清诊断的联动点</code></pre>
+
+  <h2 id="c4">4. 目标架构与模块设计</h2>
+  <p>不新建平行模块：<code>modal_volume/client.py</code> 是全部调用方的既有缝隙，
+    原地把它从「CLI 子进程封装」改造为「SDK 网关」，公开类型化函数，
+    调用方分批从 <code>run("volume", ...)</code> 命令串迁到类型化调用。</p>
+  <h3>4.1 模块内部结构</h3>
+  <ul>
+    <li><b>client 生命周期</b>：进程内缓存一个 client（按凭证对缓存）；
+      <code>from_credentials</code> 失败回落 <code>from_env</code>；
+      账号切换钩子（config API 的既有 <code>reset_runtime_state()</code> 联动点）重建 client 并清诊断。</li>
+    <li><b>类型化函数面</b>（保持既有函数名优先）：
+      <code>list_dir / list_files / volumes_list / volume_create / volume_delete /
+      put_file / put_directory / get_file / remove_file / app_status / billing_summary /
+      billing_report</code>。</li>
+    <li><b>错误映射</b>：SDK 异常 → 既有 <code>ModalCliError</code> 分类契约
+      （<code>category / retryable / next_action / command</code> 字段不变，
+      前端「系统状态」页零改动）：
+      <code>NotFoundError → uncertain</code>（含 retryable 判定）、
+      <code>AlreadyExistsError → command</code>（409 语义由 API 层保留）、
+      <code>AuthError / 认证类 → not_logged_in</code>、
+      <code>ConnectionError / TimeoutError → network</code>（retryable）、
+      限流异常或 429 → <code>rate_limited</code>（retryable）。
+      映射表带保守兜底：未知异常归 <code>command</code>，不误报登录/权限。</li>
+    <li><b>三件套契约保留</b>：只读退避（限流 1s/4s/10s、网络 0.5s）、
+      诊断留痕（<code>diagnostics()</code> → <code>/health/modal-cli</code>）、
+      系统状态页错误分类全部不动；超时语义从「强杀子进程 + uncertain」改为
+      <code>asyncio.wait_for</code> 取消（远端状态同样不确定，错误文案保留
+      「先核对远端再重试」）。</li>
+    <li><b>懒导入</b>：<code>import modal</code> 收敛到 SDK 网关模块内部
+      （函数级或模块级按首次调用），避免 pytest 收集 / CLI 启动路径提前拉起 modal 配置；
+      1.5.5 实测 import 副作用仅「modal-client logger 配置 + 配置读取」，
+      无事件循环策略设置（旧 pyproject 注释里的说法过时，一并修正）。</li>
+    <li><b>代理边界</b>：CLI 路线在子进程 env 里摘掉 HTTP(S)_PROXY 并设
+      <code>NO_PROXY=*</code>；SDK 在主进程内不能全局改 env，改为
+      创建 client 时按 <code>cli_env()</code> 的同一边界处理（modal 客户端自身的
+      代理配置项或局部 env 快照），保证「Modal 云端通信不走本机代理」语义不变。</li>
+  </ul>
+  <h3>4.2 调用方迁移样例</h3>
+  <pre><span class="lang">python</span><code># 现状（nodes.py 节点上传）
+await volume_cli.run("volume", "put", volume_cli.volume_name(), str(local_path), remote, "-f")
+
+# 迁移后
+await volume_cli.put_file(local_path, remote)
+
+# 现状（usage.py 卷统计）
+out = await modal_cli.run("volume", "list", "--json")
+rows = modal_cli.cli_json_list(out)
+
+# 迁移后
+vols = await modal_cli.volumes_list()   # list[dict{name,...}] 或 list[Volume]</code></pre>
+
+  <h2 id="c5">5. 分批迁移计划</h2>
+  <p>按「读 → 写 → 状态/账单 → 收尾」推进，每批独立提交、独立可回滚，
+    全程保持既有 API 契约（前端与 e2e 零感知）：</p>
+  <h3>批次 1：SDK 网关 + 只读卷操作</h3>
+  <ul>
+    <li><code>modal_volume/client.py</code>：client 生命周期、错误映射、懒导入、代理边界；
+      <code>list_dir / list_files / volumes_list</code> 切 SDK。</li>
+    <li>调用方：<code>usage.py</code>、<code>deletion.py</code>（卷存在性）、
+      <code>volume.py _volume_exists</code>。</li>
+    <li>测试：SDK mock 层（<code>unittest.mock</code> 替换 SDK 句柄）重写
+      <code>test_modal_volume_client.py</code> 对应用例；语义差异用例
+      （listdir 根路径、mtime/size 类型）。</li>
+  </ul>
+  <h3>批次 2：卷写操作 + 分块上传落卷</h3>
+  <ul>
+    <li><code>put_file / put_directory / get_file / remove_file / volume_create / volume_delete</code>。</li>
+    <li>调用方：nodes.py（上传/移除/manifest）、settings_sync、workflows_sync、
+      executor（输入兜底通道）、uploader（最终落卷）、precheck、deletion（回收站）、
+      volume.py（卷 CRUD）、modal_volume/jobs.py。</li>
+    <li>注意：staging 排除逻辑（<code>.git</code>/<code>__pycache__</code>）从 CLI
+      隐式行为确认后显式保留；<code>--force</code> 语义映射为「覆盖写」。</li>
+    <li>测试：<code>test_input_push / test_model_deletion / test_model_uploader /
+      test_precheck / test_workflows_sync / test_m2_leftovers</code> 的 CLI mock 同步。</li>
+  </ul>
+  <h3>批次 3：应用状态 + 账单</h3>
+  <ul>
+    <li><code>app_status</code>（<code>App.lookup</code>）切 health 自检与
+      runner/client ensure_state；<code>--version</code> 自检改读
+      <code>modal.version</code>（或保留一次 CLI，见风险）。</li>
+    <li><code>billing_summary / billing_report</code> 切
+      <code>Workspace.from_context + ws.billing.*</code>，
+      <code>Decimal → float</code> 换算收敛在一处；缓存 120s/20s 保留。</li>
+    <li>测试：<code>test_health</code> mock 同步；账单输出与 CLI 基线对照
+      （同一 workspace 同月，metered/billed 误差 &lt; 0.0001）。</li>
+  </ul>
+  <h3>批次 4：收尾 + deploy/run 决策</h3>
+  <ul>
+    <li>删除 <code>_popen / _run_once / cli_json_list / _unescape_cli_name /
+      cli_env / _classify_error</code> 的 CLI 路径（错误映射保留）；
+      pyproject 依赖注释更新（modal 从「仅子进程调用」改为「SDK 直调 + 部署/流式作业子进程」）。</li>
+    <li><b><code>modal deploy</code> 保留 CLI</b>：镜像构建是长时构建操作，
+      CLI 流式日志直通 <code>job.log_tail</code>；SDK <code>App.deploy()</code>
+      需要 importlib 加载 runner.py（本地导入副作用 + 日志面弱），
+      收益不成比例。P2 可选项保留在本文档。</li>
+    <li><b><code>modal run</code> 流式作业保留 CLI</b>：downloads/moves 的价值就在
+      日志泵（进度 UI 实时性），SDK <code>Function.remote()</code> 不回传流式日志；
+      P2 评估「函数调用 + 日志轮询」后另行立项。</li>
+    <li>文档同步：README 依赖注、本文件验收登记。</li>
+  </ul>
+
+  <h2 id="c6">6. 风险与对策</h2>
+  <table>
+    <thead><tr><th>风险</th><th>对策</th></tr></thead>
+    <tbody>
+      <tr><td>Windows 事件循环：uvicorn asyncio loop 与 modal grpclib 客户端共存未验证</td>
+        <td>批次 1 首个验证项：真机跑一次 listdir + health 自检，观察
+          "Event loop is closed / already running"；兜底方案：SDK 调用收敛到
+          独立 loop 线程（<code>run_coroutine_threadsafe</code>），语义不变。
+          实测依据：modal 1.5.5 import 不设事件循环策略，风险主要在运行期。</td></tr>
+      <tr><td>主进程 import modal 的副作用（modal-client logger、配置读取）</td>
+        <td>懒导入收敛在网关模块；logger 为独立命名空间，必要时
+          <code>logging.getLogger("modal-client").setLevel(WARNING)</code>；
+          pytest 收集路径确认不触发网络调用。</td></tr>
+      <tr><td>多账号凭证切换：进程内 client 缓存与账号注册表联动</td>
+        <td>凭证对作为 client 缓存键；账号激活钩子重建 client；
+          切换期间在途调用允许完成（client 独立对象，不复用全局状态）。</td></tr>
+      <tr><td>语义差异引入回归：mtime 单位（CLI 文本 vs SDK int）、
+        size 类型（str vs int）、listdir 根路径、<code>--force</code> 覆盖、
+        staging 排除</td>
+        <td>差异清单显式列在批次 1/2 测试用例里；前端展示层
+          （大小/时间格式化）逐项过一遍 e2e。</td></tr>
+      <tr><td>错误分类漏判：SDK 异常类型比 CLI 文本更结构化，但部分错误
+        （服务端 5xx、限流）需确认异常形态</td>
+        <td>保守兜底（未知 → command）沿用；限流按异常信息匹配保留；
+          真机触发一次限流验证退避路径仍生效。</td></tr>
+      <tr><td>打包体积：modal 已是依赖，无新增；但 SDK import 链更重
+        （grpclib、protobuf）</td>
+        <td>wheel 打包自检沿用 <code>build_package.py</code>；
+          pipx 安装态真机跑一次启动 + 首图。</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="c7">7. 验收标准</h2>
+  <ul>
+    <li><input type="checkbox"> 后端全量门禁：<code>ruff check .</code> 0 违规、
+      <code>mypy app</code> 0 错误、<code>pytest tests -q</code> 全绿（live 仍默认 skip）。</li>
+    <li><input type="checkbox"> 真实卷操作冒烟（回环部署）：
+      <code>volume ls / put / get / rm</code> 各一次实调成功，
+      节点同步与模型分块上传全链路一次通过。</li>
+    <li><input type="checkbox"> health 自检真机通过：版本 / 登录态 / 应用状态 /
+      延迟与 CLI 基线一致；限流退避与系统状态页错误分类不回归。</li>
+    <li><input type="checkbox"> 账单查询与 CLI 输出对照（同月）误差 &lt; 0.0001。</li>
+    <li><input type="checkbox"> 多账号切换后 SDK 调用使用新凭证（重建 client 生效）。</li>
+    <li><input type="checkbox"> Playwright 管理台 e2e 全绿（前端零改动通过）。</li>
+    <li><input type="checkbox"> <code>build_package.py</code> 打包 + pipx 安装态
+      冒烟（SDK 直调路径在安装 venv 可用）。</li>
+  </ul>
+
+  <h2 id="c8">8. 回滚与兼容</h2>
+  <ul>
+    <li>分批提交，每批独立可 revert；批次 1-3 期间 CLI 路径仍在代码库中
+      （网关内部保留 <code>_cli_fallback</code> 分支不对外暴露），批次 4 统一删除。</li>
+    <li>若真机验证发现 Windows 事件循环不兼容且线程隔离兜底也不稳，
+      回滚点 = 批次 1 提交前，CLI 路线完整保留。</li>
+    <li>API 契约（REST 形态、错误 category 字段、诊断字段）不变，
+      前端与 e2e 不感知迁移；数据库 schema 无变更。</li>
+  </ul>
+</main>
+
+<div class="footer">ComfyBridge · 本地 ComfyUI × Modal 云端 GPU 桥接器</div>
+</body>
+</html>

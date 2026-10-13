@@ -8,6 +8,7 @@
 - 技术线（架构/核心设计/API/目录）：`docs/ComfyBridge-计划-技术规划.html`
 - 缺陷与修复入口：`docs/ComfyBridge-过程-真机验收缺陷清单.html`（真机验收残留项登记）
 - 测试计划：docs/ComfyBridge-过程-第二轮完整测试计划.html（第二轮完整回归 + 性能压测执行清单）
+- 下一阶段改造：docs/ComfyBridge-设计-ModalSDK迁移.html（Modal CLI 子进程 → Python SDK 直调）
 - 速查：`docs/ComfyBridge-参考-ComfyUI启动命令与参数.html`、`docs/ComfyBridge-参考-Modal云平台与SDK.html`
 
 ## 目录
