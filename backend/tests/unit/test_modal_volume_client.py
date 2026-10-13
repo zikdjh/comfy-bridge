@@ -1,9 +1,85 @@
 """modal CLI 输出 quirk 修复：volume ls --json 对非 ASCII 文件名的双重转义还原。"""
 
+from dataclasses import dataclass
+
 import pytest
 
 from app.modal_volume import client as modal_cli
-from app.modal_volume.client import ModalCliError, _unescape_cli_name
+from app.modal_volume.client import (
+    ModalCliError,
+    _humanize_filesize,
+    _map_sdk_error,
+    _normalize_entry,
+    _unescape_cli_name,
+)
+
+
+@dataclass
+class _Entry:
+    path: str
+    type: int
+    mtime: int
+    size: int
+
+
+def test_humanize_filesize_matches_cli_format():
+    assert _humanize_filesize(0) == "0 B"
+    assert _humanize_filesize(6) == "6 B"
+    assert _humanize_filesize(1258291) == "1.2 MiB"
+    assert _humanize_filesize(1024**4) == "1.0 TiB"
+
+
+def test_normalize_entry_matches_cli_shape_and_adds_int_fields():
+    row = _normalize_entry(_Entry(path="/models/demo.safetensors", type=1, mtime=1_700_000_000, size=6))
+    assert row["name"] == "demo.safetensors"
+    assert row["type"] == "file"
+    assert row["size"] == "6 B"
+    assert row["size_bytes"] == 6
+    assert row["mtime_s"] == 1_700_000_000
+    assert row["mtime"]
+
+
+def test_normalize_entry_type_mapping_and_empty_mtime():
+    assert _normalize_entry(_Entry(path="/a/b", type=2, mtime=0, size=0))["type"] == "dir"
+    assert _normalize_entry(_Entry(path="/a/link", type=3, mtime=0, size=0))["type"] == "link"
+    assert _normalize_entry(_Entry(path="/a/sock", type=5, mtime=0, size=0))["type"] == "socket"
+    assert _normalize_entry(_Entry(path="/a/b", type=1, mtime=0, size=0))["mtime"] == ""
+
+
+def test_localized_datetime_json_matches_cli_json_shape():
+    value = modal_cli._localized_datetime_json(1_700_000_000)
+    assert value
+    assert value[4] == "-" and value[10] == " "
+    assert modal_cli._localized_datetime_json(0) == ""
+
+
+def test_sdk_error_mapping_keeps_stable_categories():
+    class ResourceExhaustedError(Exception):
+        pass
+
+    class PermissionDeniedError(Exception):
+        pass
+
+    class AuthError(Exception):
+        pass
+
+    rate = _map_sdk_error(ResourceExhaustedError("429"), "列出数据卷")
+    assert rate.category == "rate_limited" and rate.retryable is True
+    denied = _map_sdk_error(PermissionDeniedError("denied"), "列出数据卷")
+    assert denied.category == "permission" and denied.retryable is False
+    auth = _map_sdk_error(AuthError("bad token"), "获取客户端")
+    assert auth.category == "not_logged_in"
+    unknown = _map_sdk_error(RuntimeError("boom"), "列出数据卷")
+    assert unknown.category == "command" and unknown.retryable is False
+
+
+def test_not_found_mapping_keeps_legacy_string_marker():
+    class NotFoundError(Exception):
+        pass
+
+    error = _map_sdk_error(NotFoundError("volume missing"), "列出数据卷")
+    assert error.category == "uncertain" and error.retryable is False
+    assert "No such file or directory" in str(error)
 
 
 def test_unescapes_double_escaped_chinese():

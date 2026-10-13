@@ -312,6 +312,7 @@ def _node_version(node_exe: str) -> str | None:
         proc = subprocess.run(
             [node_exe, "--version"],
             capture_output=True, text=True, timeout=6,
+            check=False,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except (OSError, subprocess.SubprocessError):

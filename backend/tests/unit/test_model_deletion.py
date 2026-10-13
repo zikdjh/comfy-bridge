@@ -36,6 +36,13 @@ def _client(monkeypatch) -> TestClient:
         "get_settings",
         lambda: type("Settings", (), {"modal": type("Modal", (), {"volume": "comfyui-data"})()})(),
     )
+    async def fake_volume_exists(name: str) -> bool:
+        return name == "comfyui-data"
+
+    # 避免测试真连 Modal：卷存在性在 API 层即被短路。
+    monkeypatch.setattr(volume_api.volume_cli, "volume_exists", fake_volume_exists)
+    # 后台用量统计会跨请求留在事件循环里，测试不验证它，显式隔离。
+    monkeypatch.setattr(volume_api.usage, "get_usage", lambda force=False: None)
     return TestClient(app)
 
 
@@ -208,14 +215,12 @@ async def test_list_trash_returns_entries_and_marks_unreadable_timestamp(
 
 
 @pytest.mark.asyncio
-async def test_cleanup_all_skips_silently_without_cli(monkeypatch) -> None:
-    """安装态仅本地桥接（无 modal CLI）：静默跳过，不产生启动告警。"""
-    monkeypatch.setattr(deletion.modal_cli, "cli_path", lambda: "")
-
+async def test_cleanup_all_skips_silently_when_volumes_list_fails(monkeypatch) -> None:
+    """SDK/凭证不可用属正常安装形态：静默跳过，不产生启动告警。"""
     async def _boom(*args, **kwargs):
-        raise AssertionError("must not invoke CLI when not installed")
+        raise deletion.modal_cli.ModalCliError("SDK 不可用", category="not_installed")
 
-    monkeypatch.setattr(deletion.modal_cli, "run", _boom)
+    monkeypatch.setattr(deletion.modal_cli, "volumes_list", _boom)
     result = await deletion.cleanup_all_expired_trash()
     assert result == {}
 

@@ -586,6 +586,26 @@ state = await modal_cli.app_status(app_name)   # "deployed" / "stopped" / None</
       断言网关产出逐字段一致（含 <code>"6 B"</code> / <code>"1.2 MiB"</code> 边界与
       <code>mtime &lt;= 0</code> 落空串）。</li>
   </ul>
+  <p><b>实施登记（2026-10-13）：本批次已完成，等待真机事件循环/代理冒烟。</b>
+    已落地内容：<code>client.py</code> 增加懒导入、按
+    <code>(token_id, token_secret)</code> 缓存且在运行事件循环变化时自动失效的
+    SDK client、按 <code>(client, volume_name)</code> 缓存的 Volume 句柄、
+    SDK 异常映射与类型化只读退避；<code>list_dir / list_files / volumes_list /
+    volume_exists</code> 已切 SDK，其中 <code>volumes_list</code> 用
+    <code>Volume.objects.list()</code> + 逐句柄 <code>info()</code> 补齐 CLI
+    同形的 <code>created_at</code> 带秒时间串，<code>volume_exists</code>
+    用非缓存 hydrate 避免删除后的陈旧句柄误判。调用方 <code>usage.py</code>
+    改读 <code>size_bytes</code>，<code>deletion.py</code> 与
+    <code>api/v1/volume.py::_volume_exists</code> 清除 CLI JSON 解析；
+    <code>list_dir/list_files</code> 的其余消费者保持零改动。</p>
+  <p>实施偏差两项：代理边界采用 Modal 1.5+ 官方配置
+    <code>MODAL_DISABLE_API_PROXY=1</code>（只在网关懒导入时设置，不全局改
+    <code>HTTP_PROXY</code>）；<code>NotFoundError</code> 的错误文案补回
+    <code>No such file or directory</code> 兼容标记，且该类
+    <code>retryable=False</code>（状态不确定但不存在可安全重试的写操作语义）。
+    验证：后端 <code>ruff</code> 0 违规、<code>mypy</code> 0 错误、
+    <code>pytest -q tests/unit</code> 363 passed；未覆盖项为 Windows uvicorn
+    真机 listdir、真实 Modal 限流与多账号切换后的 client 重建。</p>
   <h3>批次 2：卷写操作 + 分块上传落卷</h3>
   <ul>
     <li><code>put_file / put_many / put_directory / get_file / remove_file /
@@ -817,6 +837,7 @@ state = await modal_cli.app_status(app_name)   # "deployed" / "stopped" / None</
     <code>app_state</code> 硬契约与内部 stub、billing keyword-only 签名、
     返回形状归一定案、批次 4 删除清单修正、同步/异步边界、CI 门禁对齐等），
     全部对照 <code>backend/.venv</code> 内 modal 1.5.5 源码与现网代码逐条核验。
+    批次 1 实施登记（SDK 网关 + 只读卷操作 + 形状归一）已回填至 §5。
   </div>
 </body>
 </html>

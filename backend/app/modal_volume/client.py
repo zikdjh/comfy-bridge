@@ -1,18 +1,15 @@
-"""modal CLI 子进程封装（桥接器不直连 Modal API）。
+"""Modal 访问网关：只读卷操作走 Python SDK，其余命令保留 CLI 子进程。
 
-凭证优先级：设置页保存的 token_id/token_secret（注入 MODAL_TOKEN_ID/MODAL_TOKEN_SECRET
-环境变量）> CLI 自读的 ~/.modal.toml。只填了管理台凭证的用户也能直接用。
+凭证优先级：设置页保存的 token_id/token_secret（SDK / CLI 都注入
+MODAL_TOKEN_ID/MODAL_TOKEN_SECRET）> ~/.modal.toml。只填了管理台凭证的用户也能直接用。
 
-CLI 输出契约（modal 1.5.x 实测）：
-- volume ls <vol> <path> --json
-    → [{"filename": 含查询前缀的全路径, "type": "file"|"dir",
-        "size": 人类可读串（如 "6 B" / "1.2 GB"）, "created_modified": 本地时间串}]
-    不支持递归，深目录需逐层展开。
-- volume put <vol> <local> [remote]   单文件/单目录上传；自动创建父目录；-f 覆盖
-- volume get <vol> <remote> [dest]    下载；remote 为目录时递归
-- volume rm <vol> <remote> [-r]       删除
-- volume list --json                  所有卷 [{name, created_at, created_by}]（无大小）
-- volume create <name>                新建卷
+SDK 只读卷操作（modal 1.5.x 实测）：
+- list_dir / list_files / volumes_list / volume_exists 返回既有 CLI 形状的 dict，
+  调用方与前端不需要感知 SDK 改造；同时新增整数 size_bytes / mtime_s，供用量统计
+  直接累加。
+
+CLI 契约仍保留的部分：volume put/get/rm/create/delete、app list/logs、billing、
+container 等继续走子进程；`volume put/get/rm` 的调用方按批次 2 迁移。
 """
 
 from __future__ import annotations
@@ -25,11 +22,51 @@ import re
 import shutil
 import subprocess
 import time
+from datetime import datetime
+from typing import Any
 
 from ..core.config import get_settings
 
 _EXE: str | None = None
 logger = logging.getLogger(__name__)
+
+# SDK 客户端与 Volume 句柄进程内缓存；账号切换由 reset_runtime_state() 失效。
+_CLIENT = None
+_CLIENT_KEY: tuple[str, str] | None = None
+_CLIENT_LOOP: object | None = None
+_VOLUMES: dict[tuple[str, str], Any] = {}
+
+_modal: Any = None
+_MODAL_IMPORT_FAILED = False
+
+
+def _get_modal():
+    """首次 SDK 调用才 import modal；避免 pytest/CLI-only 启动路径提前加载 SDK。"""
+    global _modal, _MODAL_IMPORT_FAILED
+    if _modal is not None:
+        return _modal
+    if _MODAL_IMPORT_FAILED:
+        error = ModalCliError(
+            "modal SDK 不可用（请安装：pip install 'modal>=1.5'）",
+            category="not_installed",
+        )
+        _record_failure(error)
+        raise error
+    try:
+        import modal as modal_module
+    except ImportError as exc:  # pragma: no cover - 运行环境缺 SDK 时走此分支
+        _MODAL_IMPORT_FAILED = True
+        error = ModalCliError(
+            "modal SDK 不可用（请安装：pip install 'modal>=1.5'）",
+            category="not_installed",
+        )
+        _record_failure(error)
+        raise error from exc
+    _modal = modal_module
+    # 与 CLI 子进程同一网络边界：Modal 云端通信不走本机代理。
+    # Modal 1.5+ 的官方开关只影响其自身 gRPC/HTTP 通道，不触碰其他库。
+    os.environ.setdefault("MODAL_DISABLE_API_PROXY", "1")
+    return _modal
 
 _SIZE_RE = re.compile(r"([\d.]+)\s*([KMGT]?i?B)", re.IGNORECASE)
 
@@ -65,6 +102,55 @@ def parse_size(text: str) -> int:
         return int(float(m.group(1)) * _SIZE_UNITS[m.group(2).upper()])
     except (ValueError, KeyError):
         return 0
+
+
+def _humanize_filesize(value: int) -> str:
+    """对齐 modal.cli.volume.humanize_filesize：1024 基，B 无小数、其余一位小数。"""
+    if value < 0:
+        raise ValueError("value should be >= 0")
+    size = float(value)
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"):
+        if size < 1024:
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} EiB"
+
+
+def _localized_mtime(ts: int) -> str:
+    """对齐 timestamp_to_localized_str(ts, False)；<=0 与 CLI 一致落空串。"""
+    if not ts or ts <= 0:
+        return ""
+    dt = datetime.fromtimestamp(ts).astimezone()
+    return f"{dt:%Y-%m-%d %H:%M %Z}"
+
+
+def _localized_datetime_json(ts: int) -> str:
+    """对齐 CLI --json 口径：timestamp_to_localized_str(ts, True)。"""
+    if not ts or ts <= 0:
+        return ""
+    return datetime.fromtimestamp(ts).astimezone().isoformat(sep=" ", timespec="seconds")
+
+
+def _entry_type(entry: Any) -> str:
+    """FileEntryType → CLI 的 file/dir/link/fifo/socket 文案。"""
+    value = getattr(entry.type, "value", entry.type)
+    return {0: "file", 1: "file", 2: "dir", 3: "link", 4: "fifo", 5: "socket"}.get(value, "file")
+
+
+def _normalize_entry(entry: Any) -> dict:
+    """SDK FileEntry → 既有 list_dir dict；size/mtime 保持 CLI 同形字符串。"""
+    raw_path = str(getattr(entry, "path", "") or "")
+    rel = raw_path.rstrip("/").rsplit("/", 1)[-1]
+    size = int(getattr(entry, "size", 0) or 0)
+    mtime = int(getattr(entry, "mtime", 0) or 0)
+    return {
+        "name": _unescape_cli_name(rel),
+        "type": _entry_type(entry),
+        "size": _humanize_filesize(size),
+        "mtime": _localized_mtime(mtime),
+        "size_bytes": size,
+        "mtime_s": mtime,
+    }
 
 
 def _exe() -> str:
@@ -229,8 +315,24 @@ def _clear_diagnostics() -> None:
 
 
 def reset_runtime_state() -> None:
-    """账号切换后清空 CLI 诊断状态（config API 联动点）。"""
+    """账号切换后清空诊断并丢弃缓存的 SDK client / Volume 句柄（config API 联动点）。"""
+    global _CLIENT, _CLIENT_KEY, _CLIENT_LOOP
     _clear_diagnostics()
+    _CLIENT = None
+    _CLIENT_KEY = None
+    _CLIENT_LOOP = None
+    _VOLUMES.clear()
+
+
+def sdk_available() -> bool:
+    """SDK 是否可导入；批次 3 起前端 cli_found 字段沿用此语义。"""
+    if _modal is not None:
+        return True
+    try:
+        _get_modal()
+    except ModalCliError:
+        return False
+    return True
 
 
 def cli_path() -> str:
@@ -325,6 +427,42 @@ def _should_retry(error: ModalCliError, args: tuple[str, ...]) -> bool:
     return error.retryable and _is_read_only(args)
 
 
+# 类型化 SDK 操作使用与 CLI 命令串等价的只读白名单；写操作不自动重发。
+_READ_ONLY_OPS = {
+    "list_dir",
+    "list_files",
+    "volumes_list",
+    "volume_exists",
+    "app_status",
+    "billing_summary",
+    "billing_report",
+}
+
+
+def _should_retry_op(error: ModalCliError, op: str) -> bool:
+    return error.retryable and op in _READ_ONLY_OPS
+
+
+async def _with_retry(op: str, fn):
+    attempt = 0
+    while True:
+        try:
+            return await fn()
+        except ModalCliError as exc:
+            if not _should_retry_op(exc, op):
+                raise
+            delays = _RETRY_DELAYS.get(exc.category, _DEFAULT_RETRY_DELAYS)
+            if attempt >= len(delays):
+                raise
+            delay = delays[attempt]
+            attempt += 1
+            logger.info(
+                "modal SDK 可重试错误（%s/%s），%.1fs 后第 %d 次重试: %s",
+                op, exc.category, delay, attempt, exc,
+            )
+            await asyncio.sleep(delay)
+
+
 # 各错误类别的重试退避序列（秒）：限流窗口为秒级，退避逐次拉长；
 # 其余可重试错误（网络抖动等）保持原有的单次快速重试。
 _RETRY_DELAYS: dict[str, tuple[float, ...]] = {
@@ -401,41 +539,123 @@ def cli_json_list(text: str) -> list:
     return json.loads(text[start:]) if start != -1 else []
 
 
-async def list_dir(remote_path: str, volume: str | None = None) -> list[dict]:
-    """列一层目录；filename 归一化为相对 remote_path 的名称。
+async def _get_client():
+    """按凭证对缓存进程内 SDK client；配置了管理台 token 时优先 from_credentials。"""
+    global _CLIENT, _CLIENT_KEY, _CLIENT_LOOP
+    modal = _get_modal()
+    loop = asyncio.get_running_loop()
+    if _CLIENT is not None and _CLIENT_LOOP is not loop:
+        _CLIENT = None
+        _CLIENT_KEY = None
+        _VOLUMES.clear()
+    modal_cfg = get_settings().modal
+    token_id = modal_cfg.token_id.strip()
+    token_secret = modal_cfg.token_secret.strip()
+    key = (token_id, token_secret)
+    if _CLIENT is not None and _CLIENT_KEY == key:
+        return _CLIENT
+    try:
+        if token_id and token_secret:
+            _CLIENT = await modal.Client.from_credentials.aio(token_id, token_secret)
+        else:
+            _CLIENT = await modal.Client.from_env.aio()
+    except Exception as exc:
+        _CLIENT = None
+        error = _map_sdk_error(exc, "获取 Modal 客户端")
+        _record_failure(error)
+        raise error from exc
+    _CLIENT_KEY = key
+    _CLIENT_LOOP = loop
+    return _CLIENT
 
-    CLI quirk：`volume ls <vol> /` 会报 No such file or directory，省略路径参数才是列根。
-    """
-    args = ["volume", "ls", volume or volume_name()]
-    prefix = ""
-    if remote_path and remote_path not in ("/", "."):
-        args.append(remote_path)
-        prefix = remote_path.rstrip("/") + "/"
-    out = await run(*args, "--json")
-    items = cli_json_list(out)
-    entries: list[dict] = []
-    for item in items:
-        full = str(item.get("filename", ""))
-        rel = full[len(prefix):].strip("/") if prefix and full.startswith(prefix) else full.rsplit("/", 1)[-1]
-        rel = rel.strip("/")
-        if not rel:
-            continue
-        entries.append({
-            "name": _unescape_cli_name(rel),
-            "type": item.get("type", "file"),
-            "size": str(item.get("size", "")),
-            "mtime": str(item.get("created_modified", "")),
-        })
-    return entries
+
+async def _get_volume(
+    name: str | None = None, *, use_cache: bool = True, record_failure: bool = True
+):
+    """按 (client, volume_name) 缓存已 hydrate 的 Volume 句柄。"""
+    modal = _get_modal()
+    vol_name = name or volume_name()
+    client = await _get_client()
+    key = (str(id(client)), vol_name)
+    cached = _VOLUMES.get(key) if use_cache else None
+    if cached is not None:
+        return cached
+    try:
+        handle = modal.Volume.from_name(vol_name, client=client)
+        await handle.hydrate.aio(client)
+    except Exception as exc:
+        error = _map_sdk_error(exc, f"获取数据卷 {vol_name}")
+        if record_failure:
+            _record_failure(error)
+        raise error from exc
+    _VOLUMES[key] = handle
+    return handle
 
 
-async def list_files(remote_dir: str, max_depth: int = 3) -> list[dict]:
+_SDK_ERROR_MAP = {
+    "AuthError": "not_logged_in",
+    "PermissionDeniedError": "permission",
+    "ResourceExhaustedError": "rate_limited",
+    "ConnectionError": "network",
+    "TimeoutError": "network",
+    "VolumeUploadTimeoutError": "network",
+    "NotFoundError": "uncertain",
+    "AlreadyExistsError": "command",
+    "ConflictError": "command",
+    "InvalidError": "command",
+    "VersionError": "command",
+    "ClientClosed": "command",
+}
+
+
+def _map_sdk_error(exc: Exception, context: str) -> ModalCliError:
+    """modal SDK 异常 → 既有 ModalCliError 分类契约；未知异常保守归 command。"""
+    name = type(exc).__name__
+    category = _SDK_ERROR_MAP.get(name, "command")
+    retryable = category in ("network", "rate_limited")
+    msg = str(exc).strip() or name
+    if name == "NotFoundError":
+        # 保留既有调用方的字符串兼容判断（空目录/不存在路径按空处理）。
+        msg = f"No such file or directory: {msg}"
+    return ModalCliError(
+        f"{context}失败：{msg}"[:400],
+        category=category,
+        retryable=retryable,
+    )
+
+
+async def list_dir(remote_path: str, volume: str | None = None, *, timeout: float = 600.0) -> list[dict]:
+    """列一层目录；SDK FileEntry 归一化为既有 CLI dict 形状。"""
+    async def _call() -> list[dict]:
+        try:
+            handle = await _get_volume(volume)
+            entries = await asyncio.wait_for(handle.listdir.aio(remote_path or "/"), timeout=timeout)
+        except ModalCliError:
+            raise
+        except TimeoutError as exc:
+            error = ModalCliError(f"列出数据卷目录超时（超过 {timeout:g}s）", category="uncertain")
+            _record_failure(error)
+            raise error from exc
+        except Exception as exc:
+            error = _map_sdk_error(exc, "列出数据卷目录")
+            _record_failure(error)
+            raise error from exc
+        out = [_normalize_entry(entry) for entry in entries]
+        _record_success()
+        return out
+
+    return await _with_retry("list_dir", _call)
+
+
+async def list_files(remote_dir: str, max_depth: int = 3, *, timeout: float = 600.0) -> list[dict]:
     """递归收集目录下所有文件，name 为相对 remote_dir 的 POSIX 路径。"""
     files: list[dict] = []
+    deadline = asyncio.get_running_loop().time() + timeout
 
     async def walk(rel_dir: str, depth: int) -> None:
         path = f"{remote_dir}/{rel_dir}" if rel_dir else remote_dir
-        for entry in await list_dir(path):
+        remaining = max(0.1, deadline - asyncio.get_running_loop().time())
+        for entry in await list_dir(path, timeout=remaining):
             rel = f"{rel_dir}/{entry['name']}" if rel_dir else entry["name"]
             if entry["type"] in ("dir", "directory"):
                 if depth < max_depth:
@@ -445,3 +665,60 @@ async def list_files(remote_dir: str, max_depth: int = 3) -> list[dict]:
 
     await walk("", 0)
     return files
+
+
+async def volumes_list(*, timeout: float = 600.0) -> list[dict]:
+    """所有数据卷 [{name, created_at, created_by}]，与 CLI volume list --json 同形。"""
+    async def _call() -> list[dict]:
+        try:
+            client = await _get_client()
+            modal = _get_modal()
+            handles = await asyncio.wait_for(
+                modal.Volume.objects.list.aio(client=client), timeout=timeout
+            )
+            out: list[dict] = []
+            for handle in handles:
+                info = await handle.info.aio()
+                created = info.created_at
+                out.append({
+                    "name": info.name or "",
+                    "created_at": _localized_datetime_json(int(created.timestamp())),
+                    "created_by": info.created_by or "",
+                })
+        except ModalCliError:
+            raise
+        except TimeoutError as exc:
+            error = ModalCliError(f"列出数据卷超时（超过 {timeout:g}s）", category="uncertain")
+            _record_failure(error)
+            raise error from exc
+        except Exception as exc:
+            error = _map_sdk_error(exc, "列出数据卷")
+            _record_failure(error)
+            raise error from exc
+        _record_success()
+        return out
+
+    return await _with_retry("volumes_list", _call)
+
+
+async def volume_exists(name: str, *, timeout: float = 600.0) -> bool:
+    """单对象 hydrate 判断卷是否存在；NotFoundError → False，其余异常按契约抛出。"""
+    async def _call() -> bool:
+        try:
+            await asyncio.wait_for(
+                _get_volume(name, use_cache=False, record_failure=False), timeout=timeout
+            )
+        except ModalCliError as exc:
+            if exc.category == "uncertain":
+                return False
+            raise
+        except TimeoutError:
+            return False
+        except Exception as exc:
+            error = _map_sdk_error(exc, f"检查数据卷 {name}")
+            _record_failure(error)
+            raise error from exc
+        _record_success()
+        return True
+
+    return await _with_retry("volume_exists", _call)

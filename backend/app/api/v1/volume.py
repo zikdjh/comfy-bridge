@@ -526,9 +526,7 @@ async def create_download(body: DownloadBody) -> dict:
 
 
 async def _volume_exists(name: str) -> bool:
-    out = await volume_cli.run("volume", "list", "--json")
-    rows = volume_cli.cli_json_list(out)
-    return any(r.get("name") == name for r in rows)
+    return await volume_cli.volume_exists(name)
 
 
 @router.get("/downloads")

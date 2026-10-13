@@ -2,8 +2,8 @@
 
 - 触发：GET /volume/volumes 时缓存过期（TTL 60s）则在后台启动一轮计算，立即返回
   旧快照 + computing=true，前端轮询直到刷新完成；
-- 遍历：逐卷 BFS 展开，list_dir 并发限流（信号量 6 个 CLI 子进程），目录条目大小
-  不可靠（非聚合值），只累加文件条目的人类可读 size；
+- 遍历：逐卷 BFS 展开，list_dir 并发限流（SDK 化后无子进程开销，保留 6 个并发在途
+  请求观察平台限流；目录条目大小不可靠，只累加文件条目的 size_bytes）；
 - 阈值：总用量 ≥512GiB 标黄（接近额度），≥1024GiB 标红（超出免费额度）。
 """
 
@@ -86,8 +86,7 @@ async def _compute() -> None:
     async with _LOCK:
         gen = _CACHE["generation"]
         try:
-            out = await modal_cli.run("volume", "list", "--json")
-            rows = modal_cli.cli_json_list(out)
+            rows = await modal_cli.volumes_list()
             names = [str(r.get("name")) for r in rows if r.get("name")]
             results = await asyncio.gather(*(_volume_usage(n, r) for n, r in zip(names, rows)))
             volumes = sorted(results, key=lambda v: v["total_bytes"], reverse=True)
@@ -101,7 +100,7 @@ async def _compute() -> None:
                 computed_mono=time.monotonic(),
                 computed_ms=int(time.time() * 1000),
             )
-        except Exception as exc:  # noqa: BLE001 —— CLI 缺失/凭证问题都落到 error
+        except Exception as exc:  # noqa: BLE001 —— SDK/凭证问题都落到 error
             _CACHE["error"] = str(exc)[:300]
             _CACHE["computed_mono"] = time.monotonic()
             _CACHE["computing"] = False
@@ -131,7 +130,7 @@ async def _volume_usage(name: str, row: dict) -> dict:
             if e["type"] in ("dir", "directory"):
                 subs.append(f"{rel_dir}/{e['name']}" if rel_dir else e["name"])
             else:
-                entry["total_bytes"] += modal_cli.parse_size(e["size"])
+                entry["total_bytes"] += int(e.get("size_bytes") or 0)
                 entry["file_count"] += 1
         if subs:
             await asyncio.gather(*(walk(s) for s in subs))
