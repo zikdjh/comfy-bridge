@@ -272,10 +272,10 @@ async def test_sync_invalidates_matrix(diff_env, tmp_path, monkeypatch):
                                "has_requirements": False, "enabled": True}],
                  "single_files": []},
     )
-    puts: list[str] = []
+    dir_puts: list[str] = []
 
-    async def fake_put(local_path, remote):
-        puts.append(remote)
+    async def fake_put_dir(local_path, remote, **kwargs):
+        dir_puts.append(remote)
 
     async def fake_read_manifest():
         return None
@@ -285,14 +285,14 @@ async def test_sync_invalidates_matrix(diff_env, tmp_path, monkeypatch):
     async def fake_write_manifest(manifest):
         writes.append(manifest)
 
-    monkeypatch.setattr(nodes_api, "_volume_put", fake_put)
+    monkeypatch.setattr(nodes_api.volume_cli, "put_directory", fake_put_dir)
     monkeypatch.setattr(nodes_api, "_read_cloud_manifest", fake_read_manifest)
     monkeypatch.setattr(nodes_api, "_write_cloud_manifest", fake_write_manifest)
 
     res = await nodes_api.nodes_sync(nodes_api.NamesBody(names=["new_pkg"]))
     job = await nodes_api.jobs.wait_job(res["job"]["id"])
     assert job["state"] == "ok" and job["items"][0]["ok"] is True
-    assert puts == ["custom_nodes/new_pkg"]
+    assert dir_puts == ["custom_nodes/new_pkg"]
     assert writes and writes[0]["schema"] == 1
     assert diff_cache.load_matrix() is None  # 缓存已失效
 

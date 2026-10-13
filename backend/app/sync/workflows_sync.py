@@ -1,6 +1,6 @@
 """工作流双向同步（M2-4）：本地 workflows 目录 ⇄ 数据卷 user/default/workflows/。
 
-卷访问与节点/设置同步同一边界（modal CLI 子进程，免容器读）；检测逻辑在
+卷访问与节点/设置同步同一边界（SDK 网关，免容器读）；检测逻辑在
 workflows_rules（纯函数，单测覆盖）。冲突处理按规划「保留双副本 + UI 人工合并」：
 keep_both 把云端版拉成本地 x.conflict-<ts>.json，再把本地版推上云端，基线记本地版。
 
@@ -90,7 +90,7 @@ async def cloud_hashes() -> tuple[dict[str, str], str | None]:
             if not rules.valid_workflow_name(name):
                 continue
             dest = tmp_root / name
-            await volume_cli.run("volume", "get", volume_cli.volume_name(), f"{CLOUD_DIR}/{name}", str(dest))
+            await volume_cli.get_file(f"{CLOUD_DIR}/{name}", dest, force=True)
             digest = _sha256(dest)
             if digest:
                 hashes[name] = digest
@@ -123,12 +123,12 @@ async def status() -> dict:
 
 
 async def _volume_put(local_path: Path, remote: str) -> None:
-    await volume_cli.run("volume", "put", volume_cli.volume_name(), str(local_path), remote, "-f")
+    await volume_cli.put_file(local_path, remote, force=True)
 
 
 async def _pull_to(name: str, dest: Path) -> None:
     # --force：pull 的目标（本地工作流文件）通常已存在，CLI 默认拒绝覆盖
-    await volume_cli.run("volume", "get", volume_cli.volume_name(), f"{CLOUD_DIR}/{name}", str(dest), "--force")
+    await volume_cli.get_file(f"{CLOUD_DIR}/{name}", dest, force=True)
 
 
 async def apply_as_job(actions: list[dict]) -> dict:

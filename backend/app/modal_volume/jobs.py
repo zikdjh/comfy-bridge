@@ -1,14 +1,13 @@
-"""模型卷同步作业引擎：本地 ↔ 云端数据卷（modal CLI 子进程，作业内逐文件顺序执行）。
+"""模型卷同步作业引擎：本地 ↔ 云端数据卷（SDK 网关，作业内逐文件顺序执行）。
 
 - push（上传）：本地 model_dirs_resolved()[category] → 卷 models/<category>/
 - pull（下载）：卷 models/<category>/<name> → 本地对应目录
-作业状态保存在内存（后端重启清空）；取消在文件间生效，正在传的单个文件会被终止。
+作业状态保存在内存（后端重启清空）；取消会取消当前 SDK 协程，已完成文件保留。
 """
 
 from __future__ import annotations
 
 import asyncio
-import subprocess
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -59,7 +58,7 @@ class SyncJob:
     created_ms: int = field(default_factory=now_ms)
     finished_ms: int | None = None
     _cancel: bool = field(default=False, repr=False)
-    _proc: subprocess.Popen | None = field(default=None, repr=False)
+    _task: asyncio.Task | None = field(default=None, repr=False)
 
     def to_dict(self) -> dict:
         return {
@@ -113,7 +112,7 @@ def create_job(direction: str, category: str, names: list[str]) -> SyncJob:
     )
     _store().create(_NAMESPACE, job.id, job)
     _trim_jobs()
-    asyncio.get_running_loop().create_task(_run_job(job))
+    job._task = asyncio.get_running_loop().create_task(_run_job(job))
     return job
 
 
@@ -122,16 +121,10 @@ async def cancel_job(job_id: str) -> bool:
     if job is None or job.status != "running":
         return False
     job._cancel = True
-    proc = job._proc
-    if proc is not None and proc.poll() is None:
-        proc.terminate()
+    if job._task is not None and not job._task.done():
+        job._task.cancel()
     _store().save(_NAMESPACE, job_id, job)
     return True
-
-
-def _terminate(proc: subprocess.Popen) -> None:
-    if proc.poll() is None:
-        proc.terminate()
 
 
 async def _run_job(job: SyncJob) -> None:
@@ -150,31 +143,22 @@ async def _run_job(job: SyncJob) -> None:
                         _store().save(_NAMESPACE, job.id, job)
                         continue
                     remote = f"models/{job.category}/{f.name}"
-                    proc = client._popen(
-                        "volume", "put", client.volume_name(), "-f", str(src), remote
-                    )
+                    await client.put_file(src, remote, force=True)
                 else:
-                    dest_dir = local_root / Path(f.name).parent
-                    dest_dir.mkdir(parents=True, exist_ok=True)
+                    dest = local_root / f.name
                     remote = f"models/{job.category}/{f.name}"
-                    proc = client._popen(
-                        "volume", "get", client.volume_name(), remote, str(dest_dir)
-                    )
-                job._proc = proc
-                out, err = await asyncio.to_thread(proc.communicate)
-                job._proc = None
-                if proc.returncode != 0:
-                    f.status = "error"
-                    f.error = (err or out).decode("utf-8", errors="replace").strip()[:300]
-                else:
-                    f.status = "done"
+                    await client.get_file(remote, dest, force=True)
+                f.status = "done"
+            except asyncio.CancelledError:
+                f.status, f.error = "error", "已被取消"
+                job.status = "error"
+                job.error = "已被取消"
+                _store().save(_NAMESPACE, job.id, job)
+                break
             except Exception as exc:  # noqa: BLE001 —— 单文件失败不拖垮作业
                 f.status, f.error = "error", str(exc)[:300]
             _store().save(_NAMESPACE, job.id, job)
     finally:
-        if job._proc is not None:
-            _terminate(job._proc)
-            job._proc = None
         if job.status == "running":
             job.status = "done"
             failed = [f for f in job.files if f.status == "error"]

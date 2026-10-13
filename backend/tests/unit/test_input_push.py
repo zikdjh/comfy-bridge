@@ -1,6 +1,6 @@
-"""云端输入文件推送：优先走容器内 /upload/image，失败回落 volume put。
+"""云端输入文件推送：优先走容器内 /upload/image，失败回落到 SDK 网关写卷。
 
-真机回归（2026-10-11）：只做 `modal volume put` 时，已在运行的容器拿着旧卷快照，
+真机回归（2026-10-11）：只做卷写入时，已在运行的容器拿着旧卷快照，
 LoadImage 报 "Invalid image file: <name>"；必须先把文件写进容器自己的卷视图。
 """
 
@@ -30,10 +30,10 @@ async def test_push_input_prefers_container_upload(monkeypatch, tmp_path: Path) 
         return {"name": filename}
 
     async def explode(*args, **kwargs):
-        raise AssertionError("容器内上传成功时不应回落 volume put")
+        raise AssertionError("容器内上传成功时不应回落卷写入")
 
     monkeypatch.setattr(executor.runner_client, "post_input_file", fake_post)
-    monkeypatch.setattr(executor.modal_cli, "run", explode)
+    monkeypatch.setattr(executor.modal_cli, "put_file", explode)
     local = _write_input(tmp_path, "bridge_live_input.png")
 
     assert await executor._push_input("bridge_live_input.png", local) == "comfy"
@@ -54,24 +54,21 @@ async def test_push_input_splits_subfolder(monkeypatch, tmp_path: Path) -> None:
     assert calls["args"] == ("ref.png", "shots")
 
 
-async def test_push_input_falls_back_to_volume_put(monkeypatch, tmp_path: Path) -> None:
-    runs: list = []
+async def test_push_input_falls_back_to_sdk_put(monkeypatch, tmp_path: Path) -> None:
+    calls: list[tuple] = []
 
     async def failing_post(filename: str, data: bytes, *, subfolder: str = "") -> dict:
         raise RuntimeError("云端输入上传失败（HTTP 404）")
 
-    async def fake_run(*args, **kwargs):
-        runs.append(args)
-        return ""
+    async def fake_put(local, remote, **kwargs):
+        calls.append((local, remote, kwargs))
 
     monkeypatch.setattr(executor.runner_client, "post_input_file", failing_post)
-    monkeypatch.setattr(executor.modal_cli, "run", fake_run)
-    monkeypatch.setattr(executor.modal_cli, "volume_name", lambda: "comfyui-data")
+    monkeypatch.setattr(executor.modal_cli, "put_file", fake_put)
     local = _write_input(tmp_path, "a.png")
 
     assert await executor._push_input("a.png", local) == "volume"
-    assert runs and runs[0][:3] == ("volume", "put", "comfyui-data")
-    assert runs[0][-1] == "input/a.png"
+    assert calls == [(str(local), "input/a.png", {"force": True})]
 
 
 async def test_upload_inputs_uses_container_channel(monkeypatch, tmp_path: Path) -> None:

@@ -159,7 +159,7 @@ async def _upload_inputs(payload: dict) -> None:
     """把 prompt 引用的本地输入文件推入云端容器的 input/。
 
     两条通道：优先走云端 ComfyUI `/upload/image`（写入运行中容器的卷视图，
-    立刻可见）；端点不可用时回落 `modal volume put`（写卷持久化，但要等下一次
+    立刻可见）；端点不可用时回落 SDK 卷写入（写卷持久化，但要等下一次
     容器冷启动才可见）。真机实测（2026-10-11）：只做 volume put 时，已在运行的
     容器拿着旧快照，LoadImage 校验报 "Invalid image file"——这正是本函数必须先
     走容器内通道的原因。
@@ -200,14 +200,14 @@ async def _push_input(name: str, local: Path) -> str:
     try:
         data = local.read_bytes()
     except OSError as exc:
-        logger.warning("读取本地输入失败，回落 volume put: %s (%s)", rel, exc)
+        logger.warning("读取本地输入失败，回落卷写入: %s (%s)", rel, exc)
     else:
         try:
             await runner_client.post_input_file(filename, data, subfolder=subfolder)
             return "comfy"
         except Exception as exc:  # noqa: BLE001 —— 端点缺失/容器未起都回落，不阻断执行
-            logger.warning("云端 /upload/image 失败，回落 volume put: %s (%s)", rel, exc)
-    await modal_cli.run("volume", "put", modal_cli.volume_name(), "-f", str(local), f"input/{rel}")
+            logger.warning("云端 /upload/image 失败，回落卷写入: %s (%s)", rel, exc)
+    await modal_cli.put_file(str(local), f"input/{rel}", force=True)
     return "volume"
 
 

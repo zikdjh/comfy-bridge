@@ -169,12 +169,12 @@ async def test_move_restore_and_cleanup_only_touch_valid_trash_paths(
 
     removed: list[tuple] = []
 
-    async def fake_run(*args: str) -> str:
-        removed.append(args)
-        return ""
+    async def fake_remove(remote: str, *, volume: str | None = None,
+                          recursive: bool = False) -> None:
+        removed.append((remote, volume, recursive))
 
     monkeypatch.setattr(deletion.modal_cli, "list_dir", fake_list_dir)
-    monkeypatch.setattr(deletion.modal_cli, "run", fake_run)
+    monkeypatch.setattr(deletion.modal_cli, "remove_file", fake_remove)
     now = datetime(2026, 10, 10, tzinfo=UTC)
     result = await deletion.cleanup_expired_trash(
         "comfyui-data",
@@ -183,7 +183,7 @@ async def test_move_restore_and_cleanup_only_touch_valid_trash_paths(
     )
     assert result == [".trash/20261003T000000Z"]
     assert len(removed) == 1
-    assert removed[0][:5] == ("volume", "rm", "comfyui-data", ".trash/20261003T000000Z", "-r")
+    assert removed[0] == (".trash/20261003T000000Z", "comfyui-data", True)
 
 
 @pytest.mark.asyncio
@@ -301,11 +301,11 @@ def test_trash_restore_rejects_existing_target_and_purge_guard(monkeypatch) -> N
 
     calls: list[tuple] = []
 
-    async def fake_run(*args: str) -> str:
-        calls.append(args)
-        return ""
+    async def fake_remove(remote: str, *, volume: str | None = None,
+                          recursive: bool = False) -> None:
+        calls.append((remote, volume, recursive))
 
-    monkeypatch.setattr(volume_api.volume_cli, "run", fake_run)
+    monkeypatch.setattr(volume_api.volume_cli, "remove_file", fake_remove)
     rejected = client.post(
         "/api/v1/volume/trash/purge",
         json={
@@ -326,5 +326,5 @@ def test_trash_restore_rejects_existing_target_and_purge_guard(monkeypatch) -> N
     )
     assert purged.status_code == 200
     assert purged.json()["ok"] is True
-    assert ("volume", "rm", "comfyui-data", trash_path, "-r") in calls
+    assert (trash_path, "comfyui-data", True) in calls
 

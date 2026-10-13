@@ -82,6 +82,205 @@ def test_not_found_mapping_keeps_legacy_string_marker():
     assert "No such file or directory" in str(error)
 
 
+def test_file_not_found_mapping_keeps_legacy_string_marker():
+    """SDK read_file 把 NotFoundError 转成 FileNotFoundError，网关仍需保留旧标记。"""
+    error = _map_sdk_error(FileNotFoundError("missing"), "下载文件")
+    assert error.category == "uncertain" and error.retryable is False
+    assert "No such file or directory" in str(error)
+
+
+def test_normalize_remote_expands_directory_suffix(tmp_path):
+    local = tmp_path / "a.txt"
+    local.write_text("x", encoding="utf-8")
+    assert modal_cli._normalize_remote(local, "/input/") == "/input/a.txt"
+
+
+async def test_put_file_uses_batch_upload_and_waits_whole_context(monkeypatch, tmp_path):
+    local = tmp_path / "a.txt"
+    local.write_text("x", encoding="utf-8")
+    calls: list[tuple] = []
+
+    class _Batch:
+        async def __aenter__(self):
+            calls.append(("enter",))
+            return self
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            calls.append(("exit", exc_type))
+
+        def put_file(self, local_file, remote_path):
+            calls.append(("put", str(local_file), remote_path))
+
+    class _Handle:
+        class _Upload:
+            def aio(self, *, force: bool):
+                calls.append(("force", force))
+                return _Batch()
+
+        batch_upload = _Upload()
+
+    async def fake_get_volume(volume=None):
+        return _Handle()
+
+    monkeypatch.setattr(modal_cli, "_get_volume", fake_get_volume)
+    await modal_cli.put_file(local, "/input/", timeout=3)
+    assert calls == [
+        ("force", True),
+        ("enter",),
+        ("put", str(local), "/input/a.txt"),
+        ("exit", None),
+    ]
+
+
+async def test_put_file_maps_error_raised_on_batch_exit(monkeypatch, tmp_path):
+    local = tmp_path / "a.txt"
+    local.write_text("x", encoding="utf-8")
+
+    class ResourceExhaustedError(Exception):
+        pass
+
+    class _Batch:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            raise ResourceExhaustedError("rate limited")
+
+        def put_file(self, local_file, remote_path):
+            return None
+
+    class _Handle:
+        class _Upload:
+            def aio(self, *, force: bool):
+                return _Batch()
+
+        batch_upload = _Upload()
+
+    async def fake_get_volume(volume=None):
+        return _Handle()
+
+    monkeypatch.setattr(modal_cli, "_get_volume", fake_get_volume)
+    with pytest.raises(ModalCliError) as ei:
+        await modal_cli.put_file(local, "input/a.txt")
+    assert ei.value.category == "rate_limited"
+    assert ei.value.retryable is True
+
+
+async def test_get_file_writes_atomically_and_overwrites(monkeypatch, tmp_path):
+    destination = tmp_path / "nested" / "a.txt"
+    destination.parent.mkdir()
+    destination.write_text("old", encoding="utf-8")
+    reads: list[str] = []
+
+    class _Entry:
+        path = "input/a.txt"  # SDK FileEntry.path 不带前导斜杠
+        type = 1
+
+    class _Handle:
+        class _Listdir:
+            async def aio(self, path, recursive=False):
+                return [_Entry()]
+
+        listdir = _Listdir()
+
+        class _Read:
+            async def aio(self, path, fileobj):
+                reads.append(path)
+                fileobj.write(b"new")
+                return 3
+
+        read_file_into_fileobj = _Read()
+
+    async def fake_get_volume(volume=None):
+        return _Handle()
+
+    monkeypatch.setattr(modal_cli, "_get_volume", fake_get_volume)
+    await modal_cli.get_file("input/a.txt", destination, force=True)
+    assert destination.read_bytes() == b"new"
+    assert reads == ["input/a.txt"]
+
+
+async def test_get_file_absolute_remote_writes_file_destination(monkeypatch, tmp_path):
+    """CLI `volume get vol /file local-file` 的本地目标按文件名落盘，不展开成目录。"""
+    destination = tmp_path / "downloaded.txt"
+
+    class _Entry:
+        path = "smoke/a.txt"
+        type = 1
+
+    class _Handle:
+        class _Listdir:
+            async def aio(self, path, recursive=False):
+                assert path == "/smoke/a.txt"
+                return [_Entry()]
+
+        listdir = _Listdir()
+
+        class _Read:
+            async def aio(self, path, fileobj):
+                assert path == "smoke/a.txt"
+                fileobj.write(b"new")
+                return 3
+
+        read_file_into_fileobj = _Read()
+
+    async def fake_get_volume(volume=None):
+        return _Handle()
+
+    monkeypatch.setattr(modal_cli, "_get_volume", fake_get_volume)
+    await modal_cli.get_file("/smoke/a.txt", destination, force=True)
+    assert destination.read_bytes() == b"new"
+    assert not (destination / "smoke").exists()
+
+
+async def test_list_dir_missing_prefix_matches_cli_empty_directory(monkeypatch):
+    modal_cli._clear_diagnostics()
+
+    class NotFoundError(Exception):
+        pass
+
+    class _Handle:
+        class _Listdir:
+            async def aio(self, path, recursive=False):
+                # 对齐 modal.exception.NotFoundError：名称匹配、不是内建 FileNotFoundError。
+                raise NotFoundError("No such file or directory")
+
+        listdir = _Listdir()
+
+    async def fake_get_volume(volume=None):
+        return _Handle()
+
+    monkeypatch.setattr(modal_cli, "_get_volume", fake_get_volume)
+    assert await modal_cli.list_dir("/removed", volume="vol") == []
+    assert modal_cli.diagnostics()["last_failure"] is None
+
+
+async def test_volume_delete_forgets_cached_handle(monkeypatch):
+    forgotten: list[str] = []
+    monkeypatch.setattr(modal_cli, "_forget_volume", forgotten.append)
+
+    class _Delete:
+        async def aio(self, name, *, client=None):
+            return None
+
+    class _Objects:
+        delete = _Delete()
+
+    class _Volume:
+        objects = _Objects()
+
+    class _Modal:
+        Volume = _Volume
+
+    async def fake_client():
+        return object()
+
+    monkeypatch.setattr(modal_cli, "_get_client", fake_client)
+    monkeypatch.setattr(modal_cli, "_get_modal", lambda: _Modal)
+    await modal_cli.volume_delete("old-volume")
+    assert forgotten == ["old-volume"]
+
+
 def test_unescapes_double_escaped_chinese():
     # CLI 实测输出：json.loads 一次后名字仍是字面 backslash-u 序列
     assert _unescape_cli_name("krea2-\\u6587\\u751f\\u56fe.json") == "krea2-文生图.json"

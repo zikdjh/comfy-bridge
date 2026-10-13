@@ -5,7 +5,7 @@ GET  /api/v1/launch  两端启动命令视图：
   - modal：runner.py 的基础参数（镜像内固定）+ 已保存的追加参数。
 
 PUT  /api/v1/launch 保存两端追加启动参数到 ~/.comfybridge/config.toml，并把
-云端参数经 `modal volume put` 下发到数据卷 /config/launch_args.json
+云端参数经 SDK 网关下发到数据卷 /config/launch_args.json
 （runner.py 容器冷启动时读取追加；正在运行的容器不受影响）。
 
 进程控制（桥接器直接控制 ComfyUI 启动，见 core/local_proc.py）：
@@ -20,6 +20,7 @@ PUT  /api/v1/launch 保存两端追加启动参数到 ~/.comfybridge/config.toml
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import os
 import re
@@ -33,7 +34,8 @@ from pydantic import BaseModel
 
 from ...core import local_proc
 from ...core.config import CONFIG_PATH, AppConfig, get_settings
-from ...modal_volume.client import auth_env
+from ...modal_volume import client as volume_cli
+from ...modal_volume.client import ModalCliError, auth_env
 from ...runner import client as runner_client
 from .config import _dump_toml
 
@@ -46,7 +48,7 @@ MODAL_BASE_ARGS = [
     "--disable-auto-launch",
     "--base-directory", "/data",
 ]
-# 数据卷上的启动参数文件（PUT 时经 modal volume put 写入）
+# 数据卷上的启动参数文件（PUT 时经 SDK 网关写入）
 VOLUME_ARGS_FILE = "/config/launch_args.json"
 # 云端是固定端口/固定基准目录的 web_server，这几个参数由 runner.py 掌控，不允许覆盖
 MODAL_PROTECTED = {"--listen", "--port", "--base-directory"}
@@ -115,21 +117,20 @@ def _validate(args: list[str], target: str) -> None:
                 raise HTTPException(status_code=422, detail=f"云端参数 {base} 由 runner.py 固定，不可覆盖")
 
 
-def _push_modal_args(args: list[str]) -> dict:
-    """modal volume put 把参数文件写入数据卷（供 runner.py 冷启动读取）。"""
+async def _push_modal_args(args: list[str]) -> dict:
+    """经 SDK 网关把参数文件写入数据卷（供 runner.py 冷启动读取）。"""
     settings = get_settings()
-    src = CONFIG_PATH.parent / "modal_launch_args.json"
-    src.write_text(json.dumps(args, ensure_ascii=False), encoding="utf-8")
+    payload = json.dumps(args, ensure_ascii=False).encode("utf-8")
     try:
-        proc = subprocess.run(
-            ["modal", "volume", "put", settings.modal.volume, "-f", str(src), VOLUME_ARGS_FILE],
-            capture_output=True, text=True, timeout=180, check=False,
-            env={**os.environ, **auth_env()},
+        await volume_cli.put_file(
+            io.BytesIO(payload),
+            VOLUME_ARGS_FILE,
+            volume=settings.modal.volume,
+            force=True,
+            timeout=180,
         )
-    except Exception as exc:  # noqa: BLE001
+    except ModalCliError as exc:
         return {"ok": False, "detail": str(exc) or type(exc).__name__}
-    if proc.returncode != 0:
-        return {"ok": False, "detail": (proc.stderr or proc.stdout or "").strip()[-300:]}
     return {"ok": True, "detail": f"{settings.modal.volume}:{VOLUME_ARGS_FILE}"}
 
 
@@ -175,7 +176,7 @@ async def write_launch(body: LaunchBody) -> dict:
     )
     get_settings.cache_clear()
 
-    push = await asyncio.to_thread(_push_modal_args, modal_extra)
+    push = await _push_modal_args(modal_extra)
     return {"saved": True, "local": _local_launch_view(), "modal": _modal_launch_view(), "volume_push": push}
 
 

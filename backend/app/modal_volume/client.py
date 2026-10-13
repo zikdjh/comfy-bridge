@@ -1,15 +1,17 @@
-"""Modal 访问网关：只读卷操作走 Python SDK，其余命令保留 CLI 子进程。
+"""Modal 访问网关：卷操作走 Python SDK，其余命令保留 CLI 子进程。
 
 凭证优先级：设置页保存的 token_id/token_secret（SDK / CLI 都注入
 MODAL_TOKEN_ID/MODAL_TOKEN_SECRET）> ~/.modal.toml。只填了管理台凭证的用户也能直接用。
 
-SDK 只读卷操作（modal 1.5.x 实测）：
+SDK 卷操作（modal 1.5.x 实测）：
 - list_dir / list_files / volumes_list / volume_exists 返回既有 CLI 形状的 dict，
   调用方与前端不需要感知 SDK 改造；同时新增整数 size_bytes / mtime_s，供用量统计
   直接累加。
+- put_file / put_many / put_directory / get_file / remove_file / volume_create /
+  volume_delete 是类型化写操作入口。上传使用 batch_upload 上下文，错误集中在退出时；
+  下载自己补齐父目录与临时文件原子替换语义。
 
-CLI 契约仍保留的部分：volume put/get/rm/create/delete、app list/logs、billing、
-container 等继续走子进程；`volume put/get/rm` 的调用方按批次 2 迁移。
+CLI 契约仍保留的部分：app list/logs、billing、container 等继续走子进程。
 """
 
 from __future__ import annotations
@@ -21,8 +23,10 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import time
 from datetime import datetime
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from ..core.config import get_settings
@@ -324,6 +328,11 @@ def reset_runtime_state() -> None:
     _VOLUMES.clear()
 
 
+def _forget_volume(name: str) -> None:
+    for key in [key for key in _VOLUMES if key[1] == name]:
+        _VOLUMES.pop(key, None)
+
+
 def sdk_available() -> bool:
     """SDK 是否可导入；批次 3 起前端 cli_found 字段沿用此语义。"""
     if _modal is not None:
@@ -592,6 +601,41 @@ async def _get_volume(
     return handle
 
 
+def _normalize_remote(local: Any, remote: str) -> str:
+    """对齐 CLI volume put：远端以 / 结尾时，把本地文件名追加到目录后。"""
+    value = str(remote or "").replace("\\", "/")
+    if not value:
+        raise ModalCliError("远端路径不能为空", category="command")
+    if value.endswith("/"):
+        if isinstance(local, (str, Path)):
+            name = Path(local).name
+        else:
+            name = str(getattr(local, "name", "") or "").replace("\\", "/").rsplit("/", 1)[-1]
+        if not name:
+            raise ModalCliError("远端路径以 / 结尾时无法确定文件名", category="command")
+        value += name
+    return value
+
+
+async def _run_sdk_write(op: str, context: str, timeout: float, fn):
+    """执行写操作：不自动重试；超时归 uncertain（远端可能已部分生效）。"""
+    try:
+        return await asyncio.wait_for(fn(), timeout=timeout)
+    except ModalCliError:
+        raise
+    except TimeoutError as exc:
+        error = ModalCliError(
+            f"{context}超时（超过 {timeout:g}s）",
+            category="uncertain",
+        )
+        _record_failure(error)
+        raise error from exc
+    except Exception as exc:
+        error = _map_sdk_error(exc, context)
+        _record_failure(error)
+        raise error from exc
+
+
 _SDK_ERROR_MAP = {
     "AuthError": "not_logged_in",
     "PermissionDeniedError": "permission",
@@ -600,6 +644,7 @@ _SDK_ERROR_MAP = {
     "TimeoutError": "network",
     "VolumeUploadTimeoutError": "network",
     "NotFoundError": "uncertain",
+    "FileNotFoundError": "uncertain",
     "AlreadyExistsError": "command",
     "ConflictError": "command",
     "InvalidError": "command",
@@ -614,7 +659,7 @@ def _map_sdk_error(exc: Exception, context: str) -> ModalCliError:
     category = _SDK_ERROR_MAP.get(name, "command")
     retryable = category in ("network", "rate_limited")
     msg = str(exc).strip() or name
-    if name == "NotFoundError":
+    if name in ("NotFoundError", "FileNotFoundError"):
         # 保留既有调用方的字符串兼容判断（空目录/不存在路径按空处理）。
         msg = f"No such file or directory: {msg}"
     return ModalCliError(
@@ -637,6 +682,12 @@ async def list_dir(remote_path: str, volume: str | None = None, *, timeout: floa
             _record_failure(error)
             raise error from exc
         except Exception as exc:
+            # The SDK reports a missing prefix (including a removed final child)
+            # as NotFoundError/FileNotFoundError; CLI list treated both as an empty
+            # directory. Keep that contract for all existing callers.
+            if type(exc).__name__ in ("NotFoundError", "FileNotFoundError"):
+                _record_success()
+                return []
             error = _map_sdk_error(exc, "列出数据卷目录")
             _record_failure(error)
             raise error from exc
@@ -722,3 +773,185 @@ async def volume_exists(name: str, *, timeout: float = 600.0) -> bool:
         return True
 
     return await _with_retry("volume_exists", _call)
+
+
+async def put_file(
+    local_path: Path | str | Any,
+    remote: str,
+    volume: str | None = None,
+    *,
+    force: bool = True,
+    timeout: float = 600.0,
+) -> None:
+    """上传一个文件；兼容 CLI 的远端目录尾缀语义，错误在 batch 退出时映射。"""
+    remote_path = _normalize_remote(local_path, remote)
+
+    async def _do() -> None:
+        handle = await _get_volume(volume)
+        async with handle.batch_upload.aio(force=force) as batch:
+            batch.put_file(local_path, remote_path)
+
+    await _run_sdk_write("put_file", f"上传文件到 {remote_path}", timeout, _do)
+    _record_success()
+
+
+async def put_directory(
+    local_dir: Path | str,
+    remote: str,
+    volume: str | None = None,
+    *,
+    force: bool = True,
+    recursive: bool = True,
+    timeout: float = 600.0,
+) -> None:
+    """递归上传本地目录；CLI 的远端尾缀目录语义由 _normalize_remote 对齐。"""
+    if not Path(local_dir).is_dir():
+        raise ModalCliError(f"本地目录不存在: {local_dir}", category="command")
+    remote_path = _normalize_remote(local_dir, remote)
+
+    async def _do() -> None:
+        handle = await _get_volume(volume)
+        async with handle.batch_upload.aio(force=force) as batch:
+            batch.put_directory(local_dir, remote_path, recursive=recursive)
+
+    await _run_sdk_write("put_directory", f"上传目录到 {remote_path}", timeout, _do)
+    _record_success()
+
+
+async def put_many(
+    items: list[tuple[Path | str | Any, str]],
+    volume: str | None = None,
+    *,
+    force: bool = True,
+    timeout: float = 600.0,
+) -> None:
+    """把多个本地文件/目录放进同一个 batch，合并为一次提交。"""
+    if not items:
+        return
+
+    async def _do() -> None:
+        handle = await _get_volume(volume)
+        async with handle.batch_upload.aio(force=force) as batch:
+            for local_path, remote in items:
+                remote_path = _normalize_remote(local_path, remote)
+                if isinstance(local_path, (str, Path)) and Path(local_path).is_dir():
+                    batch.put_directory(local_path, remote_path)
+                else:
+                    batch.put_file(local_path, remote_path)
+
+    await _run_sdk_write("put_many", f"批量上传 {len(items)} 项", timeout, _do)
+    _record_success()
+
+
+async def get_file(
+    remote: str,
+    local_destination: Path | str,
+    volume: str | None = None,
+    *,
+    force: bool = True,
+    timeout: float = 600.0,
+) -> None:
+    """下载远端文件；目录递归展开，写入临时文件后原子替换目标。"""
+    remote_path = str(remote or "").replace("\\", "/")
+    if not remote_path:
+        raise ModalCliError("远端路径不能为空", category="command")
+    destination = Path(local_destination)
+
+    async def _do() -> None:
+        handle = await _get_volume(volume)
+        entries = await handle.listdir.aio(remote_path, recursive=False)
+        if not entries:
+            raise FileNotFoundError(remote_path)
+        first_path = str(getattr(entries[0], "path", "")).rstrip("/")
+        # SDK 的 FileEntry.path 不带前导 "/"，而调用方通常传 CLI 形态的绝对卷路径。
+        if len(entries) == 1 and first_path.lstrip("/") == remote_path.rstrip("/").lstrip("/"):
+            entry = entries[0]
+            if _entry_type(entry) == "dir":
+                await _download_directory(handle, remote_path, destination, force)
+            else:
+                target = destination / Path(remote_path).name if destination.is_dir() else destination
+                await _download_one(handle, first_path, target, force)
+            return
+        await _download_directory(handle, remote_path, destination, force)
+
+    await _run_sdk_write("get_file", f"下载 {remote_path}", timeout, _do)
+    _record_success()
+
+
+async def _download_one(handle: Any, remote_path: str, destination: Path, force: bool) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists() and not force:
+        raise FileExistsError(f"本地目标已存在: {destination}")
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.",
+        suffix=".tmp",
+        dir=str(destination.parent),
+    )
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb") as fp:
+            await handle.read_file_into_fileobj.aio(remote_path, fp)
+        os.replace(tmp_path, destination)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
+async def _download_directory(
+    handle: Any,
+    remote_path: str,
+    destination: Path,
+    force: bool,
+) -> None:
+    entries = await handle.listdir.aio(remote_path, recursive=True)
+    base = remote_path.rstrip("/").lstrip("/")
+    for entry in entries:
+        if _entry_type(entry) != "file":
+            continue
+        rel = str(getattr(entry, "path", "") or "").lstrip("/")
+        if base:
+            prefix = base + "/"
+            rel = rel.removeprefix(prefix)
+        target = destination / PurePosixPath(rel)
+        await _download_one(handle, str(getattr(entry, "path", "")), target, force)
+
+
+async def remove_file(
+    remote: str,
+    volume: str | None = None,
+    *,
+    recursive: bool = False,
+    timeout: float = 600.0,
+) -> None:
+    """删除卷内文件或目录；不存在时保留 NotFoundError 映射。"""
+    remote_path = str(remote or "").replace("\\", "/")
+
+    async def _do() -> None:
+        handle = await _get_volume(volume)
+        await handle.remove_file.aio(remote_path, recursive=recursive)
+
+    await _run_sdk_write("remove_file", f"删除 {remote_path}", timeout, _do)
+    _record_success()
+
+
+async def volume_create(name: str, *, timeout: float = 600.0) -> None:
+    """创建整卷；已存在错误按 SDK AlreadyExistsError 映射为 command。"""
+    async def _do() -> None:
+        client = await _get_client()
+        modal = _get_modal()
+        await modal.Volume.objects.create.aio(name, client=client)
+
+    await _run_sdk_write("volume_create", f"创建数据卷 {name}", timeout, _do)
+    _forget_volume(name)
+    _record_success()
+
+
+async def volume_delete(name: str, *, timeout: float = 600.0) -> None:
+    """删除整卷并清理本地 Volume 句柄缓存。"""
+    async def _do() -> None:
+        client = await _get_client()
+        modal = _get_modal()
+        await modal.Volume.objects.delete.aio(name, client=client)
+
+    await _run_sdk_write("volume_delete", f"删除数据卷 {name}", timeout, _do)
+    _forget_volume(name)
+    _record_success()

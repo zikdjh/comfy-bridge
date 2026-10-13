@@ -4,8 +4,8 @@
 - 云端 = Modal 数据卷 `user/default/comfy.settings.json`（runner 以 --base-directory /data
   挂载、启动时读取；容器运行中改卷不热生效，下次冷启动生效 —— 由 UI 提示）
 
-读经 `modal volume get`、写经 `modal volume put -f`（复用 modal_volume.client 的凭证注入
-与超时兜底），不要求云端容器在运行。凭证类键（键名含 api_key/token/secret/password）
+读经 SDK 网关 get_file、写经 put_file（复用 modal_volume.client 的凭证注入与超时兜底），
+不要求云端容器在运行。凭证类键（键名含 api_key/token/secret/password）
 在 diff 回显中一律掩码（红线），推拉仍使用真实值。
 """
 
@@ -46,17 +46,15 @@ def _read_json_file(path: Path) -> dict:
 
 
 async def _read_cloud() -> tuple[dict | None, bool, str | None]:
-    """经 volume get 读云端设置。返回 (settings, file_exists, error)。
+    """经 SDK 网关读云端设置。返回 (settings, file_exists, error)。
 
-    error 非 None 表示云端通道不可用（CLI 未装/凭证/网络）；文件缺失不算错误，
+    error 非 None 表示云端通道不可用（SDK 不可用/凭证/网络）；文件缺失不算错误，
     file_exists=False 且 settings={}（首次部署尚未生成，视为空）。
     """
     with tempfile.TemporaryDirectory() as td:
         dest = Path(td) / "comfy.settings.json"
         try:
-            # modal CLI 的 volume get 会在下载前预创建目标文件，二次调用会报
-            # "Output path already exists"——统一加 --force 覆盖临时目录内的文件。
-            await volume_cli.run("volume", "get", volume_cli.volume_name(), CLOUD_REL, str(dest), "--force")
+            await volume_cli.get_file(CLOUD_REL, dest, force=True)
         except ModalCliError as exc:
             msg = str(exc)
             if any(hint in msg.lower() for hint in _MISSING_HINTS):
@@ -70,7 +68,7 @@ async def _write_cloud(data: dict) -> None:
     with tempfile.TemporaryDirectory() as td:
         src = Path(td) / "comfy.settings.json"
         src.write_text(json.dumps(data, ensure_ascii=False, indent=4) + "\n", encoding="utf-8")
-        await volume_cli.run("volume", "put", volume_cli.volume_name(), str(src), CLOUD_REL, "-f")
+        await volume_cli.put_file(src, CLOUD_REL, force=True)
 
 
 async def _write_local(data: dict) -> None:

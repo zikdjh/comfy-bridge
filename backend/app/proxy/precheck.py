@@ -8,7 +8,7 @@
 - off    不校验（历史行为不变，默认）
 - strict 缺节点/缺模型 → 拦截（409，blocked 留痕，不带选项）
 - ask    拦截并附结构化可操作选项（上传哪些模型 / 安装哪些节点 / 改走云端）
-- auto   缺模型且本地有副本 → 自动 modal volume put 上传云端卷后放行；缺节点/本地目标仍按 ask 拦截
+- auto   缺模型且本地有副本 → 自动上传云端卷后放行；缺节点/本地目标仍按 ask 拦截
 
 未知取值一律按 off 处理（配置打错不改变历史行为）。
 """
@@ -182,7 +182,7 @@ async def auto_supply(items: list[tuple[str, str | None]]) -> dict:
     """把本地有副本的缺失模型上传云端卷 models/<分类>/<ref>（auto 供给）。
 
     逐个上传：单个失败不阻塞其余；本地找不到文件或无分类映射的条目记为失败。
-    全部经 `modal volume put -f`（免容器，与节点同步同一原语）。
+    全部经 SDK 网关 put_file（免容器，与节点同步同一原语）。
     """
     dirs = model_dirs_resolved()
     uploaded: list[str] = []
@@ -197,9 +197,7 @@ async def auto_supply(items: list[tuple[str, str | None]]) -> dict:
             continue
         remote = f"models/{cat}/{ref}"
         try:
-            await volume_cli.run(
-                "volume", "put", volume_cli.volume_name(), str(local_path), remote, "-f"
-            )
+            await volume_cli.put_file(str(local_path), remote, force=True)
         except ModalCliError as exc:
             failed.append({"ref": ref, "error": str(exc)[:200]})
             continue

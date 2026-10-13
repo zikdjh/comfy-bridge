@@ -312,7 +312,7 @@ async def cleanup_expired_trash(
         if age is None or age < retention_days:
             continue
         rel = f"{TRASH_ROOT}/{name}"
-        await modal_cli.run("volume", "rm", volume, rel, "-r")
+        await modal_cli.remove_file(rel, volume=volume, recursive=True)
         removed.append(rel)
         logger.info("回收站清理：卷 %s 删除过期条目 %s（%.1f 天）", volume, rel, age)
     return removed

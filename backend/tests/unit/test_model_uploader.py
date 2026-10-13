@@ -20,15 +20,14 @@ def upload_env(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(uploader, "model_dirs_resolved", lambda: {"checkpoints": str(tmp_path / "models")})
     calls: list[tuple] = []
 
-    async def fake_run(*args, **kwargs):
-        calls.append((args, kwargs))
-        return ""
+    async def fake_put(local, remote, **kwargs):
+        calls.append(((str(local), remote), kwargs))
 
     async def fake_refresh(force: bool = False):
         calls.append((("refresh", force), {}))
         return {}
 
-    monkeypatch.setattr(uploader.modal_cli, "run", fake_run)
+    monkeypatch.setattr(uploader.modal_cli, "put_file", fake_put)
     monkeypatch.setattr(uploader.cloud_index, "refresh", fake_refresh)
     uploader._LOCKS.clear()
     uploader._TASKS.clear()
@@ -98,9 +97,10 @@ async def test_complete_merges_verifies_and_pushes(upload_env):
     assert not (root / session["id"] / "chunks").exists()
     assert not (root / session["id"] / "assembled.bin").exists()
 
-    put_calls = [c for c in calls if c[0][:2] == ("volume", "put")]
+    put_calls = [c for c in calls if c[0][1] == "models/checkpoints/demo.safetensors"]
     assert put_calls
-    assert put_calls[0][0][4] == "models/checkpoints/demo.safetensors"
+    assert put_calls[0][1]["force"] is True
+    assert put_calls[0][1]["timeout"] == 24 * 3600
     assert ("refresh", True) in [c[0] for c in calls]
 
 

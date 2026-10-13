@@ -129,7 +129,7 @@ class ModalConfig(BaseModel):
     # web_server 固定端点（modal deploy 输出），空 = 通道不可用
     web_url: str = ""
     task_timeout: int = 3600  # 单个云端任务最长等待秒数（含冷启动）
-    # 云端 ComfyUI 追加启动参数：保存时经 modal volume put 写入数据卷
+    # 云端 ComfyUI 追加启动参数：保存时经 SDK 网关写入数据卷
     # /config/launch_args.json，容器冷启动时由 runner.py 读取追加
     extra_launch_args: list[str] = []
     # 账号档案注册表（多账号维护，docs/ComfyBridge-设计-多账号维护.html）：[[modal.accounts]]。

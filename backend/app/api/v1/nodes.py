@@ -3,13 +3,13 @@
 - GET  /nodes/local             本地清单（运行中 /object_info + custom_nodes/ 目录扫描
                                 + ComfyUI-Manager API 兜底增强：在线且装了 Manager 时补
                                 非 git 包的 repo/版本/展示名，任何失败静默跳过）
-- GET  /nodes/cloud             云端清单（Modal 数据卷 custom_nodes/ 免容器列举，modal volume ls）
+- GET  /nodes/cloud             云端清单（Modal 数据卷 custom_nodes/ 免容器列举，SDK list_dir）
 - GET  /nodes/diff?deep=&force= 差异矩阵：包级并集对比；deep=1 时同时拉云端 /object_info
                                 （容器未运行会触发冷启动计费，故仅由前端按钮显式触发）；
                                 矩阵短 TTL 缓存、deep class_type 块持久化缓存（~/.comfybridge/
                                 nodes_diff_cache.json，重启不丢），force=1 绕过缓存现算
-- POST /nodes/sync              安装本地节点包/单文件 → 云端数据卷（整目录 volume put）
-- POST /nodes/cloud/remove      从云端数据卷移除节点（volume rm）
+- POST /nodes/sync              安装本地节点包/单文件 → 云端数据卷（整目录上传）
+- POST /nodes/cloud/remove      从云端数据卷移除节点
 - GET  /nodes/version           本地 ComfyUI 版本 vs 云端镜像 pin 对照 + 部署任务状态
 - POST /nodes/version/align     版本对齐（本地为权威）：写 pin 锁文件 → modal deploy 重建镜像
 - GET  /nodes/dependency-precheck
@@ -117,9 +117,7 @@ async def _read_cloud_manifest() -> dict | None:
     tmp_root = Path(tempfile.mkdtemp(prefix="cb-node-manifest-"))
     dest = tmp_root / "manifest.json"
     try:
-        await volume_cli.run(
-            "volume", "get", volume_cli.volume_name(), _MANIFEST_REMOTE, str(dest)
-        )
+        await volume_cli.get_file(_MANIFEST_REMOTE, dest, force=True)
         return json.loads(dest.read_text(encoding="utf-8"))
     except (ModalCliError, OSError, json.JSONDecodeError):
         return None
@@ -257,13 +255,11 @@ def _local_file_hash(name: str) -> str | None:
 
 
 async def _cloud_file_hash(name: str) -> str | None:
-    """云端单文件内容 sha256（volume get 现算；失败返回 None，diff 退回元数据对比）。"""
+    """云端单文件内容 sha256（SDK 网关现读；失败返回 None，diff 退回元数据对比）。"""
     tmp_root = Path(tempfile.mkdtemp(prefix="cb-node-hash-"))
     try:
         dest = tmp_root / name
-        await volume_cli.run(
-            "volume", "get", volume_cli.volume_name(), f"custom_nodes/{name}", str(dest), "--force"
-        )
+        await volume_cli.get_file(f"custom_nodes/{name}", dest, force=True)
         h = hashlib.sha256()
         with dest.open("rb") as f:
             for chunk in iter(lambda: f.read(65536), b""):
@@ -456,7 +452,7 @@ class RebuildBody(BaseModel):
 
 
 def _stage_dir(src: Path) -> Path:
-    """复制到临时目录再上传：排除 __pycache__/.git 等（volume put 不支持排除规则）。"""
+    """复制到临时目录再上传：排除 __pycache__/.git 等（SDK 上传不做排除规则）。"""
     tmp_root = Path(tempfile.mkdtemp(prefix="cb-sync-"))
     staged = tmp_root / src.name
     shutil.copytree(
@@ -467,7 +463,7 @@ def _stage_dir(src: Path) -> Path:
 
 
 async def _volume_put(local_path: Path, remote: str) -> None:
-    await volume_cli.run("volume", "put", volume_cli.volume_name(), str(local_path), remote, "-f")
+    await volume_cli.put_file(local_path, remote, force=True)
 
 
 _SYNC_LOCK = asyncio.Lock()  # 串行化同步作业：manifest 合并与卷写入不并发交错
@@ -495,7 +491,7 @@ async def _sync_body(handle, names: list[str]) -> None:
                             handle.log(f"打包上传 {name} …")
                             staged = _stage_dir(src)
                             try:
-                                await _volume_put(staged, remote)
+                                await volume_cli.put_directory(staged, remote, force=True)
                             finally:
                                 shutil.rmtree(staged.parent, ignore_errors=True)
                         else:
@@ -591,11 +587,7 @@ async def nodes_cloud_remove(body: NamesBody) -> dict:
 
 
 async def _remove_remote(remote: str) -> None:
-    try:
-        await volume_cli.run("volume", "rm", volume_cli.volume_name(), remote)
-    except ModalCliError:
-        # Directories require recursive removal; retry covers both files and dirs.
-        await volume_cli.run("volume", "rm", volume_cli.volume_name(), remote, "-r")
+    await volume_cli.remove_file(remote, recursive=True)
 
 
 # ---------------------------------------------------------------- 版本对齐与镜像固化

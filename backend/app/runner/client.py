@@ -129,7 +129,7 @@ async def post_input_file(
 ) -> dict:
     """把输入文件写进运行中容器的 input/ 目录（ComfyUI `/upload/image`）。
 
-    必须走容器内的 ComfyUI，而不是外部 `modal volume put`：Modal Volume 是快照
+    必须走容器内的 ComfyUI，而不是外部卷写入：Modal Volume 是快照
     语义，外部写入对**已经在运行**的容器不可见（load 时报 Invalid image file），
     而容器内写入立刻可见；文件随容器正常退出提交回卷，持久化语义不变。
     ComfyUI 该端点只落原始字节，不做图片解码校验（校验发生在 LoadImage 节点），

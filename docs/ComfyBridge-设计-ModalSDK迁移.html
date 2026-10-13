@@ -633,6 +633,37 @@ state = await modal_cli.app_status(app_name)   # "deployed" / "stopped" / None</
       （<code>test_m2_leftovers.py:293</code> patch 的是 <code>wf_api.volume_cli.run</code>，
       正对应上面补进来的 <code>api/v1/workflows.py</code>）。</li>
   </ul>
+  <p><b>实施登记（2026-10-13，批次 2）：</b>
+    <code>put_file / put_many / put_directory / get_file / remove_file /
+    volume_create / volume_delete</code> 已全部落地到
+    <code>modal_volume/client.py</code>；上传通过
+    <code>async with handle.batch_upload.aio(force=...)</code> 提交，
+    <code>asyncio.wait_for</code> 包住整个上下文以保留调用方逐操作
+    <code>timeout</code>。下载实现已补齐 CLI 同源语义：单文件目标是已有目录时
+    写入 <code>&lt;dir&gt;/&lt;basename&gt;</code>，否则直接写目标路径；目录下载递归展开；
+    写入均经过目标同级临时文件 + <code>os.replace</code> 原子替换，失败不留下半文件。
+    <code>list_dir</code> 对 SDK 在“目录已空/路径已不存在”时返回的
+    <code>NotFoundError</code> 兼容为 <code>[]</code>，对齐 CLI 时代的空目录契约。</p>
+  <p>调用方已切换：<code>api/v1/nodes.py / settings_sync.py / workflows.py /
+    volume.py / launch.py</code>、<code>models_mgr/uploader.py</code>、
+    <code>proxy/precheck.py</code>、<code>runner/executor.py</code>、
+    <code>sync/workflows_sync.py</code>、<code>volume_mgr/deletion.py</code>、
+    <code>modal_volume/jobs.py</code>。<code>launch.py::_push_modal_args</code>
+    已从同步子进程改为 async SDK 上传，启动参数 JSON 用 <code>io.BytesIO</code>
+    直接写入卷目标；<code>api/v1/nodes.py</code> 的节点目录整包同步改走
+    <code>put_directory</code>，单文件/manifest 仍走 <code>put_file</code>。
+    <code>modal_volume/jobs.py</code> 的取消语义从终止
+    <code>Popen</code> 改为取消当前 <code>asyncio.Task</code>，已完成文件保留。</p>
+  <p>验证：真实 Modal 临时卷全链路冒烟通过（创建卷 → 尾缀 <code>/</code> 上传 →
+    <code>force=False</code> 拒绝覆盖 → <code>force=True</code> 覆盖 →
+    单文件/目录读取 → 非递归删除文件 → 递归删除目录 → 空目录读取 → 删除卷 →
+    存在性返回 false；临时卷在 <code>finally</code> 中清理）。
+    后端 <code>ruff</code> 0 违规、<code>mypy</code> 0 错误、
+    <code>pytest -q tests/unit</code> 371 passed（3 条既有
+    deprecation warnings）。
+    真实写操作冒烟暴露并修复两项兼容差异：SDK <code>FileEntry.path</code>
+    不带前导 <code>/</code>，以及删除最后一个子项后 <code>listdir</code> 报
+    <code>NotFoundError</code>；两者均有回归用例。</p>
   <h3>批次 3：应用状态 + 账单</h3>
   <ul>
     <li><code>app_status</code> 切 health 自检与 runner/client <code>refresh_state</code>：
