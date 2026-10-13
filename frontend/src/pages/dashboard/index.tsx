@@ -520,7 +520,7 @@ export default function DashboardPage() {
         onCancel={() => setBudgetOpen(false)}
         onOk={() => budgetForm.submit()}
         okText="保存"
-        destroyOnClose
+        destroyOnHidden
       >
         <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
           估算 = GPU 单价 × 请求墙钟秒数（含冷启动等待）。月度上限设为 0 = 关闭护栏；

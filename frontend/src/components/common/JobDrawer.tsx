@@ -160,7 +160,7 @@ export function JobDrawer({ open, onClose, focusId, onFocusHandled }: {
       width={520}
       open={open}
       onClose={onClose}
-      destroyOnClose
+      destroyOnHidden
     >
       {focusId && focusLoading && <Spin style={{ display: "block", margin: "32px auto" }} />}
       {focused && (
