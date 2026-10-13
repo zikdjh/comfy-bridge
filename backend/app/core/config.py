@@ -43,6 +43,9 @@ class LocalConfig(BaseModel):
     # 桥接器接管启动用的基础命令（argv，可执行文件 + main.py + 基础参数）；
     # 空 = 保存/启动时自动探测当前实例命令行，探测不到回退 venv python -s main.py
     launch_command: list[str] = []
+    # Node.js 可执行文件路径（可选）：开发前端（pnpm/Vite）依赖 node，PATH 探测不到时
+    # 可在设置页手动指定；留空 = 检测接口自动按 PATH → 常见安装目录快扫兜底
+    node_path: str = ""
 
 
 class RoutingRule(BaseModel):
@@ -129,7 +132,7 @@ class ModalConfig(BaseModel):
     # 云端 ComfyUI 追加启动参数：保存时经 modal volume put 写入数据卷
     # /config/launch_args.json，容器冷启动时由 runner.py 读取追加
     extra_launch_args: list[str] = []
-    # 账号档案注册表（多账号维护，docs/多账号维护设计.md）：[[modal.accounts]]。
+    # 账号档案注册表（多账号维护，docs/ComfyBridge-设计-多账号维护.html）：[[modal.accounts]]。
     # [modal] 本体始终是「当前活跃账号的生效视图」；激活 = 把档案字段整体复制进本体。
     # 1 账号 = 1 份凭据：token_id 唯一，轮换 = 覆盖写回档案，不做多凭据并存。
     accounts: list[AccountProfile] = []

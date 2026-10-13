@@ -6,6 +6,7 @@ export interface LocalConfigDto {
   comfy_root: string;
   output_dir: string;
   models_dirs: Record<string, string>;
+  node_path: string;
 }
 
 export interface BridgeConfigDto {
@@ -199,3 +200,14 @@ export const startComfyScan = () => apiSend<ComfyScanStateDto>("/api/v1/config/s
 export const cancelComfyScan = () => apiSend<ComfyScanStateDto>("/api/v1/config/scan-comfy/cancel", "POST", {});
 export const validateComfyRoot = (path: string) =>
   apiSend<ComfyInspectDto>("/api/v1/config/validate-comfy", "POST", { path });
+
+/** Node.js 环境检测（设置 → 本地）：手动指定路径 → PATH → 常见安装目录快扫 */
+export interface NodeEnvDto {
+  ok: boolean;
+  source: "config" | "PATH" | "scan" | "none";
+  path: string | null;
+  version?: string;
+  error?: string;
+}
+
+export const fetchNodeEnv = () => apiGet<NodeEnvDto>("/api/v1/config/node-env");

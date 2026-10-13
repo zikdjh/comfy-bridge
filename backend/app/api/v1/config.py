@@ -8,6 +8,10 @@ PUT 校验后把 local/bridge/modal 三节整体写回 ~/.comfybridge/config.tom
 
 from __future__ import annotations
 
+import asyncio
+import glob
+import shutil
+import subprocess
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -118,7 +122,7 @@ def _persist_settings(local, bridge, modal) -> None:
 
 
 def _invalidate_account_caches() -> None:
-    """账号切换联动（docs/多账号维护设计.md §3.3/§3.4）：配置缓存由 _persist_settings 清。"""
+    """账号切换联动（docs/ComfyBridge-设计-多账号维护.html §3.3/§3.4）：配置缓存由 _persist_settings 清。"""
     object_info_merge.invalidate_merge_cache()
     runner_client.invalidate_state()
     volume_usage.invalidate_cache()
@@ -272,6 +276,81 @@ def _dump_toml(sections: dict[str, dict]) -> str:
     return "\n".join(lines) + "\n"
 
 
+# ---------------------------------------------------------------- Node.js 环境检测
+
+def _detect_node_candidates() -> list[Path]:
+    """PATH 探测不到时的常见安装布局快扫（官方安装器 / nvm-windows / fnm / volta / scoop）。"""
+    home = Path.home()
+    patterns: list[Path] = [
+        Path(r"C:\Program Files\nodejs") / "node.exe",
+        Path(r"C:\Program Files (x86)\nodejs") / "node.exe",
+        home / "scoop" / "apps" / "nodejs" / "current" / "node.exe",
+        home / "AppData" / "Roaming" / "nvm" / "*" / "node.exe",
+        home / "AppData" / "Local" / "Volta" / "tools" / "image" / "node" / "*" / "node.exe",
+        home / "AppData" / "Local" / "fnm_multishells" / "*" / "node.exe",
+        home / ".fnm" / "node-versions" / "*" / "installation" / "node.exe",
+    ]
+    out: list[Path] = []
+    for pattern in patterns:
+        try:
+            if pattern.is_file():
+                out.append(pattern)
+                continue
+            # 版本号目录取最新（倒序前 3 个）；fnm_multishells 命中即可
+            for hit in sorted(glob.glob(str(pattern)), reverse=True)[:3]:
+                p = Path(hit)
+                if p.is_file():
+                    out.append(p)
+        except OSError:
+            continue
+    return out
+
+
+def _node_version(node_exe: str) -> str | None:
+    """执行 node --version；失败/超时返回 None（不抛，检测接口保持可轮询语义）。"""
+    try:
+        proc = subprocess.run(
+            [node_exe, "--version"],
+            capture_output=True, text=True, timeout=6,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    text = (proc.stdout or "").strip()
+    return text if proc.returncode == 0 and text else None
+
+
+@router.get("/node-env")
+async def read_node_env() -> dict:
+    """Node.js 环境检测（设置页「本地」Tab）：手动指定路径 → PATH → 常见安装目录快扫。
+
+    检测是幂等只读（最多跑一次 node --version 子进程），dev.ps1/pnpm 前置条件可视化；
+    手动指定路径在 GET /config 的 local.node_path 回显，保存走 PUT /config（轻校验）。
+    """
+    configured = (get_settings().local.node_path or "").strip().strip('"')
+    if configured:
+        p = Path(configured)
+        if not p.is_file():
+            return {"ok": False, "source": "config", "path": configured,
+                    "error": f"手动指定路径不存在: {configured}"}
+        version = await asyncio.to_thread(_node_version, str(p))
+        if version:
+            return {"ok": True, "source": "config", "path": str(p), "version": version}
+        return {"ok": False, "source": "config", "path": configured,
+                "error": f"手动指定路径无法执行 node --version: {configured}"}
+    which = shutil.which("node")
+    if which:
+        version = await asyncio.to_thread(_node_version, which)
+        if version:
+            return {"ok": True, "source": "PATH", "path": which, "version": version}
+    for candidate in await asyncio.to_thread(_detect_node_candidates):
+        version = await asyncio.to_thread(_node_version, str(candidate))
+        if version:
+            return {"ok": True, "source": "scan", "path": str(candidate), "version": version}
+    return {"ok": False, "source": "none", "path": None,
+            "error": "PATH 与常见安装目录均未找到 node.exe；请在下方手动指定路径后保存"}
+
+
 class ConfigBody(BaseModel):
     local: dict | None = None
     bridge: dict | None = None
@@ -333,6 +412,16 @@ async def write_config(body: ConfigBody) -> dict:
     clean_local = {**incoming_local}
     if "comfy_root" in clean_local:
         clean_local["comfy_root"] = new_root
+    if "node_path" in clean_local:
+        raw_node = str(clean_local.get("node_path") or "").strip().strip('"')
+        if raw_node:
+            np = Path(raw_node)
+            if not np.is_absolute() or not np.is_file():
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Node.js 路径必须是已存在的可执行文件绝对路径: {raw_node!r}（留空 = 自动检测）",
+                )
+        clean_local["node_path"] = raw_node
     merged = {
         "local": {**current.local.model_dump(), **clean_local},
         "bridge": {**current.bridge.model_dump(), **(body.bridge or {})},

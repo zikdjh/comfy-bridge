@@ -3,7 +3,8 @@ import { Alert, Button, Card, Form, Input, InputNumber, Popconfirm, Select, Spac
 import { PlusOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { message } from "antd";
-import { useConfig, useSaveConfig, validateComfyRoot } from "../../api/config";
+import { useConfig, useSaveConfig, fetchNodeEnv, validateComfyRoot } from "../../api/config";
+import type { NodeEnvDto } from "../../api/config";
 import { LaunchArgsPanel } from "./LaunchArgsPanel";
 import { ComfyScanModal } from "./ComfyScanModal";
 import { SettingsSyncTab } from "./SettingsSyncTab";
@@ -21,6 +22,24 @@ export default function SettingsPage() {
   const [scanOpen, setScanOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [nodeEnv, setNodeEnv] = useState<NodeEnvDto | null>(null);
+  const [nodeChecking, setNodeChecking] = useState(false);
+
+  /** Node.js 环境检测：手动指定路径 → PATH → 常见安装目录快扫（dev.ps1/pnpm 前置条件可视化） */
+  const checkNode = async () => {
+    setNodeChecking(true);
+    try {
+      setNodeEnv(await fetchNodeEnv());
+    } catch (err) {
+      message.error(`Node 检测失败：${err instanceof Error ? err.message : err}`);
+    } finally {
+      setNodeChecking(false);
+    }
+  };
+
+  useEffect(() => {
+    checkNode();
+  }, []);
 
   /** 手动指定目录的即时完整性校验（保存时后端还会再强制校验一次） */
   const checkRoot = async () => {
@@ -57,6 +76,7 @@ export default function SettingsPage() {
       comfyRoot: config.local.comfy_root,
       comfyUrl: config.local.comfy_url,
       outputDir: config.local.output_dir,
+      nodePath: config.local.node_path ?? "",
       modelsDirs: Object.entries(config.local.models_dirs).map(([category, path]) => ({ category, path })),
     });
     bridgeForm.setFieldsValue({
@@ -90,6 +110,7 @@ export default function SettingsPage() {
     comfyRoot: string;
     comfyUrl: string;
     outputDir: string;
+    nodePath?: string;
     modelsDirs?: { category: string; path: string }[];
   }) => {
     try {
@@ -117,10 +138,12 @@ export default function SettingsPage() {
           comfy_root: values.comfyRoot.trim(),
           comfy_url: values.comfyUrl,
           output_dir: values.outputDir,
+          node_path: (values.nodePath ?? "").trim(),
           models_dirs: modelsDirs,
         },
       });
       message.success("已保存并热生效");
+      checkNode();
     } catch (err) {
       message.error(`保存失败：${err instanceof Error ? err.message : err}`);
     }
@@ -272,6 +295,37 @@ export default function SettingsPage() {
                   extra="远端（Modal）执行结果回传落盘处；媒体库也读取该目录"
                 >
                   <Input />
+                </Form.Item>
+                <Form.Item
+                  label="Node.js 路径（可选）"
+                  name="nodePath"
+                  extra="开发前端（pnpm/Vite）依赖 node；留空 = 自动按 PATH 与常见安装目录检测。手动指定后保存，检测将优先使用该路径"
+                >
+                  <Input allowClear placeholder="如 E:\node\version\v24.20.0\node.exe，留空自动检测" />
+                </Form.Item>
+                <Form.Item label="Node.js 环境">
+                  <Space wrap>
+                    <Button size="small" loading={nodeChecking} onClick={checkNode}>检测</Button>
+                    {nodeEnv === null ? (
+                      <Typography.Text type="secondary">未检测</Typography.Text>
+                    ) : nodeEnv.ok ? (
+                      <Typography.Text>
+                        <Tag color="success">{nodeEnv.version}</Tag>
+                        <Tag>
+                          {nodeEnv.source === "config"
+                            ? "手动指定"
+                            : nodeEnv.source === "PATH"
+                              ? "PATH 自动"
+                              : "目录扫描"}
+                        </Tag>
+                        <Typography.Text code copyable={{ text: nodeEnv.path ?? "" }}>
+                          {nodeEnv.path}
+                        </Typography.Text>
+                      </Typography.Text>
+                    ) : (
+                      <Typography.Text type="danger">{nodeEnv.error}</Typography.Text>
+                    )}
+                  </Space>
                 </Form.Item>
                 <Form.Item label="本地模型目录映射（分类 → 路径）">
                   <Form.List name="modelsDirs">

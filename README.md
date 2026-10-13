@@ -4,11 +4,11 @@
 同步两端节点/配置/工作流（不同步模型），管理 Modal 数据卷与多账号档案切换
 （1 账号 = 1 份凭据），统一记录日志与成本。
 
-- 管理线（范围/排期/风险/验收）：`docs/ComfyBridge项目计划书.html`
-- 技术线（架构/核心设计/API/目录）：`docs/ComfyUI-Modal桥接器项目规划.html`
-- 缺陷与修复入口：`docs/真机验收缺陷清单.md`（真机验收残留项登记）
-- 测试计划：docs/第二轮完整测试计划.md（第二轮完整回归 + 性能压测执行清单）
-- 速查：`docs/ComfyUI启动命令与参数参考.html`、`docs/Modal云平台与SDK参考.html`
+- 管理线（范围/排期/风险/验收）：`docs/ComfyBridge-计划-项目计划书.html`
+- 技术线（架构/核心设计/API/目录）：`docs/ComfyBridge-计划-技术规划.html`
+- 缺陷与修复入口：`docs/ComfyBridge-过程-真机验收缺陷清单.html`（真机验收残留项登记）
+- 测试计划：docs/ComfyBridge-过程-第二轮完整测试计划.html（第二轮完整回归 + 性能压测执行清单）
+- 速查：`docs/ComfyBridge-参考-ComfyUI启动命令与参数.html`、`docs/ComfyBridge-参考-Modal云平台与SDK.html`
 
 ## 目录
 
@@ -28,13 +28,18 @@ scripts/       dev.ps1 / build.ps1
 cd backend
 uv run uvicorn app.main:app --reload --port 8189
 
-# 前端（另开终端，首次：pnpm install）
+# 前端（另开终端，首次：pnpm install；需 Node ≥ 18 且 node.exe 在 PATH）
 cd frontend
 pnpm dev          # http://127.0.0.1:5173，/api 代理到 8189
 
 # 或一键并行启动
 powershell -File scripts/dev.ps1
 ```
+
+Node 环境排查：管理台「设置 → 本地」的 Node.js 环境卡片可自动检测
+（手动指定路径 → PATH → 常见安装目录快扫）；`node.exe` 不在 PATH 时在卡片里
+手动指定路径保存即可，对应 API `GET /api/v1/config/node-env`
+（配置项 `~/.comfybridge/config.toml` 的 `[local].node_path`）。
 
 后端配置：复制 `backend/config.example.toml` 到 `~/.comfybridge/config.toml` 按需修改。
 管理台入口 `http://127.0.0.1:5173`；出图走桥接地址 `http://127.0.0.1:8189`
@@ -137,7 +142,7 @@ Set-Content -Path "$HOME\.comfybridge\management_token" -Value "<随机长令牌
   只记方法/路径/状态码/客户端 IP/Origin/认证方式，**不含 token 与请求体**。
 
 对外部署（反代、Origin 白名单、审计开关、边界检查清单）见
-[`docs/反向代理与多用户部署.md`](docs/反向代理与多用户部署.md)。
+[`docs/ComfyBridge-运维-反向代理与多用户部署.html`](docs/ComfyBridge-运维-反向代理与多用户部署.html)。
 
 ### 单实例限制（P2-2）
 
@@ -213,7 +218,7 @@ M0 技术验证收尾 → M1 MVP 桥接 → M2 同步引擎 → M3 模型卷管�
   真实结局并补时长，成功时补回传产物）。
 - 真机验收（本地 v0.39.2 ↔ 云端 pin 不同）：修掉 modal CLI 编码崩溃、热容器
   volume 快照读不到新输入、纯 HTTP 无终态、WS 泵阻塞导致中断失效四处缺陷，
-  版本对齐与节点同步实测通过；详见 `docs/真机验收缺陷清单.md` 与 `FIXLIST.md` §三十四。
+  版本对齐与节点同步实测通过；详见 `docs/ComfyBridge-过程-真机验收缺陷清单.html` 与 `FIXLIST.md` §三十四。
 - P2-1 管理面鉴权边界（Origin + 审计日志 + 反代文档）。
 - P3-1 ruff 与 mypy 存量清零，CI 改为零违规、零类型错误门禁。
 - P2-2 作业状态存储接缝（`app/core/job_store.py`）与单实例边界文档。

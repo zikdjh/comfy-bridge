@@ -15,6 +15,9 @@ models_dirs = { checkpoints = "D:/ComfyUI/models/checkpoints", loras = "D:/Comfy
 extra_launch_args = []
 # 桥接器接管启动的基础命令（argv）；留空 = 保存时自动从当前实例探测固化
 launch_command = []
+# Node.js 可执行文件路径（可选）：开发前端（pnpm/Vite）依赖 node，PATH 探测不到时手动指定；
+# 留空 = 设置页「Node.js 环境」检测按 PATH → 常见安装目录自动兜底
+node_path = ""
 
 [bridge]
 listen = "127.0.0.1:8189"          # 桥接器监听地址（仅本机）
