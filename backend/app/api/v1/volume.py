@@ -1,6 +1,6 @@
 """数据卷管理 API：管理 token 鉴权下的所有 Modal 数据卷 + URL 直下 + 目录维护。
 
-- GET  /api/v1/volume/meta                 元信息（默认主卷 / 凭证 / CLI 可用性）
+- GET  /api/v1/volume/meta                 元信息（默认主卷 / 凭证 / SDK 可用性）
 - GET  /api/v1/volume/volumes?refresh=     所有卷 + 递归统计的总用量（缓存 60s，
                                            过期后台重算并置 computing=true，前端轮询）
 - POST /api/v1/volume/create               新增数据卷
@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import asyncio
 import re
-import shutil
 import tempfile
 import time
 from pathlib import Path
@@ -73,7 +72,7 @@ async def meta() -> dict:
     return {
         "volume": get_settings().modal.volume,
         "credentials_ok": modal_configured(),
-        "cli_found": shutil.which("modal") is not None,
+        "cli_found": volume_cli.sdk_available(),
     }
 
 

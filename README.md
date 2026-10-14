@@ -8,7 +8,7 @@
 - 技术线（架构/核心设计/API/目录）：`docs/ComfyBridge-计划-技术规划.html`
 - 缺陷与修复入口：`docs/ComfyBridge-过程-真机验收缺陷清单.html`（真机验收残留项登记）
 - 测试计划：docs/ComfyBridge-过程-第二轮完整测试计划.html（第二轮完整回归 + 性能压测执行清单）
-- 下一阶段改造：docs/ComfyBridge-设计-ModalSDK迁移.html（Modal CLI 子进程 → Python SDK 直调）
+- SDK 迁移记录：docs/ComfyBridge-设计-ModalSDK迁移.html（控制面已切 Python SDK；deploy / 流式 run / container 保留 CLI）
 - 速查：`docs/ComfyBridge-参考-ComfyUI启动命令与参数.html`、`docs/ComfyBridge-参考-Modal云平台与SDK.html`
 
 ## 目录
@@ -76,7 +76,9 @@ comfy-bridge --port 8189   # 控制台 http://127.0.0.1:8189/bridge/
 - 管理面 GUI 挂在 `/bridge`（SPA 回退）；`/` 与其余路径仍是本地 ComfyUI 数据面透传，**出图地址不变**。
 - 安装包自带 modal-runner 副本：节点同步 / 版本对齐 / 数据卷作业 / `modal deploy` 在安装态均可直接用。
 - `scripts/build.ps1` 仅做前端嵌入构建（`pnpm build:embed` → `backend/app/static`，开发后端同样挂 /bridge）。
-- 依赖注：modal 1.6+ 在系统代理环境硬要求 python-socks，已直接声明，代理环境开箱可用。
+- modal 依赖：控制面数据（卷读写、应用状态、账单）走 Python SDK 直调；
+  `modal deploy`、流式 `modal run`、`container list/stop` 仍走 CLI。
+  1.6+ 在系统代理环境硬要求 python-socks，已直接声明，代理环境开箱可用。
 
 ### 大模型分块上传
 
@@ -85,8 +87,8 @@ comfy-bridge --port 8189   # 控制台 http://127.0.0.1:8189/bridge/
 - 浏览器按 8 MiB 分块上传到桥接器，分块和服务端会话元数据暂存在
   `~/.comfybridge/uploads/<upload_id>/`（或 `CB_CONFIG_DIR` 指定的配置目录）。
 - 上传中断、浏览器刷新或后端重启后，只要重新选择同一文件，就能从服务端已确认的分块继续。
-- 全部分块到齐后，服务端按序合并、计算整文件 MD5；只有与客户端声明的 MD5 一致才调用
-  `modal volume put` 写入 `models/<分类>/<文件名>`。
+- 全部分块到齐后，服务端按序合并、计算整文件 MD5；只有与客户端声明的 MD5 一致才通过
+  Python SDK 写入 `models/<分类>/<文件名>`。
 - MD5 不一致、分块损坏或落卷失败都会保留失败原因，页面可查看并重试；校验失败需要删除会话后重传。
 
 ### 模型删除保护与回收站
@@ -210,7 +212,7 @@ M0 技术验证收尾 → M1 MVP 桥接 → M2 同步引擎 → M3 模型卷管�
 - 反代拦截 `/prompt` + WS 中继 + 路由决策链（默认/video/尺寸/自定义规则/缺节点/缺模型/预算/并发）。
 - 本地 ⇄ 云端：工作流、节点、设置键级同步；模型卷浏览、上传（分块续传 + MD5）、下载、移动、软删除与回收站。
 - 云端 Runner：代理鉴权、镜像固化（`nodes.lock.yaml`）、ComfyUI 版本对齐与回滚、部署任务与历史留痕。
-- 运维面：请求日志/成本报表/账单对账/额度护栏、统一作业事件流与任务抽屉、系统状态页与 CLI 故障分类。
+- 运维面：请求日志/成本报表/账单对账/额度护栏、统一作业事件流与任务抽屉、系统状态页与 Modal SDK 故障分类。
 - 边界：管理面令牌/Origin/审计日志、反代部署说明、单实例限制说明、预算护栏边界、云端提交前隐私确认。
 
 **最近变更**

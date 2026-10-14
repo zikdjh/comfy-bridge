@@ -363,7 +363,7 @@ def _merge_modal(current: dict, incoming: dict) -> dict:
 
     其余键缺省 = 保留现有；null 一律忽略（此前 null 会清空任意字段，
     PUT {"volume": null} 即可瘫痪卷操作——现只对两个 secret 保留清除语义）。
-    字符串值一律 strip：粘贴凭证时带入的尾部空白会让 modal CLI 报
+    字符串值一律 strip：粘贴凭证时带入的尾部空白会让 Modal 认证报
     "Token validation failed"，且极难排查。
     """
     merged = dict(current)

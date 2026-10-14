@@ -201,7 +201,12 @@ export default function ModelsPage() {
         <Alert type="warning" showIcon message="未配置 Modal 凭证" description="请先到「设置 → Modal」填写 Token，再回来同步模型。" />
       )}
       {meta.data && meta.data.credentials_ok && !meta.data.cli_found && (
-        <Alert type="warning" showIcon message="本机未找到 modal CLI" description="同步通过 modal CLI 执行，请先安装：pip install modal" />
+        <Alert
+          type="warning"
+          showIcon
+          message="Modal Python SDK 不可用"
+          description="同步通过 Modal SDK 执行，请安装：pip install 'modal>=1.5'"
+        />
       )}
 
       <Card

@@ -125,3 +125,51 @@ test("设置：六 Tab、设置同步面板与任务抽屉空态", async ({ page
   await expect(drawer).toBeVisible();
   await expect(drawer).toContainText("暂无任务");
 });
+
+test("状态页与模型页：SDK 不可用时展示迁移后告警", async ({ page }) => {
+  await page.route("**/api/v1/health/modal-cli", async (route) => {
+    await route.fulfill({
+      json: {
+        found: false,
+        path: "(in-process SDK)",
+        version: null,
+        logged_in: null,
+        latency_ms: null,
+        app_state: null,
+        last_failure: null,
+        last_success_ms: null,
+        error: {
+          category: "not_installed",
+          label: "未安装",
+          message: "modal Python SDK 不可用",
+          retryable: false,
+          next_action: "安装含 Python SDK 的 modal 依赖：pip install 'modal>=1.5'",
+          command: null,
+          exit_code: null,
+        },
+      },
+    });
+  });
+  await page.route("**/api/v1/modal-volume", async (route) => {
+    await route.fulfill({
+      json: {
+        volume: "comfyui-data",
+        credentials_ok: true,
+        cli_found: false,
+        categories: ["checkpoints"],
+      },
+    });
+  });
+
+  await page.goto("/bridge/");
+  await dismissWizard(page);
+  await gotoMenu(page, "系统状态");
+  const statusPanel = page.locator("main");
+  await expect(statusPanel.getByText("SDK 状态", { exact: true })).toBeVisible();
+  await expect(statusPanel.getByText("不可用", { exact: true }).first()).toBeVisible();
+  await expect(statusPanel.getByText(/Modal Python SDK 不可用：安装 `modal>=1\.5`/)).toBeVisible();
+
+  await gotoMenu(page, "模型卷");
+  await expect(page.getByText("Modal Python SDK 不可用", { exact: true })).toBeVisible();
+  await expect(page.getByText(/同步通过 Modal SDK 执行/)).toBeVisible();
+});

@@ -1,6 +1,6 @@
 """Modal 侧 ComfyUI 执行通道客户端（M1）。
 
-- 可用性 = 凭证已配置 + runner_enabled + 应用已部署（`modal app list --json`，缓存 60s）
+- 可用性 = 凭证已配置 + runner_enabled + 应用已部署（SDK AppList，缓存 60s）
   + web_url 已配置。部署状态用后台刷新 + 缓存读取，决策路径不做阻塞 CLI 调用
   （prompt_submit 在决策前 await ensure_state() 保鲜）。
 - Web URL：settings.modal.web_url（modal deploy 输出的固定端点）。
@@ -45,17 +45,15 @@ def invalidate_state() -> None:
 
 
 async def refresh_state() -> str | None:
-    """`modal app list --json` 探测应用部署状态（单飞）。"""
+    """SDK AppList 探测应用部署状态（单飞）。"""
     app_name = get_settings().modal.app_name
     async with _state_lock:
         if time.monotonic() - _state["fetched_ms"] < _STATE_TTL:
             return _state["state"]
         try:
-            out = await modal_cli.run("app", "list", "--json")
-            apps = modal_cli.cli_json_list(out)
-            state = next((a.get("state") for a in apps if a.get("description") == app_name), None)
-        except Exception as exc:  # noqa: BLE001 —— CLI 未装/凭证缺失/网络失败都视为未知
-            logger.warning("modal app list 探测失败: %s", exc)
+            state = await modal_cli.app_status(app_name)
+        except Exception as exc:  # noqa: BLE001 —— SDK/凭证/网络失败都视为未知
+            logger.warning("Modal 应用状态探测失败: %s", exc)
             state = None
         _state.update(fetched_ms=time.monotonic(), state=state)
         return state

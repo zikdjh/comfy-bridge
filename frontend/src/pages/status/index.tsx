@@ -58,7 +58,7 @@ function FailureTable({ rows }: { rows: ModalCliFailure[] }) {
       dataSource={rows}
       pagination={false}
       size="small"
-      locale={{ emptyText: "当前进程还没有 CLI 失败记录" }}
+      locale={{ emptyText: "当前进程还没有 SDK 失败记录" }}
     />
   );
 }
@@ -79,10 +79,10 @@ export default function StatusPage() {
       <Alert
         type={healthy ? "success" : data?.error ? "error" : "warning"}
         showIcon
-        message={healthy ? "Modal CLI 自检通过" : "Modal CLI 需要处理"}
+        message={healthy ? "Modal SDK 自检通过" : "Modal SDK 需要处理"}
         description={
           healthy
-            ? "CLI 可执行、登录态有效；卷、应用和部署操作应可正常使用。"
+            ? "SDK 可加载、登录态有效；卷、应用和账单操作应可正常使用。"
             : data?.error?.next_action ?? "点「重新自检」获取最新状态。"
         }
         action={
@@ -97,16 +97,16 @@ export default function StatusPage() {
         title={
           <Space size={6}>
             <ApiOutlined />
-            Modal CLI
+            Modal SDK
           </Space>
         }
         loading={isLoading && !data}
       >
         <Descriptions column={{ xs: 1, md: 2 }} size="small">
-          <Descriptions.Item label="CLI 状态">
+          <Descriptions.Item label="SDK 状态">
             <Badge
               status={data?.found ? "success" : "error"}
-              text={data?.found ? "已安装" : "未安装"}
+              text={data?.found ? "可用" : "不可用"}
             />
           </Descriptions.Item>
           <Descriptions.Item label="登录状态">
@@ -124,7 +124,7 @@ export default function StatusPage() {
           <Descriptions.Item label="最近成功">
             {data?.last_success_ms ? dayjs(data.last_success_ms).format("YYYY-MM-DD HH:mm:ss") : "—"}
           </Descriptions.Item>
-          <Descriptions.Item label="CLI 路径" span={2}>
+          <Descriptions.Item label="Modal SDK" span={2}>
             <Tooltip title={data?.path ?? ""}>
               <Typography.Text code copyable={!!data?.path} style={{ fontSize: 12 }}>
                 {data?.path ?? "—"}
@@ -140,12 +140,12 @@ export default function StatusPage() {
 
       <Card size="small" title="错误分类说明">
         <Space direction="vertical" size={6}>
-          <span><Tag color="red">未安装</Tag>找不到 modal CLI：安装 `modal` 并确认 PATH。</span>
+          <span><Tag color="red">不可用</Tag>Modal Python SDK 不可用：安装 `modal&gt;=1.5` 后重启桥接器。</span>
           <span><Tag color="orange">未登录</Tag>凭证失效或未登录：`modal token new`，或在设置页填写 token。</span>
           <span><Tag color="gold">网络失败</Tag>只读命令自动快速重试；写命令不会自动重发。</span>
           <span><Tag color="volcano">权限不足</Tag>当前账户缺少资源权限：检查 workspace / token 权限。</span>
           <span><Tag color="geekblue">平台限流</Tag>Modal 控制面限流（rate limit）：只读命令按 1s/4s/10s 退避自动重试，稍候即可恢复。</span>
-          <span><Tag color="purple">状态不确定</Tag>超时或远端未确认：先用 `modal app list` 核对，再决定是否重试。</span>
+          <span><Tag color="purple">状态不确定</Tag>超时或远端未确认：先在 Modal 控制台核对，再决定是否重试。</span>
         </Space>
       </Card>
     </Space>

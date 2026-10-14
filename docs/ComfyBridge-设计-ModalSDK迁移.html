@@ -699,6 +699,24 @@ state = await modal_cli.app_status(app_name)   # "deployed" / "stopped" / None</
       <code>test_version_align</code> 的 <code>test_run_deploy_passes_utf8_cli_env</code>
       因 deploy 保留 CLI 而有意保留，批次 4 确认仍绿。</li>
   </ul>
+  <p><b>实施登记（2026-10-13，批次 3）：</b>
+    <code>app_status</code> 已通过内部
+    <code>client.stub.AppList(api_pb2.AppListRequest(...))</code> 落地，状态映射与
+    Modal 1.5.5 CLI 的 <code>APP_STATE_TO_MESSAGE</code> 八值逐字一致，并增加
+    proto 字段存在性自检；<code>health.py</code> 与 <code>runner/client.py</code>
+    已切 SDK，<code>modal.__version__</code> 取代 <code>modal --version</code>。
+    <code>billing_summary / billing_report</code> 走
+    <code>Workspace.from_context(client=client)</code> 的
+    <code>workspace.billing.*.aio(...)</code>，<code>Decimal</code> 聚合后统一输出
+    4 位小数，120s/20s 与 600s/60s 缓存保留。字段名
+    <code>path/found/cli_found</code> 未改，语义已切 SDK；前端状态页与模型页
+    文案同步为 SDK 口径。<code>deletion.py</code> 与
+    <code>modal_volume.py</code> 中残留的 CLI 存在性守卫已移除。</p>
+  <p>验证：后端 <code>ruff</code> 0 违规、<code>mypy</code> 0 错误；新增
+    状态 golden、应用查询、账单 <code>.aio</code>、Decimal 聚合、缓存与健康检查
+    用例全绿。<code>pytest</code> 全量回归在本机受 Windows 临时目录权限
+    （<code>WinError 5</code>）限制，未依赖 <code>tmp_path</code> 的用例均已执行；
+    真实同月账单对照与多账号切换后的真机冒烟待网络环境验证。</p>
   <h3>批次 4：收尾 + deploy/run 决策</h3>
   <ul>
     <li><b>删除清单（按保留 CLI 路径修正）</b>——可删：<code>run()</code> 命令串入口、
@@ -733,6 +751,12 @@ state = await modal_cli.app_status(app_name)   # "deployed" / "stopped" / None</
       <code>modal deploy</code>；<code>Function.remote()</code> + 日志轮询替代流式作业。</li>
     <li>文档同步：README 依赖注、本文件验收登记。</li>
   </ul>
+  <p><b>实施登记（2026-10-13，批次 4）：</b>
+    CLI 文本层已按清单删除；<code>_popen / cli_env / auth_env</code> 因部署、
+    流式作业与容器管理路径继续保留，不在删除范围。依赖下限收紧为
+    <code>modal&gt;=1.5</code>，以覆盖 SDK 直调所需 API 与状态 proto 契约；
+    <code>deploy</code> / 流式 <code>run</code> / <code>container list/stop</code>
+    的 P2 决策不变。前端依赖与配置文案已同步为 SDK 口径。</p>
 
   <h2 id="c6">6. 风险与对策</h2>
   <table>
@@ -841,6 +865,17 @@ state = await modal_cli.app_status(app_name)   # "deployed" / "stopped" / None</
       容器面板列出 / 停止一次成功——确认批次 4 的删除动作没砍到
       <code>_popen / cli_env / auth_env</code>。</li>
   </ul>
+  <p><b>本地验收登记（2026-10-13，批次 3/4 合并收尾）：</b>
+    后端全量 <code>tests/</code> 为 <code>415 passed, 10 skipped</code>，
+    <code>ruff</code> 0 违规、<code>mypy</code> 84 文件 0 错误；前端
+    <code>tsc --noEmit</code> 通过；<code>pnpm build:embed</code> 在
+    允许子进程的环境下成功。
+    默认 Playwright 核心 e2e 6 项全绿，并新增「SDK 不可用时状态页 / 模型页
+    告警」浏览器回归；手工真机 <code>*-verify.spec.ts</code> 已从默认门禁分离，
+    仅按显式配置运行。wheel 已构建并自检：99 个文件，
+    <code>app/static</code> 与 <code>modal-runner</code> 副本齐全。
+    真实 Modal 卷读写、同月账单对照、多账号切换、deploy / run / container
+    真机路径仍需账号环境完成，不在本次本地收尾范围内。</p>
 
   <h2 id="c8">8. 回滚与兼容</h2>
   <ul>

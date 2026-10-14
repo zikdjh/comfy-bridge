@@ -1,8 +1,8 @@
 """逐项账单对账（规划 §8.3 v2）：本地按次估算 vs Modal 账单明细。
 
 - 本地侧：requests 表按 UTC 日聚合，只含已入账的云端请求（估算口径见 cost 模块）；
-- Modal 侧：官方 CLI `billing report --start --end --show-resources`（app × 日 × 资源
-  真实计量，子进程拉取带缓存，见 modal_billing.report）；其中 GPU（GPU_TYPE 型号）
+- Modal 侧：SDK `Workspace.billing.report`（app × 日 × 资源真实计量，
+  网关内拉取并带缓存，见 modal_billing.report）；其中 GPU（GPU_TYPE 型号）
   资源行与本地估算同口径，CPU/内存/卷等其余资源只在「全资源计量」里呈现；
 - 对比指标：本地估算 vs Modal GPU 计量 vs Modal 全资源计量，比值 = Modal GPU / 本地
   估算——持续偏离 1 说明单价配置（gpu_hourly_rate_usd）或估算口径需要校准；
@@ -16,6 +16,7 @@ import asyncio
 import re
 from datetime import UTC, datetime
 
+from ..core.constants import GPU_TYPE
 from ..logs import store
 from . import modal_billing
 
@@ -23,7 +24,7 @@ _CYCLE_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 NOTE = (
     "对账口径：本地估算 = GPU 单价 × 请求墙钟秒数（含冷启动等待）；Modal GPU = 账单明细中 "
-    f"{modal_billing.GPU_TYPE} 资源的真实计量；日界为 UTC（Modal 账单口径），与控制台逐日图（本地日界）最多差数小时。"
+    f"{GPU_TYPE} 资源的真实计量；日界为 UTC（Modal 账单口径），与控制台逐日图（本地日界）最多差数小时。"
 )
 
 # 比例偏差告警阈值：Modal GPU 计量 / 本地估算 落在 [1/T, T] 之外即提醒校准单价。
@@ -58,7 +59,7 @@ def utc_bounds(cycle: str) -> tuple[int, int, str, str]:
 
 
 async def areconcile(cycle: str) -> dict:
-    """单月对账：本地 SQL + Modal CLI 明细（缓存）；Modal 侧失败不阻塞本地侧展示。"""
+    """单月对账：本地 SQL + Modal SDK 明细（缓存）；Modal 侧失败不阻塞本地侧展示。"""
     start_ms, end_ms, start_date, end_date = utc_bounds(cycle)
     local_totals, local_daily, modal_rep = await asyncio.gather(
         store.acost_totals(start_ms, end_ms),

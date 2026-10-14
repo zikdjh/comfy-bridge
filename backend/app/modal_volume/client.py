@@ -1,35 +1,38 @@
-"""Modal 访问网关：卷操作走 Python SDK，其余命令保留 CLI 子进程。
+"""Modal 访问网关：控制面数据操作走 Python SDK，保留 CLI 的部分继续用子进程。
 
 凭证优先级：设置页保存的 token_id/token_secret（SDK / CLI 都注入
 MODAL_TOKEN_ID/MODAL_TOKEN_SECRET）> ~/.modal.toml。只填了管理台凭证的用户也能直接用。
 
-SDK 卷操作（modal 1.5.x 实测）：
+SDK 操作（modal 1.5.x 实测）：
 - list_dir / list_files / volumes_list / volume_exists 返回既有 CLI 形状的 dict，
   调用方与前端不需要感知 SDK 改造；同时新增整数 size_bytes / mtime_s，供用量统计
   直接累加。
 - put_file / put_many / put_directory / get_file / remove_file / volume_create /
   volume_delete 是类型化写操作入口。上传使用 batch_upload 上下文，错误集中在退出时；
   下载自己补齐父目录与临时文件原子替换语义。
+- app_status / billing_summary / billing_report 复用同一 SDK client 与凭证缓存；
+  应用状态字符串保持 Modal CLI 的既有展示口径，调用方与前端契约不变。
 
-CLI 契约仍保留的部分：app list/logs、billing、container 等继续走子进程。
+CLI 契约仍保留的部分：deploy、modal run 流式作业、container 管理等继续走子进程。
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
-import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 from ..core.config import get_settings
+from ..core.constants import GPU_TYPE
 
 _EXE: str | None = None
 logger = logging.getLogger(__name__)
@@ -45,7 +48,7 @@ _MODAL_IMPORT_FAILED = False
 
 
 def _get_modal():
-    """首次 SDK 调用才 import modal；避免 pytest/CLI-only 启动路径提前加载 SDK。"""
+    """首次 SDK 调用才 import modal；避免 pytest/无 SDK 启动路径提前加载 SDK。"""
     global _modal, _MODAL_IMPORT_FAILED
     if _modal is not None:
         return _modal
@@ -71,42 +74,6 @@ def _get_modal():
     # Modal 1.5+ 的官方开关只影响其自身 gRPC/HTTP 通道，不触碰其他库。
     os.environ.setdefault("MODAL_DISABLE_API_PROXY", "1")
     return _modal
-
-_SIZE_RE = re.compile(r"([\d.]+)\s*([KMGT]?i?B)", re.IGNORECASE)
-
-# CLI quirk：`volume ls --json` 的 filename 对非 ASCII 双重转义（\u98ce 以字面 backslash+u 落地），
-# json.loads 一次后仍是 "\\u98ce" 字面串；真实中文与 ASCII 名不受影响，仅名字含该模式时还原。
-_DOUBLE_ESCAPED = re.compile(r"\\u([0-9a-fA-F]{4})")
-
-
-def _unescape_cli_name(text: str) -> str:
-    if "\\u" not in text:
-        return text
-    try:
-        out = _DOUBLE_ESCAPED.sub(lambda m: chr(int(m.group(1), 16)), text)
-        out.encode("utf-8")  # 代理对拆出的孤立代理项在此失败 → 保留原样
-        return out
-    except (ValueError, OverflowError, UnicodeEncodeError):
-        return text
-_SIZE_UNITS = {
-    "B": 1,
-    "KB": 1024, "KIB": 1024,
-    "MB": 1024**2, "MIB": 1024**2,
-    "GB": 1024**3, "GIB": 1024**3,
-    "TB": 1024**4, "TIB": 1024**4,
-}
-
-
-def parse_size(text: str) -> int:
-    """把 CLI 的人类可读大小（"6 B" / "1.3 KiB" / "1.2 GB"）解析为字节数。"""
-    m = _SIZE_RE.search(text or "")
-    if not m:
-        return 0
-    try:
-        return int(float(m.group(1)) * _SIZE_UNITS[m.group(2).upper()])
-    except (ValueError, KeyError):
-        return 0
-
 
 def _humanize_filesize(value: int) -> str:
     """对齐 modal.cli.volume.humanize_filesize：1024 基，B 无小数、其余一位小数。"""
@@ -148,7 +115,7 @@ def _normalize_entry(entry: Any) -> dict:
     size = int(getattr(entry, "size", 0) or 0)
     mtime = int(getattr(entry, "mtime", 0) or 0)
     return {
-        "name": _unescape_cli_name(rel),
+        "name": rel,
         "type": _entry_type(entry),
         "size": _humanize_filesize(size),
         "mtime": _localized_mtime(mtime),
@@ -160,8 +127,18 @@ def _normalize_entry(entry: Any) -> dict:
 def _exe() -> str:
     global _EXE
     if _EXE is None:
-        _EXE = shutil.which("modal") or "modal"
+        # 优先取当前解释器同目录的 modal.exe（venv Scripts 不保证在 PATH 里，
+        # pip 安装的 CLI 入口与 SDK 同环境，这是最可靠的落点），PATH 兜底。
+        venv_exe = Path(sys.executable).with_name("modal.exe")
+        if not venv_exe.is_file():  # POSIX：无 .exe 后缀
+            venv_exe = Path(sys.executable).with_name("modal")
+        _EXE = str(venv_exe) if venv_exe.is_file() else (shutil.which("modal") or "modal")
     return _EXE
+
+
+def cli_exe() -> str:
+    """modal CLI 可执行路径（deploy 等子进程通道共用，避免各处重复解析漂移）。"""
+    return _exe()
 
 
 _ERROR_LABELS = {
@@ -174,22 +151,13 @@ _ERROR_LABELS = {
     "command": "命令失败",
 }
 
-# 只有明确列出、确实不改远端状态的子命令才允许网络错误自动重试。
-# 例如 image/secret/profile 的写子命令、volume rm/put、app shell 一律不在此列。
-_READ_ONLY_SUBCOMMANDS = {
-    "app": {"list", "logs", "history"},
-    "container": {"list", "logs"},
-    "volume": {"ls", "list", "get"},
-    "billing": {"summary", "report"},
-}
-
-# 最近一次 CLI 失败/成功供全局状态页读取；进程内状态，重启清空。
+# 最近一次 Modal 调用失败/成功供全局状态页读取；进程内状态，重启清空。
 _LAST_FAILURE: dict | None = None
 _LAST_SUCCESS_MS: int | None = None
 
 
 class ModalCliError(RuntimeError):
-    """modal CLI 非零退出 / 未安装，附带可操作分类。"""
+    """Modal SDK / CLI 调用失败，附带可操作分类。"""
 
     def __init__(
         self,
@@ -225,69 +193,14 @@ class ModalCliError(RuntimeError):
 
 
 _DEFAULT_ACTIONS = {
-    "not_installed": "安装 modal CLI 并确认它在 PATH 中：pip install modal",
+    "not_installed": "安装包含 Python SDK 的 modal 依赖：pip install 'modal>=1.5'",
     "not_logged_in": "执行 modal token new，或在「设置 → Modal」填写 token_id/token_secret",
     "network": "检查本机网络、代理和 Modal 服务状态后重试",
     "permission": "确认当前 Modal 账户对该资源有权限，或更换凭证",
     "rate_limited": "Modal 控制面限流中，稍等片刻重试即可；启动期首检会自动退避重试",
-    "uncertain": "先用 modal app list 核对远端状态，确认前不要重复发起写操作",
+    "uncertain": "先在 Modal 控制台核对远端状态，确认前不要重复发起写操作",
     "command": "查看错误详情与命令参数后重试",
 }
-
-
-def _classify_error(message: str, *, timed_out: bool = False) -> tuple[str, bool]:
-    """CLI 文本 → 稳定错误分类；宁可归为 command，也不误判权限/登录。"""
-    low = message.lower()
-    if timed_out:
-        return "uncertain", False
-    if any(marker in low for marker in (
-        "token validation failed",
-        "invalid token",
-        "not authenticated",
-        "not logged in",
-        "no credentials",
-        "credentials not found",
-        "authentication failed",
-        "unauthorized",
-        "401",
-    )):
-        return "not_logged_in", False
-    if any(marker in low for marker in (
-        "forbidden",
-        "permission denied",
-        "access denied",
-        "not authorized",
-        "403",
-    )):
-        return "permission", False
-    if any(marker in low for marker in (
-        "rate limit",
-        "too many requests",
-        "quota exceeded",
-        "429",
-    )):
-        # Modal 控制面限流（VolumeListFiles 等）：窗口为秒级，只读命令按多级退避自动恢复
-        return "rate_limited", True
-    if any(marker in low for marker in (
-        "connection refused",
-        "connection reset",
-        "connection timed out",
-        "timed out",
-        "temporary failure in name resolution",
-        "name or service not known",
-        "network is unreachable",
-        "nodename nor servname",
-        "ssl",
-        "proxy",
-        "server disconnected",
-        "bad gateway",
-        "service unavailable",
-        "connection error",
-        "read timeout",
-        "connect timeout",
-    )):
-        return "network", True
-    return "command", False
 
 
 def _record_failure(error: ModalCliError) -> None:
@@ -304,7 +217,7 @@ def _record_success() -> None:
 
 
 def diagnostics() -> dict:
-    """最近一次 CLI 调用状态（供 /health/modal-cli；不发起子进程）。"""
+    """最近一次 Modal 调用状态（供 /health/modal-cli；不发起 IO）。"""
     return {
         "last_failure": dict(_LAST_FAILURE) if _LAST_FAILURE else None,
         "last_success_ms": _LAST_SUCCESS_MS,
@@ -312,7 +225,7 @@ def diagnostics() -> dict:
 
 
 def _clear_diagnostics() -> None:
-    """测试辅助：清空进程内 CLI 诊断状态。"""
+    """测试辅助：清空进程内 Modal 诊断状态。"""
     global _LAST_FAILURE, _LAST_SUCCESS_MS
     _LAST_FAILURE = None
     _LAST_SUCCESS_MS = None
@@ -344,9 +257,37 @@ def sdk_available() -> bool:
     return True
 
 
-def cli_path() -> str:
-    """返回解析到的 modal CLI 路径；未安装时返回空串。"""
-    return shutil.which("modal") or ""
+def sdk_version() -> str:
+    """返回 Modal Python SDK 版本；不可导入时抛既有类型化错误。"""
+    modal = _get_modal()
+    version = str(getattr(modal, "__version__", "") or "").strip()
+    if not version:
+        error = ModalCliError(
+            "modal SDK 缺少版本信息（请重新安装：pip install 'modal>=1.5'）",
+            category="not_installed",
+        )
+        _record_failure(error)
+        raise error
+    return version
+
+
+def _assert_app_proto_contract() -> None:
+    """启动自检：AppList proto 字段仍在；升级 modal 后尽早暴露非公开 API 变更。"""
+    try:
+        from modal_proto import api_pb2
+
+        fields = api_pb2.AppListResponse.DESCRIPTOR.fields_by_name
+        apps_field = fields.get("apps")
+        app_fields = apps_field.message_type.fields_by_name if apps_field is not None else {}
+        if "apps" not in fields or "description" not in app_fields or "state" not in app_fields:
+            raise AttributeError("AppListResponse.apps / AppStats.description,state 缺失")
+    except Exception as exc:
+        error = ModalCliError(
+            f"modal AppList proto 契约不兼容: {exc}",
+            category="command",
+        )
+        _record_failure(error)
+        raise error from exc
 
 
 def auth_env() -> dict[str, str]:
@@ -425,17 +366,6 @@ def _popen(*args: str, extra_env: dict[str, str] | None = None) -> subprocess.Po
         raise error from exc
 
 
-def _is_read_only(args: tuple[str, ...]) -> bool:
-    """仅查询类子命令可安全重试；写命令由调用方决定是否重发。"""
-    if len(args) < 2:
-        return False
-    return args[1] in _READ_ONLY_SUBCOMMANDS.get(args[0], set())
-
-
-def _should_retry(error: ModalCliError, args: tuple[str, ...]) -> bool:
-    return error.retryable and _is_read_only(args)
-
-
 # 类型化 SDK 操作使用与 CLI 命令串等价的只读白名单；写操作不自动重发。
 _READ_ONLY_OPS = {
     "list_dir",
@@ -478,74 +408,6 @@ _RETRY_DELAYS: dict[str, tuple[float, ...]] = {
     "rate_limited": (1.0, 4.0, 10.0),
 }
 _DEFAULT_RETRY_DELAYS: tuple[float, ...] = (0.5,)
-
-
-async def run(*args: str, timeout: float = 600.0) -> str:
-    """执行 CLI 命令并返回 stdout；阻塞部分放到线程池，避免占用事件循环。
-
-    timeout 兜底防止 CLI 网络僵死把整条决策链路（/health、/prompt 路由）挂死。
-    只读命令按类别退避重试：限流 1s/4s/10s 三次，网络抖动 0.5s 一次；写命令不重发。
-    """
-    attempt = 0
-    while True:
-        try:
-            return await _run_once(*args, timeout=timeout)
-        except ModalCliError as exc:
-            if not _should_retry(exc, args):
-                raise
-            delays = _RETRY_DELAYS.get(exc.category, _DEFAULT_RETRY_DELAYS)
-            if attempt >= len(delays):
-                raise
-            delay = delays[attempt]
-            attempt += 1
-            logger.info(
-                "modal CLI 可重试错误（%s），%.1fs 后第 %d 次重试: %s",
-                exc.category, delay, attempt, exc,
-            )
-            await asyncio.sleep(delay)
-
-
-async def _run_once(*args: str, timeout: float) -> str:
-    proc = _popen(*args)
-    try:
-        out, err = await asyncio.wait_for(asyncio.to_thread(proc.communicate), timeout=timeout)
-    except TimeoutError:
-        proc.kill()
-        error = ModalCliError(
-            f"modal {args[0]} 超时（超过 {timeout:g}s），已终止",
-            category="uncertain",
-            command="modal " + " ".join(args),
-        )
-        _record_failure(error)
-        raise error from None
-    if proc.returncode != 0:
-        msg = (err or out).decode("utf-8", errors="replace").strip()
-        msg = "\n".join(  # 兜底：剥掉 CLI 的 DeprecationWarning 噪音行
-            line for line in msg.splitlines()
-            if "DeprecationWarning" not in line and "set_event_loop_policy" not in line
-        ).strip()
-        raw = msg[:400] or f"modal {args[0]} 退出码 {proc.returncode}"
-        category, retryable = _classify_error(raw)
-        error = ModalCliError(
-            raw,
-            category=category,
-            retryable=retryable,
-            command="modal " + " ".join(args),
-            exit_code=proc.returncode,
-        )
-        _record_failure(error)
-        raise error
-    _record_success()
-    return out.decode("utf-8", errors="replace")
-
-
-def cli_json_list(text: str) -> list:
-    """从 CLI stdout 提取 JSON 数组：输出可能混有 banner/日志行，定位首个 '[' 截取；无则空列表。
-
-    JSON 本身不合法时照常抛 JSONDecodeError，由调用方的既有异常路径处理。
-    """
-    start = text.find("[")
-    return json.loads(text[start:]) if start != -1 else []
 
 
 async def _get_client():
@@ -643,6 +505,12 @@ _SDK_ERROR_MAP = {
     "ConnectionError": "network",
     "TimeoutError": "network",
     "VolumeUploadTimeoutError": "network",
+    "ServiceError": "network",
+    "InternalError": "network",
+    "DataLossError": "network",
+    "UnimplementedError": "command",
+    "RemoteError": "command",
+    "WorkspaceManagementError": "command",
     "NotFoundError": "uncertain",
     "FileNotFoundError": "uncertain",
     "AlreadyExistsError": "command",
@@ -955,3 +823,190 @@ async def volume_delete(name: str, *, timeout: float = 600.0) -> None:
     await _run_sdk_write("volume_delete", f"删除数据卷 {name}", timeout, _do)
     _forget_volume(name)
     _record_success()
+
+
+# Modal CLI app list 的展示口径；app_state 是前端硬契约，映射必须逐字一致。
+_APP_STATE_NAMES = {
+    0: "unknown",
+    1: "ephemeral",
+    2: "ephemeral (detached)",
+    3: "deployed",
+    4: "stopping...",
+    5: "stopped",
+    6: "initializing...",
+    7: "disabled",
+    8: "ephemeral (detached)",
+    9: "unknown",
+}
+
+
+def _app_state_name(value: Any) -> str:
+    raw = getattr(value, "value", value)
+    try:
+        return _APP_STATE_NAMES.get(int(raw), "unknown")
+    except (TypeError, ValueError):
+        return "unknown"
+
+
+async def app_status(app_name: str, *, timeout: float = 20.0) -> str | None:
+    """按应用名返回 Modal CLI 同口径状态；不存在返回 None。
+
+    Modal SDK 没有公开的 App.objects.list() API，这里沿用 CLI 同源的内部 stub
+    （AppListRequest/AppListResponse），升级 modal 时由状态 golden 用例暴露 proto 变更。
+    """
+    _assert_app_proto_contract()
+
+    async def _call() -> str | None:
+        try:
+            from modal_proto import api_pb2
+
+            client = await _get_client()
+            env_name = get_settings().modal.environment.strip()
+            response = await asyncio.wait_for(
+                client.stub.AppList(api_pb2.AppListRequest(environment_name=env_name)),
+                timeout=timeout,
+            )
+        except ModalCliError:
+            raise
+        except TimeoutError as exc:
+            error = ModalCliError(f"查询应用状态超时（超过 {timeout:g}s）", category="uncertain")
+            _record_failure(error)
+            raise error from exc
+        except Exception as exc:
+            error = _map_sdk_error(exc, "查询应用状态")
+            _record_failure(error)
+            raise error from exc
+        state = next(
+            (_app_state_name(item.state) for item in response.apps if item.description == app_name),
+            None,
+        )
+        _record_success()
+        return state
+
+    return await _with_retry("app_status", _call)
+
+
+def _decimal_value(value: Any) -> Decimal | None:
+    """Decimal / 字符串 / 数值 → Decimal；无法换算返回 None。"""
+    try:
+        return Decimal(str(value))
+    except (TypeError, ValueError, ArithmeticError):
+        return None
+
+
+def _decimal_float(value: Any) -> float | None:
+    """Decimal / 字符串 / 数值 → 4 位小数 float；无法换算返回 None。"""
+    number = _decimal_value(value)
+    return round(float(number), 4) if number is not None else None
+
+
+async def billing_summary(cycle: str, *, timeout: float = 45.0) -> dict:
+    """单月账单摘要（Workspace.billing.summary），返回 modal_billing 的现有形状。"""
+    async def _call() -> dict:
+        try:
+            modal = _get_modal()
+            client = await _get_client()
+            workspace = modal.Workspace.from_context(client=client)
+            summary = await asyncio.wait_for(
+                workspace.billing.summary.aio(cycle=cycle),
+                timeout=timeout,
+            )
+        except ModalCliError:
+            raise
+        except TimeoutError as exc:
+            error = ModalCliError(f"查询账单摘要超时（超过 {timeout:g}s）", category="uncertain")
+            _record_failure(error)
+            raise error from exc
+        except Exception as exc:
+            error = _map_sdk_error(exc, "查询账单摘要")
+            _record_failure(error)
+            raise error from exc
+
+        adjustments = summary.adjustments or {}
+        breakdown: dict[str, float] = {}
+        for key, value in (summary.metered_cost_breakdown or {}).items():
+            number = _decimal_float(value)
+            if number:
+                breakdown[key] = number
+        data = {
+            "ok": True,
+            "metered_cost_usd": _decimal_float(summary.metered_cost),
+            "billed_cost_usd": _decimal_float(summary.billed_cost),
+            "credits_applied_usd": abs(_decimal_float(adjustments.get("credits")) or 0.0),
+            "plan_cost_usd": _decimal_float(adjustments.get("plan_cost")) or 0.0,
+            "breakdown": dict(sorted(breakdown.items(), key=lambda kv: -kv[1])),
+        }
+        _record_success()
+        return data
+
+    return await _with_retry("billing_summary", _call)
+
+
+async def billing_report(start: datetime, end: datetime, *, timeout: float = 45.0) -> dict:
+    """账单明细聚合（Workspace.billing.report），返回现有 resources/apps/daily 形状。"""
+    async def _call() -> dict:
+        try:
+            modal = _get_modal()
+            client = await _get_client()
+            workspace = modal.Workspace.from_context(client=client)
+            rows = await asyncio.wait_for(
+                workspace.billing.report.aio(start=start, end=end, resolution="d"),
+                timeout=timeout,
+            )
+        except ModalCliError:
+            raise
+        except TimeoutError as exc:
+            error = ModalCliError(f"查询账单明细超时（超过 {timeout:g}s）", category="uncertain")
+            _record_failure(error)
+            raise error from exc
+        except Exception as exc:
+            error = _map_sdk_error(exc, "查询账单明细")
+            _record_failure(error)
+            raise error from exc
+
+        daily: dict[str, dict[str, Decimal]] = {}
+        resources: dict[str, Decimal] = {}
+        apps: dict[str, Decimal] = {}
+        for row in rows:
+            interval = getattr(row, "interval_start", None)
+            date = interval.strftime("%Y-%m-%d") if isinstance(interval, datetime) else ""
+            cost_by_resource = getattr(row, "cost_by_resource", None) or {}
+            for resource, value in cost_by_resource.items():
+                usd = _decimal_value(value) or Decimal(0)
+                if date:
+                    bucket = daily.setdefault(
+                        date, {"gpu_usd": Decimal(0), "total_usd": Decimal(0)}
+                    )
+                    bucket["total_usd"] += usd
+                    if resource == GPU_TYPE:
+                        bucket["gpu_usd"] += usd
+                resources[resource] = resources.get(resource, Decimal(0)) + usd
+            app = str(getattr(row, "description", "") or getattr(row, "object_id", "") or "未知应用")
+            row_total = sum(
+                (_decimal_value(value) or Decimal(0)) for value in cost_by_resource.values()
+            )
+            apps[app] = apps.get(app, Decimal(0)) + row_total
+        data = {
+            "ok": True,
+            "gpu_usd": round(float(resources.get(GPU_TYPE, Decimal(0))), 4),
+            "total_usd": round(float(sum(resources.values(), Decimal(0))), 4),
+            "resources": {
+                k: round(float(v), 4)
+                for k, v in sorted(resources.items(), key=lambda kv: -kv[1])
+            },
+            "apps": [
+                {"name": k, "usd": round(float(v), 4)}
+                for k, v in sorted(apps.items(), key=lambda kv: -kv[1])
+            ],
+            "daily": {
+                d: {
+                    "gpu_usd": round(float(v["gpu_usd"]), 4),
+                    "total_usd": round(float(v["total_usd"]), 4),
+                }
+                for d, v in sorted(daily.items())
+            },
+        }
+        _record_success()
+        return data
+
+    return await _with_retry("billing_report", _call)

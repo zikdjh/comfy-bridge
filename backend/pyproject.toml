@@ -18,9 +18,10 @@ dependencies = [
     "pydantic>=2.7",
     # 依赖预检静态解析 requirements/specifier；不依赖 pip 内部实现
     "packaging>=24",
-    # modal 仅作子进程调用（CLI：volume/app/container；账单：子进程内用其 gRPC 客户端查 WorkspaceBillingSummary），
-    # 后端主进程不 import 其 SDK（副作用重：事件循环策略、日志钩子）
-    "modal>=0.70",
+    # modal SDK 直调控制面数据（卷读写 / 应用状态 / 账单），
+    # deploy、流式 modal run、container list/stop 仍走 CLI 子进程。
+    # 版本 pin：app_status 依赖内部 AppList proto，升级需过状态 golden 与 proto 自检。
+    "modal>=1.5",
     # modal 1.6+ 检测到系统代理时硬要求 python-socks（即 modal[api-proxy-support]），
     # 缺失直接拒绝连接（Could not connect to the Modal server）；1.5 不需要但装了无害
     "python-socks>=2.0",

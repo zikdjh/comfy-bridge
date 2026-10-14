@@ -184,29 +184,16 @@ def test_summary_shape(tmp_db, monkeypatch):
     assert "note" in s
 
 
-# ---------------------------------------------------------------- Modal 账单 CLI 子进程
+# ---------------------------------------------------------------- Modal 账单 SDK
 
-# modal billing summary --json 实测输出（1.5.5；Decimal 串 + snake_case 键）
-_CLI_JSON = b'''{
-  "metered_cost": "5.96977888",
-  "billed_cost": "0E-8",
-  "adjustments": {"plan_cost": "0E-8", "credits": "-5.50000000"},
-  "metered_cost_breakdown": {"llm_tokens": "0E-8", "deployed_apps": "4.38552567", "volumes": "0.46977888"}
-}'''
-
-
-class _FakeProc:
-    def __init__(self, payload: bytes = b"", err: bytes = b"", returncode: int = 0):
-        self._payload = payload
-        self._err = err
-        self.returncode = returncode
-        self.killed = False
-
-    async def communicate(self):
-        return self._payload, self._err
-
-    def kill(self):
-        self.killed = True
+_SUMMARY = {
+    "ok": True,
+    "metered_cost_usd": 5.9698,
+    "billed_cost_usd": 0.0,
+    "credits_applied_usd": 5.5,
+    "plan_cost_usd": 0.0,
+    "breakdown": {"deployed_apps": 4.3855, "volumes": 0.4698},
+}
 
 
 @pytest.fixture()
@@ -216,53 +203,39 @@ def fresh_billing_cache():
     modal_billing._cache.update(at=-1e9, data=None)
 
 
-def test_parse_output_cli_shape():
-    data = modal_billing.parse_output(_CLI_JSON)
-    assert data["ok"] is True
-    assert data["cycle"] == modal_billing.current_cycle()
-    assert data["period_start"].endswith("-01")
-    assert data["metered_cost_usd"] == pytest.approx(5.9698)
-    assert data["billed_cost_usd"] == 0.0
-    assert data["credits_applied_usd"] == pytest.approx(5.5)  # 负数调整取绝对值
-    assert data["breakdown"] == {"deployed_apps": 4.3855, "volumes": 0.4698}  # 0 值剔除、按额降序
-
-
-def test_parse_output_garbage():
-    bad = modal_billing.parse_output(b"<html>not json")
-    assert bad["ok"] is False and bad["error"]
-    assert modal_billing.parse_output(b"")["ok"] is False
-
-
 async def test_fetch_success_then_cache(monkeypatch, fresh_billing_cache):
     calls = {"n": 0}
 
-    async def fake_exec(*a, **kw):
+    async def fake_summary(cycle, *, timeout=45.0):
         calls["n"] += 1
-        return _FakeProc(payload=_CLI_JSON)
+        assert cycle == modal_billing.current_cycle()
+        return dict(_SUMMARY)
 
-    monkeypatch.setattr(modal_billing.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(modal_billing.modal_cli, "billing_summary", fake_summary)
     first = await modal_billing.fetch()
     assert first["ok"] is True and first["metered_cost_usd"] == pytest.approx(5.9698)
+    assert first["cycle"] == modal_billing.current_cycle()
+    assert first["period_start"].endswith("-01")
     second = await modal_billing.fetch()
-    assert second is first and calls["n"] == 1  # 120s 内命中缓存，不重复拉 CLI
+    assert second is first and calls["n"] == 1  # 120s 内命中缓存，不重复拉 SDK
 
 
-async def test_fetch_cli_error_strips_noise_and_short_caches(monkeypatch, fresh_billing_cache):
+async def test_fetch_sdk_error_short_caches(monkeypatch, fresh_billing_cache):
     calls = {"n": 0}
 
-    async def fake_exec(*a, **kw):
+    async def fake_summary(cycle, *, timeout=45.0):
         calls["n"] += 1
-        return _FakeProc(
-            err=b"DeprecationWarning: old policy\n  asyncio.set_event_loop_policy(...)\nToken validation failed",
-            returncode=1,
+        raise modal_billing.modal_cli.ModalCliError(
+            "Token validation failed",
+            category="not_logged_in",
         )
 
-    monkeypatch.setattr(modal_billing.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(modal_billing.modal_cli, "billing_summary", fake_summary)
     first = await modal_billing.fetch()
     assert first["ok"] is False
-    assert "Token validation failed" in first["error"] and "DeprecationWarning" not in first["error"]
+    assert "Token validation failed" in first["error"]
     await modal_billing.fetch()
-    assert calls["n"] == 1  # 失败结果也短暂缓存（20s），前端 30s 轮询不会连续拉 CLI
+    assert calls["n"] == 1  # 失败结果也短暂缓存（20s），前端 30s 轮询不会连续拉 SDK
 
 
 async def test_afull_summary_includes_modal(monkeypatch, tmp_db):
@@ -467,32 +440,18 @@ async def test_areconcile_ratio_at_warn_boundary_not_flagged(monkeypatch, tmp_db
     assert data["diverged"] is False
 
 
-# ---------------------------------------------------------------- 报表 v2：账单明细 CLI
-_REPORT_JSON = b'''[
-  {"object_id": "ap-1", "description": "comfyui-l40s", "environment": "main",
-   "interval_start": "2026-10-01T00:00:00", "resource": "L40S", "cost": "0.72782441"},
-  {"object_id": "ap-1", "description": "comfyui-l40s", "environment": "main",
-   "interval_start": "2026-10-01T00:00:00", "resource": "Memory", "cost": "0.09555028"},
-  {"object_id": "ap-1", "description": "comfyui-l40s", "environment": "main",
-   "interval_start": "2026-10-02T00:00:00", "resource": "CPU", "cost": "0.0700"}
-]'''
-
-
-def test_parse_report_aggregates():
-    data = modal_billing.parse_report(_REPORT_JSON)
-    assert data["ok"] is True
-    assert data["gpu_usd"] == pytest.approx(0.7278)  # 仅 GPU 资源行与本地估算同口径
-    assert data["total_usd"] == pytest.approx(0.8934)
-    assert list(data["resources"]) == ["L40S", "Memory", "CPU"]  # 按额降序
-    assert set(data["daily"]) == {"2026-10-01", "2026-10-02"}
-    assert data["daily"]["2026-10-01"]["gpu_usd"] == pytest.approx(0.7278)
-    assert data["apps"] == [{"name": "comfyui-l40s", "usd": pytest.approx(0.8934)}]
-
-
-def test_parse_report_garbage():
-    assert modal_billing.parse_report(b"<html>")["ok"] is False
-    empty = modal_billing.parse_report(b"")
-    assert empty["ok"] is True and empty["gpu_usd"] == 0.0  # 空区间 = 无用量
+# ---------------------------------------------------------------- 报表 v2：账单明细 SDK
+_REPORT = {
+    "ok": True,
+    "gpu_usd": 0.7278,
+    "total_usd": 0.8934,
+    "resources": {"L40S": 0.7278, "Memory": 0.0956, "CPU": 0.07},
+    "apps": [{"name": "comfyui-l40s", "usd": 0.8934}],
+    "daily": {
+        "2026-10-01": {"gpu_usd": 0.7278, "total_usd": 0.8234},
+        "2026-10-02": {"gpu_usd": 0.0, "total_usd": 0.07},
+    },
+}
 
 
 @pytest.fixture()
@@ -503,15 +462,17 @@ def fresh_report_cache():
 
 
 async def test_report_fetch_then_cache(monkeypatch, fresh_report_cache):
+    from datetime import UTC, datetime
+
     calls = {"n": 0}
 
-    async def fake_exec(*a, **kw):
+    async def fake_report(start, end, *, timeout=45.0):
         calls["n"] += 1
-        args = list(a)
-        assert "--show-resources" in args and "--json" in args
-        return _FakeProc(payload=_REPORT_JSON)
+        assert start == datetime.fromisoformat("2026-09-01").replace(tzinfo=UTC)
+        assert end == datetime.fromisoformat("2026-10-01").replace(tzinfo=UTC)
+        return dict(_REPORT)
 
-    monkeypatch.setattr(modal_billing.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(modal_billing.modal_cli, "billing_report", fake_report)
     first = await modal_billing.report("2026-09-01", "2026-10-01")
     assert first["ok"] is True
     second = await modal_billing.report("2026-09-01", "2026-10-01")

@@ -121,7 +121,7 @@ export function SettingsSyncTab() {
             showIcon
             style={{ marginBottom: 12 }}
             message="云端设置不可读"
-            description={data.cloud_error ?? "请检查 Modal CLI 与凭证配置"}
+            description={data.cloud_error ?? "请检查 Modal SDK 与凭证配置"}
           />
         )}
         {data && data.cloud_available && !data.cloud_exists && (

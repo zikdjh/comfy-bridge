@@ -1,6 +1,6 @@
 """模型卷同步 API：本地模型目录 ↔ Modal 数据卷（comfyui-data）的对比与同步。
 
-- GET  /api/v1/modal-volume            元信息：卷名 / 分类 / 凭证与 CLI 可用性
+- GET  /api/v1/modal-volume            元信息：卷名 / 分类 / 凭证与 SDK 可用性
 - GET  /api/v1/modal-volume/overview   指定分类的本地+云端文件并集对比
 - POST /api/v1/modal-volume/sync       创建同步作业（push=上传 / pull=下载）
 - GET  /api/v1/modal-volume/jobs       同步作业列表（内存态）
@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import asyncio
-import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
@@ -39,7 +38,7 @@ async def meta() -> dict:
     return {
         "volume": client.volume_name(),
         "credentials_ok": modal_configured(),
-        "cli_found": shutil.which("modal") is not None,
+        "cli_found": client.sdk_available(),
         "categories": sorted(model_dirs_resolved()),
     }
 
@@ -52,8 +51,13 @@ async def overview(category: str = Query("checkpoints")) -> dict:
 
     if not modal_configured():
         return {"ok": False, "reason": "未配置 Modal 凭证（设置 → Modal）", "category": category, "rows": []}
-    if shutil.which("modal") is None:
-        return {"ok": False, "reason": "本机未找到 modal CLI", "category": category, "rows": []}
+    if not client.sdk_available():
+        return {
+            "ok": False,
+            "reason": "modal Python SDK 不可用（请安装：pip install 'modal>=1.5'）",
+            "category": category,
+            "rows": [],
+        }
 
     local_dir = Path(resolved[category])
 

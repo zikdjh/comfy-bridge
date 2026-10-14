@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 
 from fastapi import APIRouter
@@ -12,14 +13,15 @@ from ...modal_volume import client as modal_cli
 from ...models_mgr import cloud_index
 from ...runner import client as runner_client
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
 def _cli_status() -> dict:
-    path = modal_cli.cli_path()
     return {
-        "found": bool(path),
-        "path": path or None,
+        "found": modal_cli.sdk_available(),
+        "path": "(in-process SDK)",
         "version": None,
         "logged_in": None,
         "latency_ms": None,
@@ -30,33 +32,29 @@ def _cli_status() -> dict:
 
 @router.get("/health/modal-cli")
 async def modal_cli_health() -> dict:
-    """modal CLI 启动自检：版本、登录态、网络延迟、应用状态与最近失败。"""
+    """Modal SDK 启动自检：版本、登录态、网络延迟、应用状态与最近失败。"""
     status = _cli_status()
     if not status["found"]:
         error = modal_cli.ModalCliError(
-            "找不到 modal CLI（请安装：pip install modal，并确认在 PATH 中）",
+            "modal Python SDK 不可用（请安装：pip install 'modal>=1.5'）",
             category="not_installed",
         )
         return {**status, "error": error.to_dict(), **modal_cli.diagnostics()}
 
     started = time.monotonic()
     try:
-        status["version"] = (await modal_cli.run("--version", timeout=15.0)).strip()
+        status["version"] = f"modal {modal_cli.sdk_version()}"
     except modal_cli.ModalCliError as exc:
         status["error"] = exc.to_dict()
         return {**status, **modal_cli.diagnostics()}
 
     try:
-        out = await modal_cli.run("app", "list", "--json", timeout=20.0)
-        apps = modal_cli.cli_json_list(out)
         app_name = get_settings().modal.app_name
-        status["app_state"] = next(
-            (item.get("state") for item in apps if item.get("description") == app_name),
-            None,
-        )
+        status["app_state"] = await modal_cli.app_status(app_name)
         status["logged_in"] = True
         status["latency_ms"] = round((time.monotonic() - started) * 1000)
     except modal_cli.ModalCliError as exc:
+        logger.exception("app_status 自检失败详情（临时诊断）")
         status["error"] = exc.to_dict()
         if exc.category == "not_logged_in":
             status["logged_in"] = False
