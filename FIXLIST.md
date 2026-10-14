@@ -1141,3 +1141,44 @@ P3-1 遗留的「mypy 尚未形成发布门禁」项闭环。
   `destroyOnClose` 全部替换为 `destroyOnHidden`（antd 5.29.3 支持）。
 - **验证**：`rg destroyOnClose frontend/src` 零命中；
   `pnpm build`（tsc --noEmit + vite）0 错误，3719 模块构建通过。
+
+## 三十八、SDK 迁移真机回归：CLI 解析缺陷修复与全量验收（2026-10-14）
+
+`feature/modal-sdk-migration` 批次3 全量真机回归（管理台点击 + ComfyUI 界面 + 云端生图 + 队列监控），
+发现并当场修复 1 个 P1 缺陷，登记 2 个遗留；云端消耗 $0.0405。
+
+### 1. P1 已修：CLI 子进程解析丢失 venv 相对路径
+
+- **症状**：镜像重建/版本对齐秒失败「无法启动 modal CLI：[WinError 2]」。根因是迁移把
+  CLI 子进程解析写成两处独立的 `shutil.which("modal")`（`modal_volume/client.py::_exe`
+  与 `nodes_mgr/deploy.py::run_deploy`），而 venv `Scripts` 目录不保证在 PATH 里——
+  当日卸载/重装 venv 内 modal 包后该场景必然化，真机暴露。与 R2-01「双份逻辑漂移」同类。
+- **修复**：`_exe()` 先取 `sys.executable` 同目录的 `modal.exe`（pip CLI 入口与 SDK
+  同环境，最可靠落点），PATH 兜底；新增公共 `cli_exe()`，`deploy.py` 复用之（删本地
+  `shutil.which`），解析逻辑收敛回一处。
+- **验证**：镜像重建重跑 → deploy 成功（App deployed in 20.4s，固化 3 节点）；
+  门禁 ruff 0 / mypy 84 文件 0 错误 / pytest **415 passed, 10 skipped** / tsc 0。
+
+### 2. 真机验收通过面
+
+- 节点链路：rgthree-comfy（gitcode 镜像克隆，48 节点本地注册）→ 管理台差异矩阵
+  「安装到云端」UI 点击同步 → 云端镜像重建 → 冷启动拾取 → 工作流注入 `Seed (rgthree)`
+  经桥接提交云端 → **#159 done（GPU 74.8s / $0.0405）**，图快照确认节点在云端执行图中，
+  产物回传媒体库（`bridge_fulltest_rgthree_20261014_00001_.png`）。
+- UI 点击覆盖：管理台（仪表盘/节点差异矩阵/同步弹窗/任务抽屉/媒体库）+ ComfyUI 界面
+  （工作流面板/运行/队列）；队列进度监控：仪表盘运行中任务表实时流转 + API 交叉验证。
+- 隐私确认（P2-5）真机复验：云端首提交 409 `privacy_confirmation_required`，
+  带 `X-Bridge-Privacy-Confirmed: 1` 重试放行。
+
+### 3. 遗留登记（未修）
+
+- **P2｜`app_status` 偶发失败**：请求路径偶报「RPC made outside of task context」，
+  错误文案泄漏 anyio 任务 repr（< 300 字符截断显示）。启动时序相关，复现条件未锁定；
+  新进程首探即过的场景已多次观察。已在 `/health/modal-cli` 挂 `logger.exception`
+  诊断位，复现时取全栈再定修法（方向：stub 调用统一走与其它 SDK 操作一致的 awaitable 形态）。
+- **P3｜API 格式工作流经侧边栏打开行为存疑**：双击 `fulltest-rgthree-cloud.json`
+  （API 格式）后画布显示的是 krea2-文生图，WF-02「API 格式加载」结论需复核；
+  改用工作流注入方式完成本轮验证，不影响链路结论。
+- **环境漂移提醒**（非缺陷）：本地 ComfyUI 自动升级 0.40.0 与云端 pin 0.39.2 漂移，
+  节点页已正确告警；0.40 下旧工作流 clip 配置（lumina2）与 VAE 通道不匹配致本地出图
+  失败两次（#157/#158，工作流配置问题）。建议尽快在节点页执行「对齐云端 → v0.40.0」。
