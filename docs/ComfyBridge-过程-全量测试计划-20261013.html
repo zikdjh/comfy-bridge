@@ -78,6 +78,13 @@
 </nav>
 <main>
 
+<div class="note">
+  <strong>执行时实时记录：</strong>打开
+  <a href="ComfyBridge-过程-真机测试执行记录.html">ComfyBridge-过程-真机测试执行记录.html</a>，
+  逐项填写状态、实际结果与证据。该页内置本计划全部 102 项用例与 live 冒烟 10 项，
+  数据自动保存在浏览器本地，可导出 JSON/Markdown/CSV 或导入续测。
+</div>
+
 <h2 id="c1">1. 测试定位与入口条件</h2>
 <blockquote>
   <p>本计划用于发布前全量真机回归。默认目标是确认「SDK 迁移后的控制面 + 保留 CLI 运维面 + ComfyUI 出图数据面」同时可用。</p>
@@ -485,6 +492,11 @@ pnpm exec playwright test</code></pre>
 </ul>
 
 <h2 id="c12">12. 执行记录</h2>
+<div class="note">
+  <p>实时记录入口：<a href="ComfyBridge-过程-真机测试执行记录.html">ComfyBridge-过程-真机测试执行记录.html</a>。</p>
+  <p>该页按本计划用例 ID 逐项记录状态、实际结果、证据、缺陷备注与时间戳，支持筛选、导入续测，
+  并可导出 JSON/Markdown/CSV 归档到发布验收记录。</p>
+</div>
 <table>
   <thead><tr><th>日期</th><th>阶段</th><th>通过/总数</th><th>关键证据</th><th>问题</th><th>执行人</th></tr></thead>
   <tbody>
