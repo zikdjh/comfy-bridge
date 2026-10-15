@@ -26,6 +26,9 @@ backend/pkg_assets/
 .env
 *.local.toml
 
+# IDE
+.idea/
+
 # 运行杂物
 tmp/
 tmp-*.log

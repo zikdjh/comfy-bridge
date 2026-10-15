@@ -1,5 +1,6 @@
 """Modal SDK 网关：形状归一、错误映射、状态/账单与 CLI 保留面。"""
 
+import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -393,7 +394,11 @@ async def test_app_status_matches_app_and_environment(monkeypatch):
     captured: dict = {}
 
     class _Stub:
-        async def AppList(self, request):
+        # retry/timeout 必须显式传入：RPC 级 deadline 是 app_status 的契约之一，
+        # 裸调 stub（不带 kwargs）的回归会在此 TypeError 失败。
+        async def AppList(self, request, *, retry, timeout):
+            captured["retry"] = retry
+            captured["timeout"] = timeout
             return _Response()
 
     class _Response:
@@ -416,18 +421,30 @@ async def test_app_status_matches_app_and_environment(monkeypatch):
         modal = _ModalCfg()
 
     def fake_request(**kwargs):
-        captured.update(kwargs)
+        captured["request_kwargs"] = dict(kwargs)
         return object()
 
     class _Proto:
         AppListRequest = staticmethod(fake_request)
 
+    def fake_blocking():
+        # asyncio.run 只能在线程里跑：若 app_status 退化为在事件循环上直接调用
+        # 同步入口（阻塞 loop），这里会抛 "cannot be called from a running event
+        # loop"，从而守住「RPC 必须经 to_thread 送入 SDK 循环」的调用形态。
+        def _run(client, request, *, timeout):
+            return asyncio.run(client.stub.AppList(request, retry=None, timeout=timeout))
+
+        return _run
+
     monkeypatch.setitem(__import__("sys").modules, "modal_proto", type("P", (), {"api_pb2": _Proto})())
     monkeypatch.setattr(modal_cli, "_get_client", fake_client)
+    monkeypatch.setattr(modal_cli, "_app_list_blocking", fake_blocking)
     monkeypatch.setattr(modal_cli, "get_settings", lambda: _Settings())
     monkeypatch.setattr(modal_cli, "_assert_app_proto_contract", lambda: None)
     assert await modal_cli.app_status("comfyui-l40s") == "stopped"
-    assert captured == {"environment_name": "main"}
+    assert captured["retry"] is None
+    assert captured["timeout"] == 20.0
+    assert captured["request_kwargs"] == {"environment_name": "main"}
 
 
 async def test_billing_summary_uses_aio_and_decimal(monkeypatch):

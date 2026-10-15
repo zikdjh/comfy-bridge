@@ -848,11 +848,39 @@ def _app_state_name(value: Any) -> str:
         return "unknown"
 
 
+_APP_LIST_BLOCKING: Any = None
+
+
+async def _app_list_on_sdk_loop(client: Any, request: Any, *, timeout: float) -> Any:
+    """AppList RPC 本体：必须运行在 modal SDK 的 synchronizer 循环上。"""
+    return await client.stub.AppList(request, retry=None, timeout=timeout)
+
+
+def _app_list_blocking():
+    """把 AppList 调用包成同步入口，经 synchronicity 送进 SDK 自己的事件循环。
+
+    modal.Client.from_credentials.aio 把 client 打开在 SDK synchronizer 的后台
+    循环上，账单 / 卷等 .aio 操作也都提交到该循环执行。若在调用方循环（uvicorn）
+    上裸调 client.stub.AppList，会与 client 的取消上下文 / gRPC 连接跨事件循环
+    共享：SDK 打 "RPC request ... made outside of task context" 告警，且首个
+    RPC 所建连接被另一循环复用时偶发 "attached to a different loop" 类失败
+    （FIXLIST 三十八 P2）。modal CLI 的 `modal app list` 同样经 create_blocking
+    通道执行 AppList，这里与其保持一致。
+    """
+    global _APP_LIST_BLOCKING
+    if _APP_LIST_BLOCKING is None:
+        from modal._utils.async_utils import synchronizer
+
+        _APP_LIST_BLOCKING = synchronizer.create_blocking(_app_list_on_sdk_loop)
+    return _APP_LIST_BLOCKING
+
+
 async def app_status(app_name: str, *, timeout: float = 20.0) -> str | None:
     """按应用名返回 Modal CLI 同口径状态；不存在返回 None。
 
     Modal SDK 没有公开的 App.objects.list() API，这里沿用 CLI 同源的内部 stub
-    （AppListRequest/AppListResponse），升级 modal 时由状态 golden 用例暴露 proto 变更。
+    （AppListRequest/AppListResponse），升级 modal 时由状态 golden 用例暴露 proto
+    变更。RPC 经 _app_list_blocking 在 SDK synchronizer 循环上执行（见其注释）。
     """
     _assert_app_proto_contract()
 
@@ -862,9 +890,12 @@ async def app_status(app_name: str, *, timeout: float = 20.0) -> str | None:
 
             client = await _get_client()
             env_name = get_settings().modal.environment.strip()
+            request = api_pb2.AppListRequest(environment_name=env_name)
+            # RPC 自带 deadline（retry=None 时才允许设 timeout）；外层 wait_for
+            # 只兜底线程 join（SDK 循环卡死时的上限），悬挂请求不再占线程。
             response = await asyncio.wait_for(
-                client.stub.AppList(api_pb2.AppListRequest(environment_name=env_name)),
-                timeout=timeout,
+                asyncio.to_thread(_app_list_blocking(), client, request, timeout=timeout),
+                timeout=timeout + 10.0,
             )
         except ModalCliError:
             raise

@@ -54,7 +54,7 @@ async def modal_cli_health() -> dict:
         status["logged_in"] = True
         status["latency_ms"] = round((time.monotonic() - started) * 1000)
     except modal_cli.ModalCliError as exc:
-        logger.exception("app_status 自检失败详情（临时诊断）")
+        logger.exception("app_status 自检失败详情")
         status["error"] = exc.to_dict()
         if exc.category == "not_logged_in":
             status["logged_in"] = False

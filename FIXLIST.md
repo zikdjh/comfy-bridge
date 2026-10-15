@@ -1182,3 +1182,41 @@ P3-1 遗留的「mypy 尚未形成发布门禁」项闭环。
 - **环境漂移提醒**（非缺陷）：本地 ComfyUI 自动升级 0.40.0 与云端 pin 0.39.2 漂移，
   节点页已正确告警；0.40 下旧工作流 clip 配置（lumina2）与 VAE 通道不匹配致本地出图
   失败两次（#157/#158，工作流配置问题）。建议尽快在节点页执行「对齐云端 → v0.40.0」。
+
+## 三十九、SDK 迁移遗留 P2 闭环：AppList 跨事件循环（2026-10-14）
+
+### 1. P2 已修：app_status 偶发失败
+
+- **根因**：`modal.Client.from_credentials.aio()` 将 gRPC client 打开在 Modal SDK
+  synchronizer 后台事件循环上；`app_status()` 原来在 uvicorn 事件循环上裸调
+  `client.stub.AppList()`。两套循环共享同一个连接与任务上下文时，会偶发
+  `RPC made outside of task context`，以及 gRPC 连接被另一事件循环复用后的
+  `attached to a different loop` 类失败。该行为与 Modal CLI 的 blocking 通道一致地
+  必须送回 SDK loop。
+- **修复**：`modal_volume/client.py` 新增 `_app_list_blocking()`，用
+  `modal._utils.async_utils.synchronizer.create_blocking` 包装 AppList RPC；
+  `app_status()` 通过 `asyncio.to_thread()` 调用该同步入口。RPC 显式携带
+  `retry=None, timeout=timeout`，外层 `wait_for(timeout + 10.0)` 只兜底线程 join，
+  不缩短 SDK 请求 deadline。`health.py` 移除临时诊断文案。
+- **测试**：`test_app_status_matches_app_and_environment` 改为断言
+  `retry=None`、`timeout=20.0`、`environment_name` 请求参数，并用线程内
+  `asyncio.run` 的 fake blocking 入口守住「不能在调用方 loop 直接阻塞」的调用形态。
+
+### 2. 本轮验证
+
+- `ruff check app tests`：0 违规。
+- `mypy`（项目配置，`files = ["app"]`）：84 文件，0 错误。
+- `pytest tests`：**415 passed, 10 skipped**。
+- `tsc --noEmit`：0 错误。
+
+注：本机沙箱内 Python 3.14 的 Windows tempfile 显式 `0o700` 目录会在当前安全策略下
+产生进程自身也无法枚举的 ACL。首次全量复跑出现的 7 个失败均属于该环境问题；
+改用白名单临时目录并在会话级 pytest 插件中改为继承 ACL 后复跑，得到上述全量绿结果。
+该插件未进入仓库。
+
+### 3. 仍待复核
+
+- **P3｜API 格式工作流经侧边栏打开行为存疑**：仍需在有本地 ComfyUI 的真机环境复核
+  ComfyUI 0.40 新前端下 API 格式 JSON 的双击加载结果。
+- **环境漂移**：本地 0.40.0 与云端 pin 0.39.2 仍需执行「对齐云端」；本轮未复跑
+  WF-01/WF-02 浏览器 e2e。

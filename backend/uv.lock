@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -354,7 +354,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },
-    { name = "modal", specifier = ">=0.70" },
+    { name = "modal", specifier = ">=1.5" },
     { name = "packaging", specifier = ">=24" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "python-socks", specifier = ">=2.0" },
