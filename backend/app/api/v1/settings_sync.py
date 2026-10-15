@@ -29,7 +29,19 @@ router = APIRouter(prefix="/settings-sync", tags=["settings-sync"])
 
 CLOUD_REL = "user/default/comfy.settings.json"
 
-_MISSING_HINTS = ("no such file", "not found", "does not exist")
+# modal_volume.client 把 NotFoundError/FileNotFoundError 归一为 category="uncertain"
+# 且消息前缀 "No such file or directory"，只有这一类才算「云端文件缺失」。
+# 不能再用宽松的 "not found" 子串：AuthError 的 "Token not found" 会命中，
+# 把凭证失效误判成文件缺失（SET-04）。
+_MISSING_HINTS = ("no such file or directory", "does not exist")
+
+
+def _is_missing_file(exc: ModalCliError) -> bool:
+    """区分「远端路径不存在」与凭证/网络/权限故障。"""
+    if exc.category != "uncertain":
+        return False
+    msg = str(exc).lower()
+    return any(hint in msg for hint in _MISSING_HINTS)
 
 
 def _local_path() -> Path:
@@ -51,16 +63,19 @@ async def _read_cloud() -> tuple[dict | None, bool, str | None]:
     error 非 None 表示云端通道不可用（SDK 不可用/凭证/网络）；文件缺失不算错误，
     file_exists=False 且 settings={}（首次部署尚未生成，视为空）。
     """
-    with tempfile.TemporaryDirectory() as td:
-        dest = Path(td) / "comfy.settings.json"
-        try:
-            await volume_cli.get_file(CLOUD_REL, dest, force=True)
-        except ModalCliError as exc:
-            msg = str(exc)
-            if any(hint in msg.lower() for hint in _MISSING_HINTS):
-                return {}, False, None
-            return None, False, msg[:300]
-        data = await asyncio.to_thread(_read_json_file, dest)
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            dest = Path(td) / "comfy.settings.json"
+            try:
+                await volume_cli.get_file(CLOUD_REL, dest, force=True)
+            except ModalCliError as exc:
+                if _is_missing_file(exc):
+                    return {}, False, None
+                return None, False, str(exc)[:300]
+            data = await asyncio.to_thread(_read_json_file, dest)
+    except OSError as exc:
+        # 本地临时目录不可用等故障：按通道不可用上报，不伪造「文件缺失」
+        return None, False, f"本地临时目录不可用: {exc}"[:300]
     return data, True, None
 
 

@@ -160,10 +160,13 @@ async def _run_job(job: SyncJob) -> None:
             _store().save(_NAMESPACE, job.id, job)
     finally:
         if job.status == "running":
-            job.status = "done"
             failed = [f for f in job.files if f.status == "error"]
             if failed:
+                # 有文件失败时不能报 done：「已完成」会让用户以为文件已落盘
+                job.status = "error"
                 job.error = f"{len(failed)}/{len(job.files)} 个文件失败：{failed[0].error or ''}"
+            else:
+                job.status = "done"
         if job.finished_ms is None:
             job.finished_ms = now_ms()
         _store().save(_NAMESPACE, job.id, job)

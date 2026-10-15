@@ -1263,3 +1263,76 @@ P3-1 遗留的「mypy 尚未形成发布门禁」项闭环。
 - API 格式工作流经 ComfyUI 0.40 侧边栏双击加载行为复核。
 - 本地 0.40.0 与云端 pin 0.39.2 的版本对齐；需真机执行。
 - 发布前 live 冒烟与干净机器安装验收。
+
+## 四十一、10-15 真机测试缺陷闭环：五处产品缺陷修复（2026-10-15）
+
+`feature/modal-sdk-migration` 批次 3 全量真机测试（管理台点击 + ComfyUI 界面 + 云端出图）
+记录 `91 通过 / 8 失败 / 13 阻塞`；本轮先闭环其中 5 处代码缺陷，不推送、不合并。
+
+### 1. P1 已修：容器列表/停止绕过 venv CLI 解析（OPS-02/03）
+
+- **症状**：管理台「容器列表」报 `[WinError 2]`；venv `Scripts` 内有 `modal.exe`，但 PATH 无 `modal`。
+- **根因**：`app/api/v1/launch.py` 的 `_container_rows()` / `_stop_modal_containers()`
+  仍硬编码裸 `["modal", ...]`。§三十八 只把 `deploy.py` 收敛到 `cli_exe()`，这两处是漏网的
+  第三、四处 `which` 解析。
+- **修复**：两处改走 `cli_exe()`，子进程环境统一用 `cli_env()`（与 deploy 通道一致），
+  删掉局部 `{**os.environ, **auth_env()}` 拼装。
+- **验证**：`tests/unit/test_leftover_polish.py::test_stop_modal_containers_invalidates_cache`
+  改为断言 `argv[0] == cli_exe()` 且所有调用同源。
+
+### 2. P1 已修：同步作业「1/1 文件失败」仍报 done（UI-18）
+
+- **症状**：覆盖下载目标被占用（`WinError 5`）时进度 `1/1` 但状态仍显示「已完成」，
+  失败只体现在 `error`/`failed` 字段。
+- **根因**：`app/modal_volume/jobs.py::_run_job` 的 finally 无条件 `job.status = "done"`，
+  再把失败摘要写进 `error`——状态机与字段语义互相矛盾。
+- **修复**：存在失败文件时 `status = "error"`（附 `N/M 个文件失败` 摘要），全成功才 `done`；
+  前端 `jobStatusTag` 已按 `error` 渲染「失败」+ tooltip，无需改动。
+- **验证**：新增 `tests/unit/test_volume_sync_jobs.py`（部分失败 → error、全部成功 → done、计数）。
+
+### 3. P1 已修：凭证失效被误判为「云端设置文件缺失」（SET-04）
+
+- **症状**：Modal 凭证失效时「设置同步」返回 HTTP 200、`cloud_available=true` /
+  `cloud_exists=false`，页面不报错，用户误以为云端设置为空。
+- **根因**：`app/api/v1/settings_sync.py::_read_cloud` 用 `_MISSING_HINTS` 子串匹配错误消息，
+  其中 `"not found"` 命中 `AuthError: Token not found`，把凭证故障当成文件不存在。
+- **修复**：新增 `_is_missing_file()`，只在 `category == "uncertain"` 且消息为 SDK
+  `No such file or directory` 映射时判定缺失，其余分类照常上报为通道不可用；临时目录
+  `OSError` 兜底为通道错误，不再掩盖原始故障。
+- **验证**：`tests/unit/test_settings_sync.py` 新增 3 项（分类函数、auth 报错、真实缺失）。
+
+### 4. P0 已修：节点索引为空时预检整体放行，缺模型不拦截（WF-05）
+
+- **症状**：隔离实例 `preflight=ask` 下，工作流引用两端都缺的模型，`verdict` 仍是 `allow`。
+- **根因**：`app/proxy/precheck.py::decide_action` 在 `result["note"]` 非空时直接 allow。
+  `note` 只代表「节点在场索引为空」（`scan` 已把缺失节点清零），模型侧结论仍然可靠，
+  空节点索引把模型缺口一并放行了。
+- **修复**：删除该提前放行；缺模型/云端专有模型仍按 strict/ask/auto 语义处理，`note`
+  继续写入 `rule_trace` 供诊断；`blocked_message` 增加空段落兜底。
+- **验证**：`tests/unit/test_precheck.py::test_decide_action_note_does_not_skip_model_gate`。
+
+### 5. P0 已修：非模型文件删除永久生效，与回收站 UI 不符（UI-23）
+
+- **症状**：删除 `input/` 等非模型文件时直接永久删除，但删除弹窗按钮写「移入回收站」，
+  回收站里也找不到、无法恢复。
+- **根因**：`app/api/v1/volume.py::delete_paths` 只对 `is_model_path(rel)` 走
+  `move_to_trash`，其余路径直接 `remove_file`。
+- **修复**：统一软删除——模型文件/非模型文件/空目录都经 `move_to_trash` 进
+  `.trash/<时间戳>/`；引用检查仍只对模型路径生效。前端文案同步为「该条目将移入 .trash…」。
+- **验证**：`tests/unit/test_model_deletion.py::test_delete_api_soft_deletes_non_model_file`
+  （断言走 `move_to_trash`、不碰永久删除通道）。
+
+### 本轮验证（非真机）
+
+- `ruff check app tests`：0 违规。
+- `mypy`（`files = ["app"]`）：84 文件，0 错误。
+- `pytest tests/unit -q`：**375 passed**；`pytest tests -q`：**423 passed, 10 skipped**
+  （沙箱外复跑；沙箱内 tempdir ACL 会报 fixture 错误）。
+- `tsc --noEmit`：0 错误。
+
+### 仍待处理（真机/环境）
+
+- 上述 5 项的真机复测：设置同步凭证失效、`ask` 预检拦截、覆盖下载失败状态、容器列表/停止、
+  非模型删除后回收站恢复。
+- `modal deploy` 相关用例（`NODE-03/05/06`、`OPS-04/05`、`SDK-02/06/07`）需在有网络权限的终端补测。
+- 本地 0.40.0 与云端 pin 0.39.2 版本漂移仍需执行「对齐云端」。

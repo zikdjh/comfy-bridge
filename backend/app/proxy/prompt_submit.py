@@ -144,6 +144,7 @@ async def handle_prompt_submit(request: Request) -> Response:
             "missing_models": pfr["missing_models"],
             "cloud_only_models": pfr["cloud_only_models"],
             "supplyable_refs": pfr["supplyable_refs"],
+            "note": pfr["note"],
             "auto_supply": pfr.get("auto_supply"),
         })
         if action == "block":

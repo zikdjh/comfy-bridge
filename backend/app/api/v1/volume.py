@@ -5,7 +5,7 @@
                                            过期后台重算并置 computing=true，前端轮询）
 - POST /api/v1/volume/create               新增数据卷
 - GET  /api/v1/volume/list?path=&volume=   列一层目录（相对卷根，"" = 根；默认主卷）
-- POST /api/v1/volume/delete               删除文件/目录（目录自动递归）
+- POST /api/v1/volume/delete               删除文件/空目录（统一软删除进回收站）
 - POST /api/v1/volume/delete               dry_run=true 只做引用检查，不落盘
 - GET  /api/v1/volume/trash                回收站条目列表
 - POST /api/v1/volume/trash/restore        从回收站恢复
@@ -237,12 +237,9 @@ async def delete_paths(body: PathsBody) -> dict:
                         "reference": reference,
                     })
                     continue
-            if deletion.is_model_path(rel):
-                dest = await deletion.move_to_trash(vol, rel, kind)
-                results.append({"path": rel, "ok": True, "trash_path": dest})
-                continue
-            await volume_cli.remove_file(rel, volume=vol, recursive=True)
-            results.append({"path": rel, "ok": True})
+            # 统一软删除：非模型文件也进回收站，避免 UI 承诺「可恢复」而实际永久删除
+            dest = await deletion.move_to_trash(vol, rel, kind)
+            results.append({"path": rel, "ok": True, "trash_path": dest})
         except ModalCliError as exc:
             results.append({"path": rel, "ok": False, "error": str(exc)})
     usage.get_usage(force=bool(results) and any(r["ok"] for r in results))
@@ -251,7 +248,7 @@ async def delete_paths(body: PathsBody) -> dict:
     return {
         "ok": bool(results) and all(r["ok"] for r in results),
         "results": results,
-        "note": "仅允许删除空目录；模型文件会移入回收站。清单刷新可能有约 1 分钟延迟。",
+        "note": "仅允许删除空目录；删除的条目会移入回收站（默认保留 7 天）。清单刷新可能有约 1 分钟延迟。",
     }
 
 

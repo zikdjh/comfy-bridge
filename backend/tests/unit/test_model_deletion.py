@@ -278,6 +278,35 @@ def test_delete_api_dry_run_and_reference_gate(monkeypatch) -> None:
     assert moved == [("comfyui-data", "models/checkpoints/demo.safetensors", "file")]
 
 
+def test_delete_api_soft_deletes_non_model_file(monkeypatch) -> None:
+    """UI-23：非模型文件同样进回收站，不能静默永久删除。"""
+    client = _client(monkeypatch)
+    moved: list[tuple] = []
+
+    async def fake_entry_kind(vol: str, rel: str) -> str:
+        assert vol == "comfyui-data"
+        assert rel == "input/photo.png"
+        return "file"
+
+    async def fake_move_to_trash(vol: str, rel: str, kind: str) -> str:
+        moved.append((vol, rel, kind))
+        return f".trash/20261015T000000Z/{rel}"
+
+    async def fail_remove(*args, **kwargs) -> None:
+        pytest.fail("非模型删除不应走永久删除通道")
+
+    monkeypatch.setattr(volume_api, "_entry_kind", fake_entry_kind)
+    monkeypatch.setattr(volume_api.deletion, "move_to_trash", fake_move_to_trash)
+    monkeypatch.setattr(volume_api.volume_cli, "remove_file", fail_remove)
+
+    res = client.post("/api/v1/volume/delete", json={"paths": ["input/photo.png"]})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["ok"] is True
+    assert body["results"][0]["trash_path"].startswith(".trash/")
+    assert moved == [("comfyui-data", "input/photo.png", "file")]
+
+
 def test_trash_restore_rejects_existing_target_and_purge_guard(monkeypatch) -> None:
     client = _client(monkeypatch)
     trash_path = ".trash/20261010T000000Z/models/checkpoints/demo.safetensors"

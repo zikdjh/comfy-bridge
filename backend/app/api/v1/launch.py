@@ -22,7 +22,6 @@ from __future__ import annotations
 import asyncio
 import io
 import json
-import os
 import re
 import subprocess
 import time
@@ -35,7 +34,7 @@ from pydantic import BaseModel
 from ...core import local_proc
 from ...core.config import CONFIG_PATH, AppConfig, get_settings
 from ...modal_volume import client as volume_cli
-from ...modal_volume.client import ModalCliError, auth_env
+from ...modal_volume.client import ModalCliError, cli_env, cli_exe
 from ...runner import client as runner_client
 from .config import _dump_toml
 
@@ -218,9 +217,9 @@ def _container_rows() -> tuple[list[dict], int, str | None]:
     app_name = settings.modal.app_name
     try:
         proc = subprocess.run(
-            ["modal", "container", "list", "--json"],
+            [cli_exe(), "container", "list", "--json"],
             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90, check=False,
-            env={**os.environ, **auth_env()},
+            env=cli_env(),
         )
     except Exception as exc:  # noqa: BLE001
         return [], 0, str(exc) or type(exc).__name__
@@ -304,9 +303,9 @@ def _stop_modal_containers() -> dict:
     for cid in ids:
         try:
             s = subprocess.run(
-                ["modal", "container", "stop", cid, "-y"],
+                [cli_exe(), "container", "stop", cid, "-y"],
                 capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90, check=False,
-                env={**os.environ, **auth_env()},
+                env=cli_env(),
             )
         except Exception as exc:  # noqa: BLE001
             failed.append(f"{cid}: {exc}")
