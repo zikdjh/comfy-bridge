@@ -86,7 +86,7 @@
 - [x] 隔离回放（假 Modal CLI + 临时目录）：`nodes_sync` 上传节点目录与 `requirements.txt`，写入 `.comfybridge-manifest.json`，manifest 条目 `enabled: true`
 - [x] 真实 Modal 卷同步（2026-09-30 网络恢复后补验）：`POST /api/v1/nodes/sync` 实同步 2 项全 ok；卷上 `custom_nodes/.comfybridge-manifest.json` schema=1（pkg comfybridge-openai-image + 单文件 websocket_image_save.py，经 `modal volume get` 回读确认）；`GET /api/v1/nodes/diff` 两行 state=`same`，counts synced=2 / only_local=0 / only_cloud=0
 
-### 待做 / 后续
+### 待做 / 后续（历史记录，后续章节已闭环）
 
 - M2-2 镜像固化：`nodes.lock.yaml` + `install_nodes.sh` + `modal deploy` + 失败回滚
 - 清单采集补全：ComfyUI-Manager API 兜底；差异结果持久化缓存供路由 `node_presence` 使用
@@ -137,7 +137,7 @@
 
 - 单价 × 请求墙钟秒数（含冷启动等待）；@modal.concurrent 复用容器时多请求墙钟重叠按请求直加 = 保守上限；scaledown 保活窗口无请求归属不计入；与 Modal 账单对账属 v2（规划 §8.3）
 
-### 待做 / 后续
+### 待做 / 后续（历史记录，后续章节已闭环）
 
 - 成本按工作流/模型维度聚合、CSV 导出（规划 §8.3 报表升级）
 - 逐项账单对账（本地按次估算 vs Modal 账单明细，规划 §8.3 v2）；「剩余积分总额」待 Modal 公开接口后补
@@ -184,11 +184,12 @@
   漂移警告横幅（本地/云端对照 + 风险说明 + 「对齐云端 → v0.38.0」按钮）后即恢复 v0.38.0；
   截图 `tmp/gui-test-screenshots/m2_5_version_*.png`。期间发现 Vite dev server 随上一会话退出，已重启
 
-### 待做 / 后续
+### 待做 / 后续（历史记录，后续章节已闭环）
 
 - M2-2 镜像固化：`nodes.lock.yaml` + `install_nodes.sh`（节点依赖预装进镜像，消除每次冷启动 pip 安装）+ 失败回滚
 - 版本对齐余项：对齐历史留痕；「对齐」与「节点依赖」合并为一次重建（M2-2 后自然合并）
-- 节点同步其余遗留见 §六待做（changed 内容哈希检测、node_presence 路由、反向同步提示等）
+- 节点同步其余遗留（changed 内容哈希检测、node_presence 路由、反向同步提示等）
+  均已在 §十三/§十七 闭环。
 
 ## 九、M2-2 镜像固化（2026-10-01）
 
@@ -222,7 +223,7 @@
   `install_nodes.sh` 已挂镜像层；云端冷启动 `/system_stats` = 0.38.0
 - [x] 浏览器：差异矩阵「固化到镜像」按钮渲染正常（截图 `m2_2_rebuild_button.png`）
 
-### 已知行为 / 待做
+### 已知行为 / 待做（历史记录，后续章节已闭环）
 
 - deploy 以子进程随后端存活：后端在 deploy 进行中被强杀会中断部署（云端状态不确定，
   与超时同语义）；部署任务状态存内存，重启清零
@@ -265,11 +266,11 @@
 - [x] 浏览器：工作流页同步矩阵真实数据渲染（截图 `m2_4_workflow_sync_matrix.png`），
   节点页差异矩阵与固化按钮正常（`m2_2_rebuild_button.png`）
 
-### 待做 / 后续
+### 待做 / 后续（历史记录，后续章节已闭环）
 
 - 冲突的「双列对比视图」（原占位按钮的另一半）与运行统计聚合（v2 报表）
 - 删除传播策略（本地删/云端删的双向 tombstone）——v1 有意不做，防误删
-- M2 全景收尾：node_presence 路由规则（M3 表内）与反向同步提示仍待做
+- M2 全景收尾：node_presence 路由规则（§十三）与反向同步提示（§十七）已闭环
 
 ## 十一、Runner 端点鉴权（P0 安全 · 2026-10-01）
 
@@ -348,7 +349,7 @@
   测试后删行保存恢复空链（GET 确认 0 条）。
 - 期间事故与自愈：首次 PUT 触发上述 `_dump_toml` bug，坏行写进 config.toml 致后端整体 500；
   修复渲染器 + 手工移除坏行 + 重启恢复，并补回环单测防复发。
-- 待办（M3 余项）：node_presence 路由规则（需本地/云端节点 class 差异的持久化缓存）。
+- 后续（已闭环）：node_presence 路由规则见 §十三；本地/云端 class 差异已用持久化缓存实现。
 
 ## 十三、M3-2 node_presence 路由规则（2026-10-01）
 
@@ -1220,3 +1221,45 @@ P3-1 遗留的「mypy 尚未形成发布门禁」项闭环。
   ComfyUI 0.40 新前端下 API 格式 JSON 的双击加载结果。
 - **环境漂移**：本地 0.40.0 与云端 pin 0.39.2 仍需执行「对齐云端」；本轮未复跑
   WF-01/WF-02 浏览器 e2e。
+
+## 四十、SDK 迁移非真机收尾：版本回退值与文档一致性（2026-10-15）
+
+### 1. 版本回退值统一
+
+- `backend/app/nodes_mgr/version_align.py::DEFAULT_PIN` 与
+  `modal-runner/runner.py::DEFAULT_COMFYUI_VERSION` 由 `v0.37.4` 统一为当前锁文件 pin
+  `v0.39.2`；两者仅作为锁文件缺失/为空时的回退值，生产部署仍以
+  `modal-runner/lock/comfyui_version.txt` 为准。
+- 影响面：无行为变更，消除「锁文件缺失时回退到旧版本」的隐性漂移。
+
+### 2. SDK API 离线审计
+
+- modal 1.5.5 实测：`Volume.rename(old_name, new_name)` 是卷重命名 API，不改卷内文件路径；
+  `Volume.copy_files(..., recursive=True)` 在 V1 卷上抛 `ValueError`；当前 `comfyui-data` 为 V1，
+  故卷内搬移继续保留 `modal run` + 挂载容器 `shutil.copy2` + `vol.remove_file`。
+- `Sandbox.objects` 不存在，入口为 `Sandbox.list()`；container↔sandbox 同构性未验，
+  `container list/stop` 继续保留 CLI。
+- `App.deploy()`、`Function.remote()` 无流式日志，`deploy` 与流式 `run` 继续保留 CLI。
+
+### 3. 文档同步
+
+- README 当前状态更新至 2026-10-15，补充 SDK 控制面迁移、AppList 修复与剩余真机验收项。
+- 兼容性矩阵：Modal 依赖改为 `>=1.5`（实测 1.5.5），Runner 默认 pin 改为 `v0.39.2`，
+  并更新上传/删除/事件推送等已落地能力，移除过时「未实现」描述。
+- Modal SDK 迁移设计文档修正 `Sandbox.objects`、`Volume.copy_files` 的 API 口径与 V1 限制。
+
+### 4. 本轮验证（非真机）
+
+- `ruff check app tests`：0 违规。
+- `mypy`：84 文件，0 错误。
+- `pytest tests/unit/test_version_align.py tests/unit/test_lockfile.py tests/compat -q`：
+  **71 passed**（沙箱外复跑；沙箱内 27 个 fixture 错误为本机 Windows tempdir ACL 环境问题，
+  非代码断言失败）。
+- `pytest tests -q`：**415 passed, 10 skipped**（3 条第三方依赖弃用告警）。
+- `pnpm exec tsc --noEmit`：0 错误。
+
+### 5. 仍待处理（真机/环境）
+
+- API 格式工作流经 ComfyUI 0.40 侧边栏双击加载行为复核。
+- 本地 0.40.0 与云端 pin 0.39.2 的版本对齐；需真机执行。
+- 发布前 live 冒烟与干净机器安装验收。

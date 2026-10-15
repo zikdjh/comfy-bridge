@@ -326,8 +326,9 @@
           <code>cost_by_resource</code> 为 <code>Decimal</code>）；
           月度对账现有的日期串需先转 UTC <code>datetime</code></td></tr>
       <tr><td><code>container list --json</code> / <code>container stop -y</code></td>
-        <td>P1 保留 CLI（<code>launch.py</code> 独立子进程）；SDK 侧
-          <code>modal.Sandbox.objects.list()</code> 存在但 container↔sandbox 同构性待验</td>
+        <td>P1 保留 CLI（<code>launch.py</code> 独立子进程）；modal 1.5.5 中
+          <code>Sandbox.objects</code> 不存在，可用入口是 <code>Sandbox.list()</code>，
+          但 container↔sandbox 同构性仍未验证</td>
         <td>容器管理与 deploy 同属控制面写操作 + 运维语义，P1 与 deploy 一并保留 CLI；P2 评估 Sandbox API</td></tr>
       <tr><td><code>volume put</code>（<code>launch.py</code> 启动参数下发）</td>
         <td>批次 2 切 <code>batch_upload</code> + <code>batch.put_file</code>
@@ -354,7 +355,10 @@
           <code>moves.py:174</code> / <code>deletion.py:237</code>）</td>
         <td>P2 候选：<code>await vol.copy_files([src], dst, recursive=True)</code> +
           <code>await vol.remove_file(src, recursive=True)</code>
-          （1.5.5 实测存在，UNIX <code>cp</code> 语义，<code>recursive</code> 仅 V2 卷）</td>
+          （1.5.5 实测存在，UNIX <code>cp</code> 语义；<code>recursive=True</code> 仅 V2 卷，
+          当前 <code>comfyui-data</code> 为 V1，因此暂不能替换现有 <code>modal run</code> 容器。
+          另：<code>Volume.rename(old_name, new_name)</code> 是卷重命名，不是卷内文件移动，
+          不能用于本条）</td>
         <td>现在为了「卷内移动」要起一个云端容器跑 <code>modal run</code>；
           <code>copy_files</code> 可能整个免掉容器与日志泵。P2 立项评估：
           V1/V2 卷判定（<code>_is_v1</code>）、进度 UI 的替代来源、
@@ -743,10 +747,11 @@ state = await modal_cli.app_status(app_name)   # "deployed" / "stopped" / None</
       日志泵（进度 UI 实时性），SDK <code>Function.remote()</code> 不回传流式日志；
       P2 评估「函数调用 + 日志轮询」后另行立项。</li>
     <li><b><code>container list/stop</code> 保留 CLI</b>：<code>launch.py</code> 的容器管理
-      与 deploy 同属运维语义；SDK <code>Sandbox.objects.list()</code> 存在但
-      container↔sandbox 同构性待验，P1 不冒险，P2 评估。</li>
+      与 deploy 同属运维语义；modal 1.5.5 无 <code>Sandbox.objects</code>，仅有
+      <code>Sandbox.list()</code>，container↔sandbox 同构性仍未验证，P1 不冒险，P2 评估。</li>
     <li><b>P2 待评估项集中登记</b>：<code>Volume.copy_files</code> 替代卷内移动的
-      <code>modal run</code> 容器（§3 末行）；<code>Sandbox.objects.list()</code> 替代
+      <code>modal run</code> 容器（§3 末行，受 V1 卷限制暂缓；<code>Volume.rename</code>
+      仅重命名卷，不适用）；<code>Sandbox.list()</code> 替代
       <code>container list/stop</code>；<code>App.deploy()</code> 替代
       <code>modal deploy</code>；<code>Function.remote()</code> + 日志轮询替代流式作业。</li>
     <li>文档同步：README 依赖注、本文件验收登记。</li>

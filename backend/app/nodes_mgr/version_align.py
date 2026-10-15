@@ -29,7 +29,7 @@ from . import deploy
 RUNNER_FILE = deploy.RUNNER_FILE
 LOCK_FILE = runner_assets.runner_file("lock", "comfyui_version.txt")
 HISTORY_FILE = config_dir() / "version_align_history.jsonl"
-DEFAULT_PIN = "v0.37.4"
+DEFAULT_PIN = "v0.39.2"
 
 _VERSION_RE = re.compile(r'__version__\s*=\s*"([^"]+)"')
 

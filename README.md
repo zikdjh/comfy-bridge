@@ -204,8 +204,10 @@ ComfyBridge 采用 [MIT License](LICENSE)。
 
 M0 技术验证收尾 → M1 MVP 桥接 → M2 同步引擎 → M3 模型卷管理 → M4 打磨发布。
 
-**当前状态（2026-10-11）**：M0–M4 均已落地，可安装、可验证、边界清楚；发布前仍需在
-真实两端跑一次 live 冒烟与干净机器安装验收（见 `backend/tests/live/README.md`）。
+**当前状态（2026-10-15）**：M0–M4 均已落地，可安装、可验证、边界清楚；
+控制面已迁移到 Modal Python SDK，AppList 跨事件循环缺陷已修并本地提交。
+发布前仍需在真实两端跑一次 live 冒烟、复核 API 格式工作流加载，并完成干净机器安装验收
+（见 `backend/tests/live/README.md`）。
 
 **核心链路**
 
@@ -217,6 +219,9 @@ M0 技术验证收尾 → M1 MVP 桥接 → M2 同步引擎 → M3 模型卷管�
 
 **最近变更**
 
+- Modal SDK 迁移收尾：控制面（卷读写 / 应用状态 / 账单）改走 SDK 直调，
+  `deploy`、流式 `run`、`container list/stop` 保留 CLI；AppList 经 SDK 自己的
+  synchronizer 循环执行，修复偶发 `RPC made outside of task context`。
 - LV-06 重启清理修复：`modal_pid` 持久化 + 启动对账（云端在跑请求重启后收敛到
   真实结局并补时长，成功时补回传产物）。
 - 真机验收（本地 v0.39.2 ↔ 云端 pin 不同）：修掉 modal CLI 编码崩溃、热容器
