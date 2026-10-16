@@ -1261,7 +1261,7 @@ P3-1 遗留的「mypy 尚未形成发布门禁」项闭环。
 ### 5. 仍待处理（真机/环境）
 
 - API 格式工作流经 ComfyUI 0.40 侧边栏双击加载行为复核。
-- 本地 0.40.0 与云端 pin 0.39.2 的版本对齐；需真机执行。
+- ~~本地 0.40.0 与云端 pin 0.39.2 的版本对齐~~ — 已于 2026-10-15 真机执行完成（见 §四十二）。
 - 发布前 live 冒烟与干净机器安装验收。
 
 ## 四十一、10-15 真机测试缺陷闭环：五处产品缺陷修复（2026-10-15）
@@ -1335,4 +1335,83 @@ P3-1 遗留的「mypy 尚未形成发布门禁」项闭环。
 - 上述 5 项的真机复测：设置同步凭证失效、`ask` 预检拦截、覆盖下载失败状态、容器列表/停止、
   非模型删除后回收站恢复。
 - `modal deploy` 相关用例（`NODE-03/05/06`、`OPS-04/05`、`SDK-02/06/07`）需在有网络权限的终端补测。
-- 本地 0.40.0 与云端 pin 0.39.2 版本漂移仍需执行「对齐云端」。
+- ~~本地 0.40.0 与云端 pin 0.39.2 版本漂移仍需执行「对齐云端」~~ — 已于 2026-10-15 真机对齐完成（见 §四十二）。
+
+## 四十二、10-15 下午真机验证：通道恢复 + 版本对齐 v0.40.0（2026-10-15）
+
+真机会话（管理台 + 桥接 API 驱动），验证云通道恢复、路由干跑、云端生图、
+本地实例拉起与版本对齐全链路。云端消耗约 $0.23（两次验证生图 $0.036 / $0.152
++ 部署与预热容器时间）。
+
+### 1. Modal 通道恢复
+
+- 应用此前被 `modal app stop`（state=stopped），预热/直连 web_url 均返回 404
+  （Modal 边缘对 stopped 应用不转发）；Modal 1.5.5 CLI 无 `app restart`，
+  恢复手段只有重新 `modal deploy modal-runner/runner.py`（11.8s，复用镜像缓存）。
+- 预热 19.3s 冷启动后 `/api/v1/health` 转 `app_state=deployed, online=true`。
+
+### 2. 云端生图与路由干跑
+
+- 路由干跑（`POST /api/v1/routing/preview`，fulltest-rgthree-cloud）：6 步 trace 完整，
+  无手动头时正确落 default→local。
+- 云端真机生图（`x-bridge-backend: modal` + 隐私确认头，换随机种子防缓存命中）：
+  请求 #181 `done / final_backend=modal`，GPU 66.98s / 估算 $0.0363，
+  `model_name=krea2_turbo-iq4_xs.gguf` 自动落库；
+  产物 `bridge_live_verify_20261015_00001_.png`（1.28MB）落 `output_dir` 并入媒体库。
+
+### 3. 本地实例经桥接器拉起（修正 §十七 口径）
+
+- `POST /api/v1/launch/local/start` 成功拉起本地 ComfyUI（pid 32428，42.3s 就绪）。
+- §十七 曾记录「嵌入式 python 无法直接命令行拉起」——本次确认桥接器固化的启动命令
+  （venv python + main.py + `--extra-model-paths-config` 等）可正常冷启动，
+  该限制仅适用于 standalone-env 裸 python 直调场景。
+
+### 4. 节点在场与版本对齐（§三十八/§四十遗留闭环）
+
+- `POST /nodes/presence/refresh` 刷新干净：local 1026 / cloud 1021 class，
+  此前本地离线期的 stale 错误清除。
+- `GET /nodes/version` 实测 drift=true（本地 0.40.0 @ 3541246a vs pin v0.39.2）；
+  `POST /nodes/version/align` 真机执行：deploy 182s，`outcome=ok`，
+  pin v0.39.2 → **v0.40.0**，`drift=false`，历史留痕入 `version_align_history.jsonl`。
+- 对齐后云端验证生图 `done`：`bridge_live_align_verify_00001_.png` 落盘 + 媒体库可见。
+
+### 5. 观察：升级后首跑性能
+
+- 0.39.2 → 0.40.0 首次云端执行 GPU **281s**（总 335s，估算 $0.152），
+  显著高于对齐前基线 67s；容器日志见 `ComfyUI-GGUF: Allowing full torch compile`，
+  判定为升级后 GGUF 节点 torch 编译预热，属预期一次性开销，后续执行应回落基线。
+
+### 仍待处理（真机/环境）
+
+- §四十一 5 处缺陷修复的真机复测（本轮未逐项覆盖）。
+- `modal deploy` 相关用例（`NODE-03/05/06`、`OPS-04/05`、`SDK-02/06/07`）补测
+  （deploy 通道本身已实测可用：cli_exe 解析 + 11.8s/182s 两次成功）。
+- API 格式工作流经 ComfyUI 0.40 侧边栏双击加载行为复核（WF-02）。
+- 发布前 live 冒烟与干净机器安装验收。
+
+## 四十三、复测剩余缺陷收口：UI-04 与 NODE-01（2026-10-15）
+
+### 1. UI-04：管理台「前往出图界面」必定导航
+
+- 原实现依赖 antd `Button href + target=_blank`；真机点击只弹出提示、未建立导航。
+  改为显式 `window.location.assign(bridgeUrl)`，让跳转不再受浏览器对按钮链接/新页
+  目标的处理差异影响。目标仍来自 `/health` 的 `bridge.url`，缺失时继续用本地默认地址。
+
+### 2. NODE-01：节点同步 manifest 写入有可写兜底
+
+- 原实现只使用系统临时目录；Windows ACL / 沙箱导致 `cb-node-manifest-write-*`
+  创建或写文件失败时，节点文件已成功落卷但作业整体误判 error。
+- 现在 manifest 先序列化，再在系统临时目录不可用或写失败时回退到
+  `<config_dir>/tmp/cb-node-manifest-write-*`；上传完成后两处临时目录都会清理。
+  该兜底只影响本地图，不改变数据卷远端路径。
+
+### 3. LIVE-10：无需再改代码
+
+- 兼容矩阵 `without_outputs` 3 项回归通过；真机记录 #179/#180 的无输出本地/云端
+  用例均已按 `done` 收尾。此前导出的失败对应旧运行时，不构成当前代码回归。
+
+### 验证
+
+- `ruff check app tests`：0 违规；`mypy app`：84 文件 0 错。
+- `pytest tests -q`：**424 passed / 10 skipped**（新增 manifest 回退单测 1 项）。
+- `pnpm exec tsc --noEmit`：0 错；`pnpm build`：构建成功（仅既有 chunk 体积提示）。

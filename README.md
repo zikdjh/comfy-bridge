@@ -208,8 +208,9 @@ M0 技术验证收尾 → M1 MVP 桥接 → M2 同步引擎 → M3 模型卷管�
 
 **当前状态（2026-10-15）**：M0–M4 均已落地，可安装、可验证、边界清楚；
 控制面已迁移到 Modal Python SDK，AppList 跨事件循环缺陷已修并本地提交。
-发布前仍需在真实两端跑一次 live 冒烟、复核 API 格式工作流加载，并完成干净机器安装验收
-（见 `backend/tests/live/README.md`）。
+两端版本已对齐 v0.40.0（真机对齐实测通过，见 `FIXLIST.md` §四十二）。
+发布前仍需在真实两端跑一次 live 冒烟、复核 API 格式工作流加载（WF-02）、
+复测 §四十一 五处缺陷修复，并完成干净机器安装验收（见 `backend/tests/live/README.md`）。
 
 **核心链路**
 
@@ -221,6 +222,9 @@ M0 技术验证收尾 → M1 MVP 桥接 → M2 同步引擎 → M3 模型卷管�
 
 **最近变更**
 
+- 真机验证（2026-10-15 下午）：Modal 通道恢复（stopped 应用只能重新 deploy）、
+  云端生图链路 #181 done、`launch/local/start` 拉起本地实例、
+  版本对齐 v0.39.2 → v0.40.0 真机完成；详见 `FIXLIST.md` §四十二。
 - Modal SDK 迁移收尾：控制面（卷读写 / 应用状态 / 账单）改走 SDK 直调，
   `deploy`、流式 `run`、`container list/stop` 保留 CLI；AppList 经 SDK 自己的
   synchronizer 循环执行，修复偶发 `RPC made outside of task context`。
