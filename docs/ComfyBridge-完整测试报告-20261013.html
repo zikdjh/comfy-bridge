@@ -281,13 +281,13 @@
       <tr>
         <td class="c">3</td>
         <td class="c">P3-2</td>
-        <td><b>启动期 Modal API 限流</b>：VolumeListFiles rate limit 使节点在场索引、系统状态首检短暂失败；已有留痕与处理建议，重试即恢复。</td>
+        <td><b>启动期 Modal API 限流</b>：VolumeListFiles rate limit 使节点在场索引、系统状态首检短暂失败。<b>已闭环</b>（<code>1e6881d</code>）：限流识别为 <code>rate_limited</code> 类，只读命令按 1s/4s/10s 多级退避重试，系统状态首检与节点云端清单均经该路径自动获得保护。</td>
         <td><span class="tag info">平台侧</span></td>
       </tr>
       <tr>
         <td class="c">4</td>
         <td class="c">P3-3</td>
-        <td><b>antd 弃用告警</b>：<code>[antd: Modal] destroyOnClose is deprecated</code>（仅控制台，不影响功能），择机替换为 destroyOnHidden。</td>
+        <td><b>antd 弃用告警</b>：<code>[antd: Modal] destroyOnClose is deprecated</code>（仅控制台，不影响功能）。<b>已闭环</b>（<code>004d02a</code>）：4 处 <code>destroyOnClose</code> 全部替换为 <code>destroyOnHidden</code>（antd 5.29.3 支持），tsc/vite 构建零错误。</td>
         <td><span class="tag info">代码卫生</span></td>
       </tr>
       </tbody>
@@ -318,7 +318,7 @@
     <ul>
       <li><b>节点选型写入运维文档</b>：krea2 架构 GGUF 须用 calcuis/gguf 的 LoaderGGUF；city96 版适用于其支持列表内架构（flux/sdxl 等）。</li>
       <li><b>启动脚本健壮性</b>：dev.ps1 可加入 node PATH 探测/注入，或在安装文档中注明 Node ≥ 18 且需在 PATH。</li>
-      <li><b>限流退避（可选）</b>：启动期对 Modal 控制面只读命令增加更长退避，降低首检失败概率。</li>
+      <li><b>限流退避（已闭环）</b>：<code>1e6881d</code> 已为 Modal 控制面只读命令增加 1s/4s/10s 多级退避重试，降低启动期首检失败概率。</li>
       <li><b>镜像固化（可选优化）</b>：calcuis/gguf 自带连接器无需 pip 依赖，暂无需重建镜像；后续引入带 requirements 的节点时经「镜像重建」烧进镜像层。</li>
       <li><b>本轮未覆盖</b>（依赖真实费用或并发场景）：预热确定执行的真实冷启动计费验证、多任务并发排队、大分辨率上云阈值触发、隐私确认首次弹窗（本轮带头直通）、跨站 Origin 403 与管理令牌鉴权（回环部署无令牌）。</li>
       <li><b>收尾状态</b>：测试结束后本地 ComfyUI 经桥接器 API 停止、桥接器与前端关闭，三端口验证离线；Modal 应用无常驻容器，闲置自动缩容到零。</li>

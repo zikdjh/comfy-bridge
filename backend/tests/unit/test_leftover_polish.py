@@ -217,7 +217,11 @@ def test_stop_modal_containers_invalidates_cache(launch_env, monkeypatch):
     result = launch_api._stop_modal_containers()
     assert result["ok"] and result["running"] == 1 and result["stopped"] == ["c1"]
     assert launch_api._containers_cache is None  # 停止后面板立即读到新状态
-    assert ["modal", "container", "stop", "c1", "-y"] in calls
+    # OPS-02/03：必须走 cli_exe() 解析（venv Scripts 不在 PATH 时裸 "modal" 会 WinError 2）
+    exe = launch_api.cli_exe()
+    assert [exe, "container", "list", "--json"] in calls
+    assert [exe, "container", "stop", "c1", "-y"] in calls
+    assert all(argv[0] == exe for argv in calls)
 
 
 # ---------------------------------------------------------------- 配置视图（M4-3）

@@ -37,7 +37,7 @@ object_info_merge = "local-first"
 
 [modal]
 # Modal 平台认证（modal token new 生成，或 modal.com 控制台；设置页可填写，secret 脱敏回显）。
-# 填写后桥接器以 MODAL_TOKEN_ID/MODAL_TOKEN_SECRET 环境变量注入 modal CLI；未填写时
+# 填写后桥接器以 MODAL_TOKEN_ID/MODAL_TOKEN_SECRET 环境变量注入 Modal SDK / CLI；未填写时
 # CLI 回落读取 ~/.modal.toml。
 token_id = ""        # ak-...
 token_secret = ""    # as-...（仅落盘本文件，API 不回传明文）

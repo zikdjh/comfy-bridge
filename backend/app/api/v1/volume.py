@@ -1,11 +1,11 @@
 """数据卷管理 API：管理 token 鉴权下的所有 Modal 数据卷 + URL 直下 + 目录维护。
 
-- GET  /api/v1/volume/meta                 元信息（默认主卷 / 凭证 / CLI 可用性）
+- GET  /api/v1/volume/meta                 元信息（默认主卷 / 凭证 / SDK 可用性）
 - GET  /api/v1/volume/volumes?refresh=     所有卷 + 递归统计的总用量（缓存 60s，
                                            过期后台重算并置 computing=true，前端轮询）
 - POST /api/v1/volume/create               新增数据卷
 - GET  /api/v1/volume/list?path=&volume=   列一层目录（相对卷根，"" = 根；默认主卷）
-- POST /api/v1/volume/delete               删除文件/目录（目录自动递归）
+- POST /api/v1/volume/delete               删除文件/空目录（统一软删除进回收站）
 - POST /api/v1/volume/delete               dry_run=true 只做引用检查，不落盘
 - GET  /api/v1/volume/trash                回收站条目列表
 - POST /api/v1/volume/trash/restore        从回收站恢复
@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import asyncio
 import re
-import shutil
 import tempfile
 import time
 from pathlib import Path
@@ -73,7 +72,7 @@ async def meta() -> dict:
     return {
         "volume": get_settings().modal.volume,
         "credentials_ok": modal_configured(),
-        "cli_found": shutil.which("modal") is not None,
+        "cli_found": volume_cli.sdk_available(),
     }
 
 
@@ -100,7 +99,7 @@ async def create_volume(body: CreateBody) -> dict:
             detail="卷名需 3~32 位小写字母/数字/连字符，且以字母开头",
         )
     try:
-        await volume_cli.run("volume", "create", name)
+        await volume_cli.volume_create(name)
     except ModalCliError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     usage.get_usage(force=True)  # 新卷立即进入统计
@@ -118,14 +117,14 @@ async def delete_volume(name: str) -> dict:
     try:
         files = await usage.count_files(name, "")
     except ModalCliError:
-        files = 0  # 空卷/清单不可读时不拦删除，由 CLI 兜底
+        files = 0  # 空卷/清单不可读时不拦删除，由 SDK 删除结果兜底
     if files > 0:
         raise HTTPException(
             status_code=400,
             detail=f"数据卷包含 {files} 个文件，不允许删除。请先清空卷内文件",
         )
     try:
-        await volume_cli.run("volume", "delete", name, "-y")
+        await volume_cli.volume_delete(name)
     except ModalCliError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     usage.get_usage(force=True)
@@ -238,15 +237,9 @@ async def delete_paths(body: PathsBody) -> dict:
                         "reference": reference,
                     })
                     continue
-            if deletion.is_model_path(rel):
-                dest = await deletion.move_to_trash(vol, rel, kind)
-                results.append({"path": rel, "ok": True, "trash_path": dest})
-                continue
-            try:
-                await volume_cli.run("volume", "rm", vol, rel)
-            except ModalCliError:
-                await volume_cli.run("volume", "rm", vol, rel, "-r")
-            results.append({"path": rel, "ok": True})
+            # 统一软删除：非模型文件也进回收站，避免 UI 承诺「可恢复」而实际永久删除
+            dest = await deletion.move_to_trash(vol, rel, kind)
+            results.append({"path": rel, "ok": True, "trash_path": dest})
         except ModalCliError as exc:
             results.append({"path": rel, "ok": False, "error": str(exc)})
     usage.get_usage(force=bool(results) and any(r["ok"] for r in results))
@@ -255,7 +248,7 @@ async def delete_paths(body: PathsBody) -> dict:
     return {
         "ok": bool(results) and all(r["ok"] for r in results),
         "results": results,
-        "note": "仅允许删除空目录；模型文件会移入回收站。清单刷新可能有约 1 分钟延迟。",
+        "note": "仅允许删除空目录；删除的条目会移入回收站（默认保留 7 天）。清单刷新可能有约 1 分钟延迟。",
     }
 
 
@@ -320,7 +313,7 @@ async def trash_purge(body: TrashPurgeBody) -> dict:
             rel = _safe_rel(raw, allow_trash=True)
             if not deletion.is_trash_path(rel):
                 raise ValueError("只能永久清理 .trash/<时间戳>/... 下的条目")
-            await volume_cli.run("volume", "rm", vol, rel, "-r")
+            await volume_cli.remove_file(rel, volume=vol, recursive=True)
             results.append({"path": rel, "ok": True})
         except ValueError as exc:
             results.append({"path": raw, "ok": False, "error": str(exc)})
@@ -349,7 +342,7 @@ class MkdirBody(BaseModel):
 
 @router.post("/mkdir")
 async def mkdir(body: MkdirBody) -> dict:
-    """新建文件夹（可多级）。CLI 无 mkdir：上传 .keep 标记自动建父目录后删除标记，
+    """新建文件夹（可多级）。SDK 无 mkdir：上传 .keep 标记自动建父目录后删除标记，
     留下真正的空目录（实测空目录条目会保留）；标记残留也不影响删除守卫（忽略点文件）。"""
     vol = _volume_or_default(body.volume)
     rel = _safe_rel(body.path)
@@ -363,18 +356,18 @@ async def mkdir(body: MkdirBody) -> dict:
         if any(e["name"] == name for e in entries):
             raise HTTPException(status_code=409, detail=f"同名条目已存在: {name}")
     except ModalCliError:
-        pass  # 父目录清单不可读时跳过预检，由 CLI 兜底
+        pass  # 父目录清单不可读时跳过预检，由后续 SDK 写入兜底
     with tempfile.TemporaryDirectory() as td:
         marker = Path(td) / ".keep"
         marker.write_bytes(b"")
         try:
-            # -f：父目录创建后子目录创建会重复落标记，覆盖无害（仅 0 字节点文件）
-            await volume_cli.run("volume", "put", vol, str(marker), f"{rel}/.keep", "-f")
+            # force=True：父目录创建后子目录创建会重复落标记，覆盖无害（仅 0 字节点文件）
+            await volume_cli.put_file(marker, f"{rel}/.keep", volume=vol, force=True)
         except ModalCliError as exc:
             raise HTTPException(status_code=409, detail=f"创建目录失败: {exc}")
     for attempt in range(2):  # 删除标记（失败重试一次；残留无害）
         try:
-            await volume_cli.run("volume", "rm", vol, f"{rel}/.keep")
+            await volume_cli.remove_file(f"{rel}/.keep", volume=vol)
             break
         except ModalCliError:
             if attempt == 0:
@@ -526,9 +519,7 @@ async def create_download(body: DownloadBody) -> dict:
 
 
 async def _volume_exists(name: str) -> bool:
-    out = await volume_cli.run("volume", "list", "--json")
-    rows = volume_cli.cli_json_list(out)
-    return any(r.get("name") == name for r in rows)
+    return await volume_cli.volume_exists(name)
 
 
 @router.get("/downloads")

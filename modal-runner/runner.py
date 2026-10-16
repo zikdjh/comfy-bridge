@@ -74,7 +74,7 @@ PORT = 8188
 # 云端 ComfyUI 版本 pin：读 lock/comfyui_version.txt（桥接器「版本对齐」功能维护，
 # 本地版本为权威；本文件只是消费方），锁文件缺失/为空时回退默认值。
 # 改 pin 后需 modal deploy 重建镜像才生效（桥接器 POST /api/v1/nodes/version/align 会自动做）。
-DEFAULT_COMFYUI_VERSION = "v0.37.4"
+DEFAULT_COMFYUI_VERSION = "v0.39.2"
 
 
 def _pinned_comfyui_version() -> str:

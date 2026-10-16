@@ -76,26 +76,22 @@ def test_merge_state_only_refreshes_synced_rows():
 # ---------------------------------------------------------------- apply（假卷）
 
 class _FakeVolume:
-    """模拟数据卷 user/default/workflows/ 的 get/put。"""
+    """模拟数据卷 user/default/workflows/ 的 SDK 网关读写。"""
 
     def __init__(self, cloud: dict[str, bytes]):
         self.cloud = dict(cloud)
 
-    async def run(self, *args: str) -> str:
+    async def get_file(self, remote: str, dest, **kwargs) -> None:
         from pathlib import Path
 
-        cmd, sub = args[0], args[1]
-        if cmd == "volume" and sub == "get":
-            remote, dest = args[3], args[4]
-            name = remote.rsplit("/", 1)[-1]
-            Path(dest).write_bytes(self.cloud[name])
-            return ""
-        if cmd == "volume" and sub == "put":
-            local, remote = args[3], args[4]
-            name = remote.rsplit("/", 1)[-1]
-            self.cloud[name] = Path(local).read_bytes()
-            return ""
-        raise AssertionError(f"unexpected cli call {args}")
+        name = remote.rsplit("/", 1)[-1]
+        Path(dest).write_bytes(self.cloud[name])
+
+    async def put_file(self, local, remote: str, **kwargs) -> None:
+        from pathlib import Path
+
+        name = remote.rsplit("/", 1)[-1]
+        self.cloud[name] = Path(local).read_bytes()
 
 
 @pytest.fixture
@@ -106,7 +102,8 @@ def wf_env(tmp_path, monkeypatch):
     monkeypatch.setattr(ws, "STATE_FILE", tmp_path / "state.json")
     monkeypatch.setattr(ws, "modal_configured", lambda: True)
     fake = _FakeVolume({})
-    monkeypatch.setattr(ws.volume_cli, "run", fake.run)
+    monkeypatch.setattr(ws.volume_cli, "get_file", fake.get_file)
+    monkeypatch.setattr(ws.volume_cli, "put_file", fake.put_file)
 
     async def fake_list_dir(remote_path, volume=None):
         if remote_path != ws.CLOUD_DIR:

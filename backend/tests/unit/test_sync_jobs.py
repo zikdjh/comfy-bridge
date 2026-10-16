@@ -152,10 +152,14 @@ async def test_nodes_sync_endpoint_returns_job(monkeypatch, tmp_path):
                                "has_requirements": False, "enabled": True}],
                  "single_files": []},
     )
-    puts: list[str] = []
+    puts: list[tuple[str, str]] = []
+    dir_puts: list[tuple[str, str]] = []
 
-    async def fake_put(local_path, remote):
-        puts.append(remote)
+    async def fake_put(local_path, remote, **kwargs):
+        puts.append((str(local_path), remote))
+
+    async def fake_put_dir(local_path, remote, **kwargs):
+        dir_puts.append((str(local_path), remote))
 
     async def fake_read_manifest():
         return None
@@ -163,7 +167,8 @@ async def test_nodes_sync_endpoint_returns_job(monkeypatch, tmp_path):
     async def fake_write_manifest(manifest):
         pass
 
-    monkeypatch.setattr(nodes_api, "_volume_put", fake_put)
+    monkeypatch.setattr(nodes_api.volume_cli, "put_file", fake_put)
+    monkeypatch.setattr(nodes_api.volume_cli, "put_directory", fake_put_dir)
     monkeypatch.setattr(nodes_api, "_read_cloud_manifest", fake_read_manifest)
     monkeypatch.setattr(nodes_api, "_write_cloud_manifest", fake_write_manifest)
 
@@ -173,7 +178,9 @@ async def test_nodes_sync_endpoint_returns_job(monkeypatch, tmp_path):
 
     job = await nodes_api.jobs.wait_job(res["job"]["id"])
     assert job["state"] == "ok"
-    assert job["items"][0]["ok"] is True and puts == ["custom_nodes/p1"]
+    assert job["items"][0]["ok"] is True
+    assert not puts
+    assert len(dir_puts) == 1 and dir_puts[0][1] == "custom_nodes/p1"
 
     empty = await nodes_api.nodes_sync(nodes_api.NamesBody(names=[]))
     assert empty["ok"] is False and empty["job"] is None

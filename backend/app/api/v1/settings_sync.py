@@ -4,8 +4,8 @@
 - 云端 = Modal 数据卷 `user/default/comfy.settings.json`（runner 以 --base-directory /data
   挂载、启动时读取；容器运行中改卷不热生效，下次冷启动生效 —— 由 UI 提示）
 
-读经 `modal volume get`、写经 `modal volume put -f`（复用 modal_volume.client 的凭证注入
-与超时兜底），不要求云端容器在运行。凭证类键（键名含 api_key/token/secret/password）
+读经 SDK 网关 get_file、写经 put_file（复用 modal_volume.client 的凭证注入与超时兜底），
+不要求云端容器在运行。凭证类键（键名含 api_key/token/secret/password）
 在 diff 回显中一律掩码（红线），推拉仍使用真实值。
 """
 
@@ -29,7 +29,19 @@ router = APIRouter(prefix="/settings-sync", tags=["settings-sync"])
 
 CLOUD_REL = "user/default/comfy.settings.json"
 
-_MISSING_HINTS = ("no such file", "not found", "does not exist")
+# modal_volume.client 把 NotFoundError/FileNotFoundError 归一为 category="uncertain"
+# 且消息前缀 "No such file or directory"，只有这一类才算「云端文件缺失」。
+# 不能再用宽松的 "not found" 子串：AuthError 的 "Token not found" 会命中，
+# 把凭证失效误判成文件缺失（SET-04）。
+_MISSING_HINTS = ("no such file or directory", "does not exist")
+
+
+def _is_missing_file(exc: ModalCliError) -> bool:
+    """区分「远端路径不存在」与凭证/网络/权限故障。"""
+    if exc.category != "uncertain":
+        return False
+    msg = str(exc).lower()
+    return any(hint in msg for hint in _MISSING_HINTS)
 
 
 def _local_path() -> Path:
@@ -46,23 +58,24 @@ def _read_json_file(path: Path) -> dict:
 
 
 async def _read_cloud() -> tuple[dict | None, bool, str | None]:
-    """经 volume get 读云端设置。返回 (settings, file_exists, error)。
+    """经 SDK 网关读云端设置。返回 (settings, file_exists, error)。
 
-    error 非 None 表示云端通道不可用（CLI 未装/凭证/网络）；文件缺失不算错误，
+    error 非 None 表示云端通道不可用（SDK 不可用/凭证/网络）；文件缺失不算错误，
     file_exists=False 且 settings={}（首次部署尚未生成，视为空）。
     """
-    with tempfile.TemporaryDirectory() as td:
-        dest = Path(td) / "comfy.settings.json"
-        try:
-            # modal CLI 的 volume get 会在下载前预创建目标文件，二次调用会报
-            # "Output path already exists"——统一加 --force 覆盖临时目录内的文件。
-            await volume_cli.run("volume", "get", volume_cli.volume_name(), CLOUD_REL, str(dest), "--force")
-        except ModalCliError as exc:
-            msg = str(exc)
-            if any(hint in msg.lower() for hint in _MISSING_HINTS):
-                return {}, False, None
-            return None, False, msg[:300]
-        data = await asyncio.to_thread(_read_json_file, dest)
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            dest = Path(td) / "comfy.settings.json"
+            try:
+                await volume_cli.get_file(CLOUD_REL, dest, force=True)
+            except ModalCliError as exc:
+                if _is_missing_file(exc):
+                    return {}, False, None
+                return None, False, str(exc)[:300]
+            data = await asyncio.to_thread(_read_json_file, dest)
+    except OSError as exc:
+        # 本地临时目录不可用等故障：按通道不可用上报，不伪造「文件缺失」
+        return None, False, f"本地临时目录不可用: {exc}"[:300]
     return data, True, None
 
 
@@ -70,7 +83,7 @@ async def _write_cloud(data: dict) -> None:
     with tempfile.TemporaryDirectory() as td:
         src = Path(td) / "comfy.settings.json"
         src.write_text(json.dumps(data, ensure_ascii=False, indent=4) + "\n", encoding="utf-8")
-        await volume_cli.run("volume", "put", volume_cli.volume_name(), str(src), CLOUD_REL, "-f")
+        await volume_cli.put_file(src, CLOUD_REL, force=True)
 
 
 async def _write_local(data: dict) -> None:

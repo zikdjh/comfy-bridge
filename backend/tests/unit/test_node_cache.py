@@ -272,10 +272,10 @@ async def test_sync_invalidates_matrix(diff_env, tmp_path, monkeypatch):
                                "has_requirements": False, "enabled": True}],
                  "single_files": []},
     )
-    puts: list[str] = []
+    dir_puts: list[str] = []
 
-    async def fake_put(local_path, remote):
-        puts.append(remote)
+    async def fake_put_dir(local_path, remote, **kwargs):
+        dir_puts.append(remote)
 
     async def fake_read_manifest():
         return None
@@ -285,14 +285,14 @@ async def test_sync_invalidates_matrix(diff_env, tmp_path, monkeypatch):
     async def fake_write_manifest(manifest):
         writes.append(manifest)
 
-    monkeypatch.setattr(nodes_api, "_volume_put", fake_put)
+    monkeypatch.setattr(nodes_api.volume_cli, "put_directory", fake_put_dir)
     monkeypatch.setattr(nodes_api, "_read_cloud_manifest", fake_read_manifest)
     monkeypatch.setattr(nodes_api, "_write_cloud_manifest", fake_write_manifest)
 
     res = await nodes_api.nodes_sync(nodes_api.NamesBody(names=["new_pkg"]))
     job = await nodes_api.jobs.wait_job(res["job"]["id"])
     assert job["state"] == "ok" and job["items"][0]["ok"] is True
-    assert puts == ["custom_nodes/new_pkg"]
+    assert dir_puts == ["custom_nodes/new_pkg"]
     assert writes and writes[0]["schema"] == 1
     assert diff_cache.load_matrix() is None  # 缓存已失效
 
@@ -370,3 +370,27 @@ async def test_nodes_local_manager_offline_silent(monkeypatch):
     assert res["manager"] == {"online": False, "entries": 0, "error": "HTTP 404"}
     pkg = res["custom_nodes"]["packages"][0]
     assert pkg["repo"] is None and "repo_via_manager" not in pkg
+
+
+async def test_cloud_manifest_write_falls_back_to_config_dir(tmp_path, monkeypatch):
+    """系统临时目录不可用时，manifest 仍要上传，不让节点同步整体误报失败。"""
+    def deny_temp_dir(*args, **kwargs):
+        raise PermissionError(13, "临时目录不可写")
+
+    captured: dict = {}
+
+    async def fake_put(local_path, remote):
+        captured["path"] = local_path
+        captured["remote"] = remote
+        captured["payload"] = local_path.read_text(encoding="utf-8")
+
+    monkeypatch.setattr(nodes_api.tempfile, "mkdtemp", deny_temp_dir)
+    monkeypatch.setattr(nodes_api, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(nodes_api, "_volume_put", fake_put)
+
+    manifest = {"schema": 1, "packages": [], "single_files": []}
+    await nodes_api._write_cloud_manifest(manifest)
+
+    assert captured["remote"] == nodes_api._MANIFEST_REMOTE
+    assert captured["payload"] == nodes_api.json.dumps(manifest, ensure_ascii=False, indent=2)
+    assert captured["path"].parent.parent == tmp_path / "tmp"

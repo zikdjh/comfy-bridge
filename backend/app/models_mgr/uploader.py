@@ -8,11 +8,11 @@
 
 1. 客户端补齐全部分块后调用 complete；
 2. 后端按序合并分块并计算整文件 MD5；
-3. MD5 与服务端计算值一致后，用现有 ``modal volume put`` 写入目标卷；
+3. MD5 与服务端计算值一致后，用 SDK 网关写入目标卷；
 4. 成功后清理临时分块和合并文件，刷新云端模型索引。
 
-本模块刻意不直接调用 Modal Python SDK：与现有卷同步、下载和移动保持一致，
-所有云端写入都经 ``modal`` CLI 子进程完成。
+本模块不直接绑定 Modal SDK：所有卷写入统一走 ``modal_volume.client`` 网关，
+由网关负责 SDK 客户端、错误分类与超时边界。
 """
 
 from __future__ import annotations
@@ -430,13 +430,11 @@ async def _finalize(upload_id: str) -> None:
             error=None,
             error_stage=None,
         )
-        await modal_cli.run(
-            "volume",
-            "put",
-            str(session_snapshot["volume"]),
+        await modal_cli.put_file(
             str(_assembled_path(upload_id)),
             str(session_snapshot["remote_path"]),
-            "-f",
+            volume=str(session_snapshot["volume"]),
+            force=True,
             timeout=24 * 3600,
         )
         await _update(

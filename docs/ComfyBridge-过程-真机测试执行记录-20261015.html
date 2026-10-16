@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyBridge 真机测试执行记录 · 实时填写 · 2026-10-15</title>
+<style>
+  :root{
+    --bg:#f6f7fb; --card:#fff; --ink:#1f2430; --ink-soft:#5a6272;
+    --line:#e4e7ef; --accent:#4f5be8; --accent-soft:#eef0fe;
+    --pass:#16803c; --pass-bg:#ecfdf3; --fail:#b91c1c; --fail-bg:#fef2f2;
+    --warn:#b45309; --warn-bg:#fffbeb; --block:#7c3aed; --block-bg:#f5f3ff;
+    --skip:#475569; --skip-bg:#f1f5f9; --code-bg:#14161f; --code-ink:#e6e9f2;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth;scroll-padding-top:150px}
+  body{margin:0;background:var(--bg);color:var(--ink);line-height:1.7;font-size:14px;
+    font-family:system-ui,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  header.hero{background:linear-gradient(135deg,#232a63 0%,#4f5be8 55%,#8a7bff 100%);
+    color:#fff;padding:30px 24px 24px;text-align:center}
+  header.hero h1{margin:0 0 6px;font-size:24px;letter-spacing:.5px}
+  header.hero .meta{font-size:12.5px;opacity:.85;margin-top:5px}
+  .toolbar{position:sticky;top:0;z-index:30;background:rgba(255,255,255,.97);
+    backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:8px 14px;
+    display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;justify-content:center;font-size:13px}
+  .toolbar button{cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);
+    border-radius:7px;padding:5px 11px;font-size:12.5px}
+  .toolbar button:hover{border-color:var(--accent);color:var(--accent)}
+  .toolbar button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .toolbar .saved{color:var(--pass);font-size:12px}
+  main{max-width:1240px;margin:0 auto;padding:22px 16px 60px}
+  h2{font-size:18px;margin:34px 0 12px;padding-left:11px;border-left:4px solid var(--accent);line-height:1.4}
+  main>h2:first-child{margin-top:0}
+  h3{font-size:15px;margin:22px 0 8px}
+  p{margin:8px 0}
+  code{font-family:Consolas,"Cascadia Code",monospace;background:#f0f2fa;color:#33398f;
+    padding:1px 6px;border-radius:5px;font-size:12.5px}
+  blockquote{margin:12px 0;padding:9px 14px;background:var(--accent-soft);
+    border-left:4px solid var(--accent);border-radius:0 8px 8px 0;color:#3a4160}
+  table{width:100%;border-collapse:collapse;background:var(--card);font-size:12.8px;margin:10px 0}
+  th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+  thead th{background:var(--accent-soft);color:#4353d8;font-weight:600;position:sticky;top:44px;z-index:5}
+  tbody tr:nth-child(even){background:#fafbfe}
+  tbody tr.row-fail{background:var(--fail-bg)}
+  tbody tr.row-block{background:var(--block-bg)}
+  tbody tr.row-skip{background:var(--skip-bg)}
+  tbody tr.row-pass{background:var(--pass-bg)}
+  .tag{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600;white-space:nowrap}
+  .p0{color:var(--fail);background:var(--fail-bg)}
+  .p1{color:var(--warn);background:var(--warn-bg)}
+  .p2{color:var(--pass);background:var(--pass-bg)}
+  select,input[type=text],textarea{width:100%;border:1px solid var(--line);border-radius:6px;
+    padding:4px 6px;font-size:12.5px;font-family:inherit;background:#fff;color:var(--ink)}
+  textarea{min-height:44px;resize:vertical}
+  select:focus,input:focus,textarea:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+  .status-sel{min-width:86px;font-weight:600}
+  .status-sel.s-pass{color:var(--pass)} .status-sel.s-fail{color:var(--fail)}
+  .status-sel.s-block{color:var(--block)} .status-sel.s-skip{color:var(--skip)}
+  .filters{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:10px 0}
+  .filters button{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:999px;
+    padding:3px 11px;font-size:12.5px}
+  .filters button.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  .filters input[type=text]{width:auto;min-width:220px}
+  .summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:12px 0}
+  .summary div{border:1px solid var(--line);border-radius:9px;background:#fff;padding:9px 12px}
+  .summary b{display:block;font-size:21px;line-height:1.25}
+  .summary span{color:var(--ink-soft);font-size:12px}
+  .n-pass{color:var(--pass)} .n-fail{color:var(--fail)} .n-block{color:var(--block)}
+  .n-skip{color:var(--skip)} .n-todo{color:var(--ink-soft)} .n-pct{color:var(--accent)}
+  .progress{height:9px;border-radius:999px;background:#e6e9f2;overflow:hidden;margin:6px 0 2px}
+  .progress i{display:block;height:100%;background:var(--accent);width:0;transition:width .25s}
+  .meta-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px 18px;
+    border:1px solid var(--line);border-radius:9px;background:#fff;padding:14px 16px}
+  .meta-grid label{display:block;font-size:12.5px;color:var(--ink-soft);margin-bottom:2px}
+  .checklist{list-style:none;padding-left:0}
+  .checklist li{margin:5px 0}
+  .checklist input{margin-right:7px}
+  .muted{color:var(--ink-soft);font-size:12.5px}
+  .footer{text-align:center;color:var(--ink-soft);font-size:12px;padding:16px;border-top:1px solid var(--line)}
+  @media print{
+    .toolbar,.filters{display:none}
+    header.hero{background:#232a63 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    thead th{position:static}
+    textarea,select,input{border:none;background:transparent}
+  }
+</style>
+</head>
+<body>
+<header class="hero">
+  <h1>ComfyBridge 真机测试执行记录 · 2026-10-15</h1>
+  <div class="meta">配套：ComfyBridge-过程-全量测试计划-20261015.html（258 项）+ backend/tests/live/</div>
+  <div class="meta">使用方式：测试过程中直接在本页填写，数据自动保存在浏览器本地（存储键 v2，不覆盖 10-13 轮记录）；可随时导出 JSON / Markdown / CSV</div>
+</header>
+
+<div class="toolbar">
+  <button class="primary" onclick="exportJSON()">导出 JSON</button>
+  <button onclick="exportMarkdown()">导出 Markdown</button>
+  <button onclick="exportCSV()">导出 CSV</button>
+  <button onclick="document.getElementById('importFile').click()">导入 JSON 续测</button>
+  <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(this)">
+  <button onclick="window.print()">打印 / 存 PDF</button>
+  <button onclick="resetAll()">清空本页记录</button>
+  <span class="saved" id="saveState">已就绪</span>
+</div>
+
+<main>
+
+<h2>1. 本轮信息</h2>
+<div class="meta-grid">
+  <div><label>测试日期</label><input type="text" id="m-date" data-meta="date" placeholder="2026-10-15"></div>
+  <div><label>分支 / commit</label><input type="text" id="m-commit" data-meta="commit" placeholder="feature/modal-sdk-migration @ d3d8d05"></div>
+  <div><label>执行人</label><input type="text" id="m-owner" data-meta="owner" placeholder="姓名"></div>
+  <div><label>桥接器地址</label><input type="text" id="m-bridge" data-meta="bridge" placeholder="http://127.0.0.1:8189"></div>
+  <div><label>本地 ComfyUI 版本</label><input type="text" id="m-local" data-meta="local" placeholder="0.40.x"></div>
+  <div><label>云端 pin / App</label><input type="text" id="m-cloud" data-meta="cloud" placeholder="v0.39.x · comfyui-l40s"></div>
+  <div><label>Modal SDK / CLI</label><input type="text" id="m-modal" data-meta="modal" placeholder="modal 1.5.x"></div>
+  <div><label>本轮云端消耗</label><input type="text" id="m-cost" data-meta="cost" placeholder="$0.00"></div>
+  <div><label>预算上限</label><input type="text" id="m-budget" data-meta="budget" placeholder="$1.50"></div>
+  <div><label>测试结论</label><input type="text" id="m-conclusion" data-meta="conclusion" placeholder="通过 / 带问题通过 / 不通过"></div>
+</div>
+
+<h2>2. 入口条件与强制规则</h2>
+<ul class="checklist">
+  <li><input type="checkbox" data-entry="e1"> 当前分支 <code>feature/modal-sdk-migration</code>，本地代码门禁已通过。</li>
+  <li><input type="checkbox" data-entry="e2"> Modal Python SDK 1.5.x 可导入，状态页自检通过（未部署时允许 <code>app_state=None</code>）。</li>
+  <li><input type="checkbox" data-entry="e3"> Modal 凭证、代理鉴权凭证、数据卷 <code>comfyui-data</code> 均可访问。</li>
+  <li><input type="checkbox" data-entry="e4"> 已准备：本地工作流 JSON、图生图输入图、大于 8 MiB 上传文件、可直连下载 URL。</li>
+  <li><input type="checkbox" data-entry="e5"> 已确认云端预算上限；超限立即停止高成本云端用例（预热 / 生图 / 对齐 / 镜像重建）。</li>
+  <li><input type="checkbox" data-entry="e6"> <strong>AGENTS.md 强制规则：</strong>真实出图一律走 Modal 云端（<code>x-bridge-backend: modal</code>），本轮不执行本地生图；判定依据 <code>final_backend=modal</code>。</li>
+</ul>
+
+<h2>3. 实时进度</h2>
+<div class="summary">
+  <div><b class="n-pass" id="s-pass">0</b><span>通过</span></div>
+  <div><b class="n-fail" id="s-fail">0</b><span>失败</span></div>
+  <div><b class="n-block" id="s-block">0</b><span>阻塞</span></div>
+  <div><b class="n-skip" id="s-skip">0</b><span>跳过 / 不适用</span></div>
+  <div><b class="n-todo" id="s-todo">0</b><span>待测</span></div>
+  <div><b class="n-pct" id="s-pct">0%</b><span>完成度</span></div>
+</div>
+<div class="progress"><i id="progressBar"></i></div>
+<p class="muted">完成度 =（通过 + 失败 + 阻塞 + 跳过）/ 总数。失败与阻塞会单独计数，不计入通过。</p>
+
+<h2>4. 筛选与定位</h2>
+<div class="filters" id="filters">
+  <button data-filter="all" class="active">全部</button>
+  <button data-filter="todo">待测</button>
+  <button data-filter="pass">通过</button>
+  <button data-filter="fail">失败</button>
+  <button data-filter="block">阻塞</button>
+  <button data-filter="skip">跳过</button>
+  <input type="text" id="searchBox" placeholder="搜索 ID / 步骤 / 预期 / 实际结果">
+</div>
+
+<h2>5. 全量用例（248 项）</h2>
+<p class="muted">来源：ComfyBridge-过程-全量测试计划-20261015.html。状态改变时自动记录时间；API / DP / UI / 功能 / 回归分组见下。</p>
+<div id="cases"></div>
+
+<h2>6. LIVE 冒烟集（10 项）</h2>
+<div id="liveCases"></div>
+
+</main>
+<div class="footer">ComfyBridge · 真机测试执行记录 · 2026-10-15 · 数据仅保存在本机浏览器 localStorage（v2）</div>
+
+<script>
+const MODULES = {
+  API:{name:"后端管理面 API"},
+  DP:{name:"数据面与实时通道"},
+  UI:{name:"管理台界面点击"},
+  GEN:{name:"生图链路"},
+  WF:{name:"工作流加载"},
+  SYNC:{name:"工作流同步"},
+  NODE:{name:"节点管理"},
+  SET:{name:"设置同步"},
+  VOL:{name:"模型卷与数据卷"},
+  OPS:{name:"云端运维"},
+  SDK:{name:"SDK 专项"},
+  NEG:{name:"异常与安全"},
+  PKG:{name:"打包与升级"},
+  REG:{name:"修复回归"}
+};
+
+const CASES = [
+["API-01","GET /health","local/modal 聚合状态与 bridge.url 可读，secret 脱敏","P0"],
+["API-02","GET /health/modal-cli","CLI 可用性与版本信息；缺失时明确降级说明","P1"],
+["API-03","GET /config","三段配置完整，token secret 脱敏","P0"],
+["API-04","PUT /config 先改后还原","修改持久化，还原后与基线一致","P1"],
+["API-05","GET /config/node-env","运行环境标识与实际一致","P1"],
+["API-06","GET /config/accounts","账号列表完整，secret 不回显明文","P0"],
+["API-07","PUT /config/accounts 新增 fulltest-acct","新增成功；缺 name 422","P1"],
+["API-08","DELETE /config/accounts/fulltest-acct","删除成功；不存在账号可读 404","P1"],
+["API-09","POST /config/accounts/{name}/activate","激活态生效；错误账号 404","P1"],
+["API-10","POST /config/validate-comfy 合法+非法路径","合法返回版本；非法路径明确失败","P1"],
+["API-11","GET /config/scan-comfy","扫描状态可读","P1"],
+["API-12","POST /config/scan-comfy 启动扫描","完成后返回发现列表；无并发扫描","P1"],
+["API-13","POST /config/scan-comfy/cancel","取消后状态收敛，无残留进程","P2"],
+["API-14","GET /cost/summary","预算、已用、GPU 秒与 /cost 页一致","P0"],
+["API-15","PUT /cost/budget 修改后还原","持久化；非法值 422","P1"],
+["API-16","GET /cost/report by/days 组合","聚合字段一致；非法 by 422","P0"],
+["API-17","GET /cost/reconciliation?cycle=2026-10","与 Modal 账单口径一致（时差留痕）","P1"],
+["API-18","GET /cost/export 下载 CSV","200，中文表头与流水正确","P1"],
+["API-19","GET /launch","本地/云端启动配置与进程状态可读","P0"],
+["API-20","PUT /launch 先改后还原","持久化生效","P1"],
+["API-21","GET /launch/local/status 运行/停止两态","运行中 pid/端口/日志可读；停止后 offline","P0"],
+["API-22","POST /launch/local/start","进程启动转 online；重复启动有保护","P1"],
+["API-23","POST /launch/local/stop","进程退出；/health 同步","P1"],
+["API-24","POST /launch/local/restart","新 pid，状态 online","P1"],
+["API-25","GET /launch/modal/containers","容器 ID/状态/GPU/启动时间可读","P0"],
+["API-26","POST /launch/modal/stop","容器停止；云端回到冷启动态","P1"],
+["API-27","GET /nodes/local","本地清单与 /nodes 页一致","P0"],
+["API-28","GET /nodes/cloud","云端 manifest 可读；SDK 错误明确","P0"],
+["API-29","GET /nodes/diff deep/force","差异正确；force 绕过缓存","P0"],
+["API-30","POST /nodes/sync 临时节点","作业成功；manifest 回退路径生效（REG-02）","P0"],
+["API-31","POST /nodes/cloud/remove","云端目录与 manifest 清除","P1"],
+["API-32","GET /nodes/version","本地/云端版本 pin 可读","P0"],
+["API-33","POST /nodes/version/align","pin 对齐；历史留痕","P0"],
+["API-34","GET /nodes/dependency-precheck?force=true","依赖预检结果可读","P1"],
+["API-35","POST /nodes/image/rebuild","重建受理；完成后 deployed（预算门禁）","P0"],
+["API-36","POST /nodes/presence/refresh","在线/加载状态刷新成功","P1"],
+["API-37","GET /workflows/local","清单 name/hash/size/mtime 与磁盘一致","P0"],
+["API-38","GET /workflows/sync","同步矩阵状态正确","P0"],
+["API-39","POST /workflows/sync push/pull/keep_both","动作生效，历史留痕","P0"],
+["API-40","GET /workflows/run-stats days=7/30/90","统计与请求日志一致","P1"],
+["API-41","GET /workflows/compare","双列对比正确；缺失名可读错误","P1"],
+["API-42","GET /jobs?limit=50","作业列表含类型/状态/进度","P0"],
+["API-43","GET /jobs/{job_id} 详情+404","详情完整；404 可读","P0"],
+["API-44","POST /jobs/{job_id}/cancel","长作业取消，无悬挂","P1"],
+["API-45","GET /media/local kind=image/video","清单与 kind 过滤生效","P0"],
+["API-46","GET /media/local/file 正常+越界路径","200 文件流；越界拒绝","P0"],
+["API-47","GET /logs/local?tail=100","最近日志行数组","P0"],
+["API-48","GET /logs/local/stream SSE","snapshot+增量；断开无残留","P1"],
+["API-49","GET /logs/modal?tail=100","云端日志可读；空态可读","P1"],
+["API-50","GET /logs/modal/stream SSE","同 API-48；未部署有状态事件","P1"],
+["API-51","GET /events/stream SSE","触发操作后收到对应事件","P0"],
+["API-52","GET /requests 组合筛选","筛选生效；行含 prompt_id/final_backend","P0"],
+["API-53","GET /requests/{req_id} 详情+404","决策链路/耗时/输出 hash；404 可读","P0"],
+["API-54","GET /requests/{req_id}/graph","返回 API 格式图；空态可读","P1"],
+["API-55","POST /routing/preview 三组 body","trace/final_backend 正确；manual 覆盖生效","P0"],
+["API-56","GET /routing/rules","内置与自定义规则完整","P0"],
+["API-57","PUT /routing/rules 增改调序后还原","规则持久化；还原一致","P0"],
+["API-58","GET /settings-sync","键级差异矩阵；不可读时明确错误","P0"],
+["API-59","POST /settings-sync/apply push/pull","方向生效；空 directions 422","P1"],
+["API-60","GET /modal-volume","凭证/卷名/分类计数可读","P0"],
+["API-61","GET /modal-volume/overview 分类切换","本地/云端对比正确","P0"],
+["API-62","POST /modal-volume/sync push/pull","文件落对应端且 hash 一致","P0"],
+["API-63","GET /modal-volume/jobs","作业列表含方向/进度/状态","P0"],
+["API-64","POST /modal-volume/jobs/{id}/cancel","大作业取消成功","P1"],
+["API-65","POST /uploads/init","返回 upload_id 与分块参数；缺字段 422","P0"],
+["API-66","GET /uploads?limit=20","会话列表含状态与进度","P1"],
+["API-67","GET /uploads/{upload_id} 详情+404","进度/位图正确；404 可读","P0"],
+["API-68","PUT /uploads/{id}/chunks/{index} 二进制+x-chunk-md5","分块校验失败被拒可重试","P0"],
+["API-69","POST /uploads/{upload_id}/complete","MD5 通过落卷；失败拒绝","P0"],
+["API-70","DELETE /uploads/{upload_id}","会话与临时分块清理","P1"],
+["API-71","GET /volume/meta","总容量/文件数/卷数/水位可读","P0"],
+["API-72","GET /volume/volumes?refresh=true","卷列表与 usage 正确","P0"],
+["API-73","POST /volume/create fulltest-vol","创建成功；重复/非法名拒绝","P1"],
+["API-74","POST /volume/volumes/fulltest-vol/delete","空卷删除；默认/非空卷拒绝","P1"],
+["API-75","GET /volume/list 正常+越界","列表含大小时间；越界拒绝","P0"],
+["API-76","POST /volume/delete dry_run + 实删","dry_run 只预览；实删生效；引用文件拒绝","P0"],
+["API-77","GET /volume/trash","回收站记录含原路径与时间","P0"],
+["API-78","POST /volume/trash/restore","恢复回原路径 hash 不变；重复恢复拒绝","P0"],
+["API-79","POST /volume/trash/purge","记录与云端文件彻底删除","P1"],
+["API-80","POST /volume/mkdir","目录出现；重复/非法名拒绝","P0"],
+["API-81","GET /volume/dirs","目录树/下拉数据正确","P1"],
+["API-82","POST /volume/move","移动后原路径消失目标出现","P0"],
+["API-83","GET /volume/moves","移动任务列表正确","P0"],
+["API-84","POST /volume/moves/{id}/cancel","任务转 cancelled 无半完成","P1"],
+["API-85","POST /volume/download 正常+失败 URL","成功落目录；失败原因可读","P0"],
+["API-86","GET /volume/downloads","下载任务列表正确","P0"],
+["API-87","POST /volume/downloads/{id}/cancel","任务转 cancelled","P1"],
+["API-88","POST /modal/warmup","预热完成；容器出现（预算门禁）","P0"],
+["API-89","GET /modal/warmup/status 三态","idle→running→done；失败原因可读","P0"],
+["DP-01","GET / 出图界面","ComfyUI 前端完整加载可交互","P0"],
+["DP-02","POST /prompt 云端提交（x-bridge-backend: modal）","受理返回 prompt_id；终态 done；final_backend=modal","P0"],
+["DP-03","POST /api/prompt 云端提交","与 /prompt 行为一致","P0"],
+["DP-04","GET /object_info 合并清单","本地节点+云端模型合并；下拉数据完整","P0"],
+["DP-05","GET /object_info/{node_type}","单节点定义；不存在时明确错误","P1"],
+["DP-06","GET /api/object_info","与 /object_info 一致","P1"],
+["DP-07","GET /queue 本地空闲","queue_running/pending 结构正确","P1"],
+["DP-08","GET /queue 云端在途合成","云端任务出现在合成队列与前端面板","P0"],
+["DP-09","POST /interrupt 本地空闲","200 透传无异常","P1"],
+["DP-10","POST /interrupt 云端转发","云端任务收敛 cancelled；事件留痕","P0"],
+["DP-11","WS /ws 双向中继","进度/预览/终态实时；断线重连","P0"],
+["DP-12","GET /history/{prompt_id} 兜底","200 历史记录；不存在原样响应","P1"],
+["DP-13","GET /view 输出文件","200 图片流可预览","P0"],
+["DP-14","POST /upload 图生图输入","上传成功；云端可引用","P1"],
+["DP-15","catch-all 静态资源","全部 200 无误拦截","P2"],
+["UI-01","进入 /bridge 仪表盘","统计/通道状态/排队表/最近完成表正常渲染","P0"],
+["UI-02","点击顶部「任务」","任务抽屉打开可关闭，作业列表可读","P1"],
+["UI-03","点「预热」费用弹窗点取消","显示费用提示；取消后无预热请求","P0"],
+["UI-04","点「前往出图界面」","跳转 8189 出图界面可加载（REG-01）","P1"],
+["UI-05","/routing 查看内置规则","manual/cloud 前缀/cloud_model 规则可读","P1"],
+["UI-06","添加 fulltest-temp 规则并保存","行内编辑/启停/上移下移/删除可用","P1"],
+["UI-07","干跑区域选择工作流点「干跑」","输出命中规则与最终后端；空输入有提示","P1"],
+["UI-08","删除 fulltest-temp 并保存","规则消失不复活","P1"],
+["UI-09","/nodes 切换三个 Tab","切换不丢状态；清单/差异/历史可读","P0"],
+["UI-10","点差异矩阵云端节点详情","hash/大小/路径或差异说明可读","P1"],
+["UI-11","点「刷新」或强制刷新","数据更新，loading 收敛","P1"],
+["UI-12","/workflows 点「重新扫描」","清单更新，hash/大小/时间可读","P0"],
+["UI-13","同步矩阵点非冲突工作流","差异/已同步状态正确","P1"],
+["UI-14","运行统计区域切 7/30/90 天","统计字段展示一致","P2"],
+["UI-15","进入 /models","凭证已配置、卷名、SDK 可用","P0"],
+["UI-16","切换分类下拉","计数/按钮启停/列表联动","P1"],
+["UI-17","点「上传缺云端」选测试文件","分块上传完成，云端出现文件","P0"],
+["UI-18","点云端文件「下载到本地」","下载作业出现，文件落本地","P1"],
+["UI-19","/volume 点「重新统计」","容量/文件数/水位正常，loading 收敛","P0"],
+["UI-20","浏览目录进入/返回","路径导航正确不串目录","P1"],
+["UI-21","fulltest 中新建文件夹","新目录可见；重复/非法名提示","P1"],
+["UI-22","选测试文件点「移动到」","移动成功，任务留痕","P1"],
+["UI-23","删除测试文件并从回收站恢复","软删/恢复成功；重复恢复拒绝","P0"],
+["UI-24","/media 过滤并点缩略图","列表收敛；详情 Modal 完整","P1"],
+["UI-25","/cost 切维度并导出 CSV","表头聚合联动；CSV 正确","P1"],
+["UI-26","/logs 切后端筛选点请求行","筛选生效；详情抽屉完整","P0"],
+["UI-27","点实时控制台开关","日志流可开关；断线/未部署有提示","P1"],
+["UI-28","/status 点「重新自检」","SDK/版本/登录/应用状态可读","P0"],
+["UI-29","访问 /bridge/no-such-page","404 页面不白屏","P2"],
+["UI-30","/settings 依次打开 6 个 Tab","各 Tab 正常渲染","P0"],
+["UI-31","「扫描本机」选结果点「采用」","回填根目录，不保存错误路径","P1"],
+["UI-32","点「校验」","版本与 venv 校验准确","P1"],
+["UI-33","点「启动/停止/重启」","按钮联动，8188 状态与进程一致","P0"],
+["UI-34","查看 Modal token 输入框","secret 始终脱敏","P0"],
+["UI-35","设置同步 Tab 查看差异","差异矩阵与实际一致或提示不可读","P1"],
+["UI-36","悬停仪表盘预算 Tag","Tooltip 显示预算与超限动作","P2"],
+["UI-37","预算 Modal 编辑保存","保存生效，Tag 刷新，与 API 一致","P1"],
+["UI-38","「中断」Popconfirm 先取消再确认","取消不发请求；确认后任务收敛","P0"],
+["UI-39","查看容器数面板","与 containers API 一致","P1"],
+["UI-40","配置向导第 1 步检测","逐项出结果无异常","P1"],
+["UI-41","向导第 2 步 Modal 凭证","secret 脱敏；校验提示可读","P1"],
+["UI-42","向导第 3 步本地 ComfyUI","路径校验与 API-10 一致","P1"],
+["UI-43","向导第 4 步完成","汇总正确；中途关闭无半保存","P1"],
+["UI-44","节点页 Segmented 切换","视图切换状态保持","P1"],
+["UI-45","单节点「安装/同步」","行内作业成功差异消除","P0"],
+["UI-46","批量勾选安装","批量作业进度可查","P1"],
+["UI-47","点「版本对齐」","与 API-33 一致（预算门禁）","P0"],
+["UI-48","点「镜像重建」","与 API-35 一致（预算门禁）","P0"],
+["UI-49","工作流「对比」弹窗","双列 hash/大小/时间正确","P1"],
+["UI-50","单条「推送/拉取」","与 API-39 单动作一致","P0"],
+["UI-51","模型批量推送","批量作业逐项进度","P1"],
+["UI-52","模型批量拉取","批量作业逐项进度","P1"],
+["UI-53","上传卡片暂停/继续","断点续传生效","P1"],
+["UI-54","上传卡片取消/移除","终止并清理会话","P1"],
+["UI-55","创建 URL 下载任务","作业完成文件落目录","P1"],
+["UI-56","任务列表点「取消」","作业转 cancelled","P1"],
+["UI-57","媒体库类型切换","列表随类型收敛","P2"],
+["UI-58","媒体库文件夹切换","仅显示所选目录","P2"],
+["UI-59","成本页月度周期切换","图表汇总随周期变化","P2"],
+["UI-60","日志后端+状态组合筛选","叠加生效与 API-52 一致","P1"],
+["UI-61","ConsolePane 关键字过滤","即时过滤计数更新","P1"],
+["UI-62","ConsolePane 级别 Segmented","全部/警告/错误过滤正确","P1"],
+["UI-63","ConsolePane 关跟随上滚","自动暂停；滚底恢复吸底","P1"],
+["UI-64","ConsolePane 暂停/继续","暂停期间后台缓冲，继续放出","P1"],
+["UI-65","ConsolePane 清空","缓冲清空后端不受影响","P2"],
+["UI-66","ConsolePane 导出","下载过滤后日志文件","P2"],
+["UI-67","ConsolePane 缓冲上限切换","超限丢最旧行","P2"],
+["UI-68","实时控制台布局切换","双栏/单栏/紧凑密度正常","P1"],
+["UI-69","设置各 Tab 字段修改保存","保存生效刷新不回跳；敏感字段脱敏","P0"],
+["UI-70","任务抽屉点「取消」","作业转 cancelled","P1"],
+["GEN-01","云端文生图（x-bridge-backend: modal）","受理成功；queued→running→done；final_backend=modal","P0"],
+["GEN-02","媒体库查看新图","图片存在大小>0 预览可打开","P0"],
+["GEN-03","请求日志详情","决策与实际后端均 modal；prompt_id 可复制","P0"],
+["GEN-04","默认路由提交","命中 modal 或明确拒绝；不允许静默本地生图","P0"],
+["GEN-05","终态与输出回传","done；输出回传并出现在媒体库","P0"],
+["GEN-06","成本留痕","GPU 秒与估算成本记录","P1"],
+["GEN-07","云端图生图","输入预上传；云端执行；输出回传","P1"],
+["GEN-08","本地生图约束核验","本轮全部 final_backend=modal；不做本地生图","P1"],
+["WF-01","出图界面加载标准工作流 JSON","节点连线完整参数不丢","P0"],
+["WF-02","API 格式 JSON 提交（云端）","ComfyUI 识别并提交","P1"],
+["WF-03","保存 fulltest-workflow.json 再加载","hash 与保存时一致","P1"],
+["WF-04","导入无效 JSON","解析错误不崩溃；管理台仍可用","P1"],
+["WF-05","缺失模型/节点工作流提交（云端）","预检明确缺失项；ask 不自动上云","P0"],
+["SYNC-01","点「重新扫描」","本地工作流全部入清单","P0"],
+["SYNC-02","推送仅本地工作流到云端","云端同名文件 hash 一致","P0"],
+["SYNC-03","拉取仅云端工作流","本地落盘 hash 一致","P1"],
+["SYNC-04","制造冲突打开对比弹窗","双列展示；三种处置可选","P0"],
+["SYNC-05","选择本地覆盖云端","云端 hash 变为本地值","P1"],
+["SYNC-06","选择保留双副本","双文件生成原始不丢","P2"],
+["SYNC-07","点「一键同步」","非冲突同步；冲突保留提示","P1"],
+["NODE-01","临时节点同步到云端","目录/requirements/manifest 上传；1/1 成功（REG-02）","P0"],
+["NODE-02","刷新差异矩阵","节点已同步缓存失效","P1"],
+["NODE-03","禁用云端临时节点","manifest 更新；冷启动不加载","P2"],
+["NODE-04","云端移除临时节点","目录与 manifest 清除","P1"],
+["NODE-05","执行版本对齐","pin 一致历史留痕","P0"],
+["NODE-06","执行镜像重建/deploy","deployed；web_url 可访问","P0"],
+["NODE-07","刷新云端 object_info","节点数量与注册状态正确","P1"],
+["SET-01","打开设置同步矩阵","键级差异或首次同步提示","P1"],
+["SET-02","非敏感键推本地到云端","云端更新差异消除","P0"],
+["SET-03","修改后从云端拉回","恢复云端值状态一致","P1"],
+["SET-04","云端不可读时刷新","错误提示页面不崩","P1"],
+["VOL-01","init/chunk/complete 8MiB","分块正确云端文件存在","P0"],
+["VOL-02","断点续传","已完成分块保留续传","P0"],
+["VOL-03","错误 md5 上传","拒绝落卷原因可读","P0"],
+["VOL-04","路径安全 ../绝对路径/非法分类","全部拒绝","P0"],
+["VOL-05","下载云端文件","大小 hash 一致任务留痕","P0"],
+["VOL-06","移动/重命名","引用检查后移动成功","P1"],
+["VOL-07","软删除测试文件","回收站出现记录","P0"],
+["VOL-08","恢复测试文件","回原路径 hash 不变","P0"],
+["VOL-09","彻底删除","记录与文件均删不可恢复","P1"],
+["VOL-10","新建临时卷并删除","创建/列示/删除成功","P2"],
+["OPS-01","预热确认","冷启动成功状态在线","P1"],
+["OPS-02","打开容器列表","ID/状态/GPU/启动时间","P1"],
+["OPS-03","停止容器","列表刷新云端回冷启动","P1"],
+["OPS-04","modal deploy","deployed 日志流式","P0"],
+["OPS-05","流式 modal run 任务","进度实时文件正确","P1"],
+["SDK-01","状态页自检","SDK 1.5.x/登录/应用状态","P0"],
+["SDK-02","SDK 不可用模拟","告警提示 modal>=1.5","P0"],
+["SDK-03","卷读写冒烟 put/ls/get/rm","全部成功内容一致","P0"],
+["SDK-04","SDK 账单 summary 对照","金额误差<0.0001","P1"],
+["SDK-05","SDK 账单 report 对照","各维度聚合一致","P1"],
+["SDK-06","切换账号操作卷与账单","client 重建不串数据","P0"],
+["SDK-07","modal 包升降级后自检","proto 契约自检暴露不兼容","P2"],
+["NEG-01","本地 ComfyUI 离线","状态明确页面不崩；恢复后可用","P1"],
+["NEG-02","云端 Runner 离线提交","可恢复或明确失败不误报 done","P1"],
+["NEG-03","隐私确认拒绝","不发起云端提交数据不上传","P0"],
+["NEG-04","运行中 Interrupt","收敛 cancelled 无悬挂","P1"],
+["NEG-05","桥接器重启后查日志","history 兜底恢复终态","P1"],
+["NEG-06","含 ../ 上传路径","拒绝保存无越界文件","P0"],
+["NEG-07","无凭证访问状态/模型页","提示未配置不泄明文；恢复可用","P0"],
+["NEG-08","预算超限提交","按配置拒绝不产生费用","P1"],
+["NEG-09","管理令牌 缺/错/对","401/403/200；审计留痕；测完关闭","P1"],
+["NEG-10","非白名单 Origin 写操作","拒绝跨域写无副作用","P1"],
+["PKG-01","构建 wheel","含 app/静态资源/runner 副本","P0"],
+["PKG-02","pipx 安装启动","管理台与代理可用","P0"],
+["PKG-03","安装态状态页与卷冒烟","SDK/CLI/卷/账单工作","P0"],
+["PKG-04","安装态云端生图","完成一次无开发目录依赖","P0"],
+["PKG-05","卸载查残留","命令消失配置/卷不误删","P1"],
+["REG-01","UI-04 修复复测：点「前往出图界面」","assign(bridgeUrl) 必定导航；反复点击均跳转","P0"],
+["REG-02","NODE-01 修复复测：manifest 回退","临时目录不可写时回退 config/tmp；作业不误判 error；完成后清理","P0"],
+["REG-03","manifest 回退单测","pytest tests/unit/test_node_cache.py 通过","P0"],
+["REG-04","门禁全量复跑","ruff/mypy/pytest/tsc/build 全绿","P0"],
+["REG-05","无输出工作流终态","本地/云端均按 done 收尾","P1"],
+["REG-06","comfyui_version.txt 一致性","与镜像 pin/本地版本一致","P2"]
+];
+
+const LIVE_CASES = [
+["LIVE-01","test_bridge_health","聚合状态可读","P0"],
+["LIVE-02","test_local_comfy_object_info","/object_info 可读含基础节点","P0"],
+["LIVE-03","test_local_text_to_image","本轮默认跳过（禁本地生图）；如确认执行终态 done","P1"],
+["LIVE-04","test_modal_runner_reachable","状态可探不产生请求","P0"],
+["LIVE-05","test_existing_request_readonly","只读终态与输出检查","P2"],
+["LIVE-06","test_modal_text_to_image","受理执行回传 rule_trace/graph_hash 留痕","P0"],
+["LIVE-07","test_modal_image_to_image","输入预上传云端执行回传","P0"],
+["LIVE-08","test_modal_interrupt","终态 cancelled","P1"],
+["LIVE-09","test_modal_reconnect_history_fallback","history 兜底收敛","P1"],
+["LIVE-10","test_modal_no_output_workflow","合法 done 不误报","P1"]
+];
+
+const STORAGE_KEY = "comfybridge.live.execution.record.v2.20261015";
+const STATUSES = [
+  ["todo","待测"],["pass","通过"],["fail","失败"],["block","阻塞"],["skip","跳过"]
+];
+let state = loadState();
+let activeFilter = "all";
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){ console.warn("读取本地记录失败", e); }
+  return {meta:{},entry:{},cases:{},live:{},updated:null};
+}
+function saveState(){
+  state.updated = new Date().toISOString();
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const el = document.getElementById("saveState");
+    el.textContent = "已自动保存 " + new Date().toLocaleTimeString("zh-CN");
+  }catch(e){
+    document.getElementById("saveState").textContent = "保存失败：" + e.message;
+  }
+}
+function escapeHTML(s){
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function getCase(kind,id){
+  const bucket = kind === "live" ? state.live : state.cases;
+  if(!bucket[id]) bucket[id] = {status:"todo",actual:"",evidence:"",issue:"",at:""};
+  return bucket[id];
+}
+function moduleOf(id){ return id.split("-")[0]; }
+function renderCases(containerId, list, kind){
+  const container = document.getElementById(containerId);
+  const groups = {};
+  list.forEach(c => { const m = moduleOf(c[0]); (groups[m] = groups[m] || []).push(c); });
+  let html = "";
+  Object.keys(groups).forEach(m => {
+    const meta = MODULES[m] || {name:m};
+    html += '<h3>' + escapeHTML(meta.name + " · " + m) + '</h3>';
+    html += '<table><thead><tr><th style="width:74px">ID</th><th style="width:26%">步骤</th><th style="width:28%">预期</th><th style="width:56px">优先级</th><th style="width:104px">状态</th><th style="width:22%">实际结果</th><th style="width:16%">证据 / 路径</th><th style="width:14%">缺陷 / 备注</th></tr></thead><tbody>';
+    groups[m].forEach(c => {
+      const id = c[0], rec = getCase(kind, id);
+      const p = c[3].toLowerCase();
+      const opts = STATUSES.map(s => '<option value="' + s[0] + '"' + (rec.status === s[0] ? " selected" : "") + '>' + s[1] + '</option>').join("");
+      html += '<tr data-id="' + id + '" data-kind="' + kind + '" data-priority="' + c[3] + '" data-module="' + m + '" class="row-' + rec.status + '">';
+      html += '<td><b>' + id + '</b></td>';
+      html += '<td>' + escapeHTML(c[1]) + '</td>';
+      html += '<td>' + escapeHTML(c[2]) + '</td>';
+      html += '<td><span class="tag ' + p + '">' + c[3] + '</span></td>';
+      html += '<td><select class="status-sel s-' + rec.status + '" onchange="setStatus(this,\'' + kind + '\',\'' + id + '\')">' + opts + '</select></td>';
+      html += '<td><textarea placeholder="填写实际观察、错误信息、prompt_id 等" oninput="setField(this,\'' + kind + '\',\'' + id + '\',\'actual\')">' + escapeHTML(rec.actual) + '</textarea></td>';
+      html += '<td><textarea placeholder="截图文件名 / 日志路径 / 命令" oninput="setField(this,\'' + kind + '\',\'' + id + '\',\'evidence\')">' + escapeHTML(rec.evidence) + '</textarea></td>';
+      html += '<td><textarea placeholder="缺陷 ID / 备注" oninput="setField(this,\'' + kind + '\',\'' + id + '\',\'issue\')">' + escapeHTML(rec.issue) + '</textarea></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+  });
+  container.innerHTML = html;
+}
+function setStatus(sel, kind, id){
+  const rec = getCase(kind, id);
+  rec.status = sel.value;
+  rec.at = new Date().toISOString();
+  sel.className = "status-sel s-" + rec.status;
+  const row = sel.closest("tr");
+  row.className = "row-" + rec.status;
+  saveState(); updateSummary(); applyFilter();
+}
+function setField(el, kind, id, field){
+  const rec = getCase(kind, id);
+  rec[field] = el.value;
+  saveState();
+}
+function updateSummary(){
+  const all = CASES.map(c => getCase("case", c[0])).concat(LIVE_CASES.map(c => getCase("live", c[0])));
+  const count = s => all.filter(r => r.status === s).length;
+  const pass = count("pass"), fail = count("fail"), block = count("block"), skip = count("skip");
+  const total = all.length, done = pass + fail + block + skip;
+  document.getElementById("s-pass").textContent = pass;
+  document.getElementById("s-fail").textContent = fail;
+  document.getElementById("s-block").textContent = block;
+  document.getElementById("s-skip").textContent = skip;
+  document.getElementById("s-todo").textContent = total - done;
+  const pct = total ? Math.round(done / total * 100) : 0;
+  document.getElementById("s-pct").textContent = pct + "%";
+  document.getElementById("progressBar").style.width = pct + "%";
+}
+function applyFilter(){
+  const q = document.getElementById("searchBox").value.trim().toLowerCase();
+  document.querySelectorAll("#cases tbody tr, #liveCases tbody tr").forEach(row => {
+    const id = row.dataset.id, kind = row.dataset.kind;
+    const rec = getCase(kind, id);
+    const text = (row.textContent + " " + rec.actual + " " + rec.evidence + " " + rec.issue).toLowerCase();
+    const statusOk = activeFilter === "all" || rec.status === activeFilter;
+    const textOk = !q || text.includes(q);
+    row.style.display = (statusOk && textOk) ? "" : "none";
+  });
+  document.querySelectorAll("#cases h3, #liveCases h3").forEach(h => {
+    let el = h.nextElementSibling, any = false;
+    while(el && el.tagName === "TABLE"){
+      if([...el.querySelectorAll("tbody tr")].some(r => r.style.display !== "none")) any = true;
+      el = el.nextElementSibling;
+    }
+    h.style.display = any ? "" : "none";
+  });
+}
+function collect(){
+  const meta = {};
+  document.querySelectorAll("[data-meta]").forEach(el => meta[el.dataset.meta] = el.value);
+  const entry = {};
+  document.querySelectorAll("[data-entry]").forEach(el => entry[el.dataset.entry] = el.checked);
+  return {version:2, exportedAt:new Date().toISOString(), meta, entry, cases:state.cases, live:state.live};
+}
+function download(name, content, type){
+  const blob = new Blob([content], {type:type || "text/plain;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function stamp(){ return new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19); }
+function statusLabel(code){
+  const hit = STATUSES.find(s => s[0] === code);
+  return hit ? hit[1] : code;
+}
+function exportJSON(){ download("comfybridge-live-record-20261015-" + stamp() + ".json", JSON.stringify(collect(), null, 2), "application/json"); }
+function exportCSV(){
+  const esc = v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
+  const rows = [["类型","ID","模块","步骤","预期","优先级","状态","实际结果","证据","缺陷备注","记录时间"]];
+  CASES.forEach(c => pushRow(rows, "case", c));
+  LIVE_CASES.forEach(c => pushRow(rows, "live", c));
+  function pushRow(rows, kind, c){
+    const r = getCase(kind, c[0]);
+    rows.push([kind === "live" ? "live" : "case", c[0], moduleOf(c[0]), c[1], c[2], c[3], statusLabel(r.status), r.actual, r.evidence, r.issue, r.at]);
+  }
+  download("comfybridge-live-record-20261015-" + stamp() + ".csv", "\ufeff" + rows.map(r => r.map(esc).join(",")).join("\r\n"), "text/csv;charset=utf-8");
+}
+function exportMarkdown(){
+  const m = collect();
+  const lines = ["# ComfyBridge 真机测试执行记录（2026-10-15）", "", "- 导出时间：" + m.exportedAt, "- 测试日期：" + (m.meta.date || ""), "- 分支/commit：" + (m.meta.commit || ""), "- 执行人：" + (m.meta.owner || ""), "- 云端消耗：" + (m.meta.cost || "") + " / 预算 " + (m.meta.budget || ""), "- 结论：" + (m.meta.conclusion || ""), ""];
+  const table = (title, list, kind) => {
+    lines.push("## " + title, "", "| ID | 步骤 | 优先级 | 状态 | 实际结果 | 证据 | 缺陷/备注 |", "| --- | --- | --- | --- | --- | --- | --- |");
+    list.forEach(c => {
+      const r = getCase(kind, c[0]);
+      lines.push("| " + [c[0], c[1], c[3], statusLabel(r.status), r.actual, r.evidence, r.issue].map(v => String(v == null ? "" : v).replace(/\|/g, "\\|").replace(/\n/g, " ")).join(" | ") + " |");
+    });
+    lines.push("");
+  };
+  table("全量用例", CASES, "case");
+  table("LIVE 冒烟集", LIVE_CASES, "live");
+  download("comfybridge-live-record-20261015-" + stamp() + ".md", lines.join("\n"), "text/markdown;charset=utf-8");
+}
+function importJSON(input){
+  const f = input.files && input.files[0];
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const data = JSON.parse(reader.result);
+      state.meta = data.meta || {};
+      state.entry = data.entry || {};
+      state.cases = data.cases || {};
+      state.live = data.live || {};
+      saveState(); hydrate();
+      alert("导入成功，已恢复测试记录。");
+    }catch(e){ alert("导入失败：" + e.message); }
+  };
+  reader.readAsText(f);
+  input.value = "";
+}
+function resetAll(){
+  if(!confirm("确定清空本页所有测试记录？此操作不可撤销，建议先导出 JSON。")) return;
+  localStorage.removeItem(STORAGE_KEY);
+  state = {meta:{},entry:{},cases:{},live:{},updated:null};
+  hydrate();
+}
+function hydrate(){
+  document.querySelectorAll("[data-meta]").forEach(el => el.value = state.meta[el.dataset.meta] || "");
+  document.querySelectorAll("[data-entry]").forEach(el => el.checked = !!state.entry[el.dataset.entry]);
+  renderCases("cases", CASES, "case");
+  renderCases("liveCases", LIVE_CASES, "live");
+  updateSummary(); applyFilter();
+}
+document.addEventListener("input", e => {
+  if(e.target.dataset.meta) state.meta[e.target.dataset.meta] = e.target.value;
+  if(e.target.dataset.entry) state.entry[e.target.dataset.entry] = e.target.checked;
+  saveState();
+});
+document.querySelectorAll("#filters button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("#filters button").forEach(x => x.classList.remove("active"));
+  b.classList.add("active"); activeFilter = b.dataset.filter; applyFilter();
+}));
+document.getElementById("searchBox").addEventListener("input", applyFilter);
+window.addEventListener("beforeunload", saveState);
+hydrate();
+</script>
+</body>
+</html>
+

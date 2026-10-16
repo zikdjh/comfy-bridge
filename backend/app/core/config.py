@@ -129,7 +129,7 @@ class ModalConfig(BaseModel):
     # web_server 固定端点（modal deploy 输出），空 = 通道不可用
     web_url: str = ""
     task_timeout: int = 3600  # 单个云端任务最长等待秒数（含冷启动）
-    # 云端 ComfyUI 追加启动参数：保存时经 modal volume put 写入数据卷
+    # 云端 ComfyUI 追加启动参数：保存时经 SDK 网关写入数据卷
     # /config/launch_args.json，容器冷启动时由 runner.py 读取追加
     extra_launch_args: list[str] = []
     # 账号档案注册表（多账号维护，docs/ComfyBridge-设计-多账号维护.html）：[[modal.accounts]]。
@@ -169,9 +169,45 @@ def workflows_dir() -> Path:
     return Path(get_settings().local.comfy_root) / "user" / "default" / "workflows"
 
 
+def _launch_arg_value(args: list[str], flag: str) -> str | None:
+    """取启动命令里 --flag <v> 或 --flag=<v> 形式的值；缺值/空值返回 None。"""
+    prefix = f"{flag}="
+    for i, arg in enumerate(args):
+        if arg == flag:
+            if i + 1 < len(args) and not args[i + 1].startswith("--"):
+                return args[i + 1].strip().strip('"') or None
+        elif arg.startswith(prefix):
+            return arg[len(prefix):].strip().strip('"') or None
+    return None
+
+
 def input_dir() -> Path:
-    """本地 ComfyUI 输入目录（LoadImage 等上传文件的查找根）。"""
+    """本地 ComfyUI 输入目录（LoadImage 等上传文件的查找根）。
+
+    启动命令带 --input-directory（空格或 = 形式）时以其实际目录为准
+    （Desktop 安装常用共享目录），否则回退 comfy_root/input。
+    """
+    value = _launch_arg_value(get_settings().local.launch_command, "--input-directory")
+    if value:
+        return Path(value)
     return Path(get_settings().local.comfy_root) / "input"
+
+
+def output_dir() -> Path:
+    """本地 output 目录：显式配置 local.output_dir 优先；未配置时解析启动命令
+    的 --output-directory，再回退 comfy_root/output。
+
+    媒体库与云端输出回传共用本解析，避免「启动命令重定向了 output 而配置
+    未同步」时产物读错位置（GEN-03 input 分叉的同类边界）。
+    """
+    local = get_settings().local
+    configured = str(local.output_dir or "").strip().strip('"')
+    if configured:
+        return Path(configured)
+    value = _launch_arg_value(local.launch_command, "--output-directory")
+    if value:
+        return Path(value)
+    return Path(local.comfy_root) / "output"
 
 
 def custom_nodes_dir() -> Path:

@@ -17,6 +17,9 @@ const python = process.env.E2E_PYTHON ?? "../backend/.venv/Scripts/python.exe";
 
 export default defineConfig({
   testDir: "./e2e",
+  // CI/默认门禁只跑隔离后端的核心链路；多提交/队列进度两条依赖
+  // 手工 8189 真机环境，使用独立配置或显式 testMatch 运行。
+  testMatch: /flows\.spec\.ts/,
   timeout: 60_000,
   expect: { timeout: 10_000 },
   workers: 1,

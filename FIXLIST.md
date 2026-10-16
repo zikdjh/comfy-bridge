@@ -86,7 +86,7 @@
 - [x] 隔离回放（假 Modal CLI + 临时目录）：`nodes_sync` 上传节点目录与 `requirements.txt`，写入 `.comfybridge-manifest.json`，manifest 条目 `enabled: true`
 - [x] 真实 Modal 卷同步（2026-09-30 网络恢复后补验）：`POST /api/v1/nodes/sync` 实同步 2 项全 ok；卷上 `custom_nodes/.comfybridge-manifest.json` schema=1（pkg comfybridge-openai-image + 单文件 websocket_image_save.py，经 `modal volume get` 回读确认）；`GET /api/v1/nodes/diff` 两行 state=`same`，counts synced=2 / only_local=0 / only_cloud=0
 
-### 待做 / 后续
+### 待做 / 后续（历史记录，后续章节已闭环）
 
 - M2-2 镜像固化：`nodes.lock.yaml` + `install_nodes.sh` + `modal deploy` + 失败回滚
 - 清单采集补全：ComfyUI-Manager API 兜底；差异结果持久化缓存供路由 `node_presence` 使用
@@ -137,7 +137,7 @@
 
 - 单价 × 请求墙钟秒数（含冷启动等待）；@modal.concurrent 复用容器时多请求墙钟重叠按请求直加 = 保守上限；scaledown 保活窗口无请求归属不计入；与 Modal 账单对账属 v2（规划 §8.3）
 
-### 待做 / 后续
+### 待做 / 后续（历史记录，后续章节已闭环）
 
 - 成本按工作流/模型维度聚合、CSV 导出（规划 §8.3 报表升级）
 - 逐项账单对账（本地按次估算 vs Modal 账单明细，规划 §8.3 v2）；「剩余积分总额」待 Modal 公开接口后补
@@ -184,11 +184,12 @@
   漂移警告横幅（本地/云端对照 + 风险说明 + 「对齐云端 → v0.38.0」按钮）后即恢复 v0.38.0；
   截图 `tmp/gui-test-screenshots/m2_5_version_*.png`。期间发现 Vite dev server 随上一会话退出，已重启
 
-### 待做 / 后续
+### 待做 / 后续（历史记录，后续章节已闭环）
 
 - M2-2 镜像固化：`nodes.lock.yaml` + `install_nodes.sh`（节点依赖预装进镜像，消除每次冷启动 pip 安装）+ 失败回滚
 - 版本对齐余项：对齐历史留痕；「对齐」与「节点依赖」合并为一次重建（M2-2 后自然合并）
-- 节点同步其余遗留见 §六待做（changed 内容哈希检测、node_presence 路由、反向同步提示等）
+- 节点同步其余遗留（changed 内容哈希检测、node_presence 路由、反向同步提示等）
+  均已在 §十三/§十七 闭环。
 
 ## 九、M2-2 镜像固化（2026-10-01）
 
@@ -222,7 +223,7 @@
   `install_nodes.sh` 已挂镜像层；云端冷启动 `/system_stats` = 0.38.0
 - [x] 浏览器：差异矩阵「固化到镜像」按钮渲染正常（截图 `m2_2_rebuild_button.png`）
 
-### 已知行为 / 待做
+### 已知行为 / 待做（历史记录，后续章节已闭环）
 
 - deploy 以子进程随后端存活：后端在 deploy 进行中被强杀会中断部署（云端状态不确定，
   与超时同语义）；部署任务状态存内存，重启清零
@@ -265,11 +266,11 @@
 - [x] 浏览器：工作流页同步矩阵真实数据渲染（截图 `m2_4_workflow_sync_matrix.png`），
   节点页差异矩阵与固化按钮正常（`m2_2_rebuild_button.png`）
 
-### 待做 / 后续
+### 待做 / 后续（历史记录，后续章节已闭环）
 
 - 冲突的「双列对比视图」（原占位按钮的另一半）与运行统计聚合（v2 报表）
 - 删除传播策略（本地删/云端删的双向 tombstone）——v1 有意不做，防误删
-- M2 全景收尾：node_presence 路由规则（M3 表内）与反向同步提示仍待做
+- M2 全景收尾：node_presence 路由规则（§十三）与反向同步提示（§十七）已闭环
 
 ## 十一、Runner 端点鉴权（P0 安全 · 2026-10-01）
 
@@ -348,7 +349,7 @@
   测试后删行保存恢复空链（GET 确认 0 条）。
 - 期间事故与自愈：首次 PUT 触发上述 `_dump_toml` bug，坏行写进 config.toml 致后端整体 500；
   修复渲染器 + 手工移除坏行 + 重启恢复，并补回环单测防复发。
-- 待办（M3 余项）：node_presence 路由规则（需本地/云端节点 class 差异的持久化缓存）。
+- 后续（已闭环）：node_presence 路由规则见 §十三；本地/云端 class 差异已用持久化缓存实现。
 
 ## 十三、M3-2 node_presence 路由规则（2026-10-01）
 
@@ -1117,3 +1118,396 @@ P3-1 遗留的「mypy 尚未形成发布门禁」项闭环。
 - 新增 `tests/unit/test_passthrough_origin_headers.py`（2 项）：Origin/Referer 改写
   + 逐跳头剥离断言。
 - 同步：`docs/ComfyBridge-过程-真机验收缺陷清单.html` 增加 §8 第二轮遗留索引。
+
+## 三十七、10-13 真机测试遗留 P3 闭环：限流退避与 antd 弃用告警（2026-10-13）
+
+全天真机测试（见《完整测试报告-20261013》）发现 3 个 P3 轻微问题，其中两项当日闭环：
+
+### 1. 启动期 Modal 控制面限流：多级退避重试（`1e6881d`）
+
+- **症状**：启动期 `VolumeListFiles rate limit` 使节点在场索引、系统状态首检短暂失败，需人工重试。
+- **修复**：`modal_volume/client.py` 错误分类新增 `rate_limited`
+  （rate limit / too many requests / quota exceeded / 429），只读命令
+  （`app list`、`volume ls/get`、`billing summary` 等）按类别退避重试，
+  限流序列 1s/4s/10s（网络抖动保持 0.5s 单次）；写命令不自动重发。
+  `/health/modal-cli` 自检与节点云端清单均经 `client.run()`，自动获得该保护。
+- **验证**：`tests/unit/test_modal_volume_client.py` 扩至 15 项
+  （限流分类、退避恢复、退避耗尽抛错、写命令不重发），
+  `uv run pytest tests/unit/test_modal_volume_client.py -q` → **15 passed**。
+
+### 2. antd destroyOnClose 弃用告警（`004d02a`）
+
+- **症状**：控制台 `[antd: Modal] destroyOnClose is deprecated` 告警（仅开发态噪音）。
+- **修复**：media / dashboard / JobDrawer / ConfigWizard 共 4 处
+  `destroyOnClose` 全部替换为 `destroyOnHidden`（antd 5.29.3 支持）。
+- **验证**：`rg destroyOnClose frontend/src` 零命中；
+  `pnpm build`（tsc --noEmit + vite）0 错误，3719 模块构建通过。
+
+## 三十八、SDK 迁移真机回归：CLI 解析缺陷修复与全量验收（2026-10-14）
+
+`feature/modal-sdk-migration` 批次3 全量真机回归（管理台点击 + ComfyUI 界面 + 云端生图 + 队列监控），
+发现并当场修复 1 个 P1 缺陷，登记 2 个遗留；云端消耗 $0.0405。
+
+### 1. P1 已修：CLI 子进程解析丢失 venv 相对路径
+
+- **症状**：镜像重建/版本对齐秒失败「无法启动 modal CLI：[WinError 2]」。根因是迁移把
+  CLI 子进程解析写成两处独立的 `shutil.which("modal")`（`modal_volume/client.py::_exe`
+  与 `nodes_mgr/deploy.py::run_deploy`），而 venv `Scripts` 目录不保证在 PATH 里——
+  当日卸载/重装 venv 内 modal 包后该场景必然化，真机暴露。与 R2-01「双份逻辑漂移」同类。
+- **修复**：`_exe()` 先取 `sys.executable` 同目录的 `modal.exe`（pip CLI 入口与 SDK
+  同环境，最可靠落点），PATH 兜底；新增公共 `cli_exe()`，`deploy.py` 复用之（删本地
+  `shutil.which`），解析逻辑收敛回一处。
+- **验证**：镜像重建重跑 → deploy 成功（App deployed in 20.4s，固化 3 节点）；
+  门禁 ruff 0 / mypy 84 文件 0 错误 / pytest **415 passed, 10 skipped** / tsc 0。
+
+### 2. 真机验收通过面
+
+- 节点链路：rgthree-comfy（gitcode 镜像克隆，48 节点本地注册）→ 管理台差异矩阵
+  「安装到云端」UI 点击同步 → 云端镜像重建 → 冷启动拾取 → 工作流注入 `Seed (rgthree)`
+  经桥接提交云端 → **#159 done（GPU 74.8s / $0.0405）**，图快照确认节点在云端执行图中，
+  产物回传媒体库（`bridge_fulltest_rgthree_20261014_00001_.png`）。
+- UI 点击覆盖：管理台（仪表盘/节点差异矩阵/同步弹窗/任务抽屉/媒体库）+ ComfyUI 界面
+  （工作流面板/运行/队列）；队列进度监控：仪表盘运行中任务表实时流转 + API 交叉验证。
+- 隐私确认（P2-5）真机复验：云端首提交 409 `privacy_confirmation_required`，
+  带 `X-Bridge-Privacy-Confirmed: 1` 重试放行。
+
+### 3. 遗留登记（未修）
+
+- **P2｜`app_status` 偶发失败**：请求路径偶报「RPC made outside of task context」，
+  错误文案泄漏 anyio 任务 repr（< 300 字符截断显示）。启动时序相关，复现条件未锁定；
+  新进程首探即过的场景已多次观察。已在 `/health/modal-cli` 挂 `logger.exception`
+  诊断位，复现时取全栈再定修法（方向：stub 调用统一走与其它 SDK 操作一致的 awaitable 形态）。
+- **P3｜API 格式工作流经侧边栏打开行为存疑**：双击 `fulltest-rgthree-cloud.json`
+  （API 格式）后画布显示的是 krea2-文生图，WF-02「API 格式加载」结论需复核；
+  改用工作流注入方式完成本轮验证，不影响链路结论。
+- **环境漂移提醒**（非缺陷）：本地 ComfyUI 自动升级 0.40.0 与云端 pin 0.39.2 漂移，
+  节点页已正确告警；0.40 下旧工作流 clip 配置（lumina2）与 VAE 通道不匹配致本地出图
+  失败两次（#157/#158，工作流配置问题）。建议尽快在节点页执行「对齐云端 → v0.40.0」。
+
+## 三十九、SDK 迁移遗留 P2 闭环：AppList 跨事件循环（2026-10-14）
+
+### 1. P2 已修：app_status 偶发失败
+
+- **根因**：`modal.Client.from_credentials.aio()` 将 gRPC client 打开在 Modal SDK
+  synchronizer 后台事件循环上；`app_status()` 原来在 uvicorn 事件循环上裸调
+  `client.stub.AppList()`。两套循环共享同一个连接与任务上下文时，会偶发
+  `RPC made outside of task context`，以及 gRPC 连接被另一事件循环复用后的
+  `attached to a different loop` 类失败。该行为与 Modal CLI 的 blocking 通道一致地
+  必须送回 SDK loop。
+- **修复**：`modal_volume/client.py` 新增 `_app_list_blocking()`，用
+  `modal._utils.async_utils.synchronizer.create_blocking` 包装 AppList RPC；
+  `app_status()` 通过 `asyncio.to_thread()` 调用该同步入口。RPC 显式携带
+  `retry=None, timeout=timeout`，外层 `wait_for(timeout + 10.0)` 只兜底线程 join，
+  不缩短 SDK 请求 deadline。`health.py` 移除临时诊断文案。
+- **测试**：`test_app_status_matches_app_and_environment` 改为断言
+  `retry=None`、`timeout=20.0`、`environment_name` 请求参数，并用线程内
+  `asyncio.run` 的 fake blocking 入口守住「不能在调用方 loop 直接阻塞」的调用形态。
+
+### 2. 本轮验证
+
+- `ruff check app tests`：0 违规。
+- `mypy`（项目配置，`files = ["app"]`）：84 文件，0 错误。
+- `pytest tests`：**415 passed, 10 skipped**。
+- `tsc --noEmit`：0 错误。
+
+注：本机沙箱内 Python 3.14 的 Windows tempfile 显式 `0o700` 目录会在当前安全策略下
+产生进程自身也无法枚举的 ACL。首次全量复跑出现的 7 个失败均属于该环境问题；
+改用白名单临时目录并在会话级 pytest 插件中改为继承 ACL 后复跑，得到上述全量绿结果。
+该插件未进入仓库。
+
+### 3. 仍待复核
+
+- **P3｜API 格式工作流经侧边栏打开行为存疑**：仍需在有本地 ComfyUI 的真机环境复核
+  ComfyUI 0.40 新前端下 API 格式 JSON 的双击加载结果。
+- **环境漂移**：本地 0.40.0 与云端 pin 0.39.2 仍需执行「对齐云端」；本轮未复跑
+  WF-01/WF-02 浏览器 e2e。
+
+## 四十、SDK 迁移非真机收尾：版本回退值与文档一致性（2026-10-15）
+
+### 1. 版本回退值统一
+
+- `backend/app/nodes_mgr/version_align.py::DEFAULT_PIN` 与
+  `modal-runner/runner.py::DEFAULT_COMFYUI_VERSION` 由 `v0.37.4` 统一为当前锁文件 pin
+  `v0.39.2`；两者仅作为锁文件缺失/为空时的回退值，生产部署仍以
+  `modal-runner/lock/comfyui_version.txt` 为准。
+- 影响面：无行为变更，消除「锁文件缺失时回退到旧版本」的隐性漂移。
+
+### 2. SDK API 离线审计
+
+- modal 1.5.5 实测：`Volume.rename(old_name, new_name)` 是卷重命名 API，不改卷内文件路径；
+  `Volume.copy_files(..., recursive=True)` 在 V1 卷上抛 `ValueError`；当前 `comfyui-data` 为 V1，
+  故卷内搬移继续保留 `modal run` + 挂载容器 `shutil.copy2` + `vol.remove_file`。
+- `Sandbox.objects` 不存在，入口为 `Sandbox.list()`；container↔sandbox 同构性未验，
+  `container list/stop` 继续保留 CLI。
+- `App.deploy()`、`Function.remote()` 无流式日志，`deploy` 与流式 `run` 继续保留 CLI。
+
+### 3. 文档同步
+
+- README 当前状态更新至 2026-10-15，补充 SDK 控制面迁移、AppList 修复与剩余真机验收项。
+- 兼容性矩阵：Modal 依赖改为 `>=1.5`（实测 1.5.5），Runner 默认 pin 改为 `v0.39.2`，
+  并更新上传/删除/事件推送等已落地能力，移除过时「未实现」描述。
+- Modal SDK 迁移设计文档修正 `Sandbox.objects`、`Volume.copy_files` 的 API 口径与 V1 限制。
+
+### 4. 本轮验证（非真机）
+
+- `ruff check app tests`：0 违规。
+- `mypy`：84 文件，0 错误。
+- `pytest tests/unit/test_version_align.py tests/unit/test_lockfile.py tests/compat -q`：
+  **71 passed**（沙箱外复跑；沙箱内 27 个 fixture 错误为本机 Windows tempdir ACL 环境问题，
+  非代码断言失败）。
+- `pytest tests -q`：**415 passed, 10 skipped**（3 条第三方依赖弃用告警）。
+- `pnpm exec tsc --noEmit`：0 错误。
+
+### 5. 仍待处理（真机/环境）
+
+- API 格式工作流经 ComfyUI 0.40 侧边栏双击加载行为复核。
+- ~~本地 0.40.0 与云端 pin 0.39.2 的版本对齐~~ — 已于 2026-10-15 真机执行完成（见 §四十二）。
+- 发布前 live 冒烟与干净机器安装验收。
+
+## 四十一、10-15 真机测试缺陷闭环：五处产品缺陷修复（2026-10-15）
+
+`feature/modal-sdk-migration` 批次 3 全量真机测试（管理台点击 + ComfyUI 界面 + 云端出图）
+记录 `91 通过 / 8 失败 / 13 阻塞`；本轮先闭环其中 5 处代码缺陷，不推送、不合并。
+
+### 1. P1 已修：容器列表/停止绕过 venv CLI 解析（OPS-02/03）
+
+- **症状**：管理台「容器列表」报 `[WinError 2]`；venv `Scripts` 内有 `modal.exe`，但 PATH 无 `modal`。
+- **根因**：`app/api/v1/launch.py` 的 `_container_rows()` / `_stop_modal_containers()`
+  仍硬编码裸 `["modal", ...]`。§三十八 只把 `deploy.py` 收敛到 `cli_exe()`，这两处是漏网的
+  第三、四处 `which` 解析。
+- **修复**：两处改走 `cli_exe()`，子进程环境统一用 `cli_env()`（与 deploy 通道一致），
+  删掉局部 `{**os.environ, **auth_env()}` 拼装。
+- **验证**：`tests/unit/test_leftover_polish.py::test_stop_modal_containers_invalidates_cache`
+  改为断言 `argv[0] == cli_exe()` 且所有调用同源。
+
+### 2. P1 已修：同步作业「1/1 文件失败」仍报 done（UI-18）
+
+- **症状**：覆盖下载目标被占用（`WinError 5`）时进度 `1/1` 但状态仍显示「已完成」，
+  失败只体现在 `error`/`failed` 字段。
+- **根因**：`app/modal_volume/jobs.py::_run_job` 的 finally 无条件 `job.status = "done"`，
+  再把失败摘要写进 `error`——状态机与字段语义互相矛盾。
+- **修复**：存在失败文件时 `status = "error"`（附 `N/M 个文件失败` 摘要），全成功才 `done`；
+  前端 `jobStatusTag` 已按 `error` 渲染「失败」+ tooltip，无需改动。
+- **验证**：新增 `tests/unit/test_volume_sync_jobs.py`（部分失败 → error、全部成功 → done、计数）。
+
+### 3. P1 已修：凭证失效被误判为「云端设置文件缺失」（SET-04）
+
+- **症状**：Modal 凭证失效时「设置同步」返回 HTTP 200、`cloud_available=true` /
+  `cloud_exists=false`，页面不报错，用户误以为云端设置为空。
+- **根因**：`app/api/v1/settings_sync.py::_read_cloud` 用 `_MISSING_HINTS` 子串匹配错误消息，
+  其中 `"not found"` 命中 `AuthError: Token not found`，把凭证故障当成文件不存在。
+- **修复**：新增 `_is_missing_file()`，只在 `category == "uncertain"` 且消息为 SDK
+  `No such file or directory` 映射时判定缺失，其余分类照常上报为通道不可用；临时目录
+  `OSError` 兜底为通道错误，不再掩盖原始故障。
+- **验证**：`tests/unit/test_settings_sync.py` 新增 3 项（分类函数、auth 报错、真实缺失）。
+
+### 4. P0 已修：节点索引为空时预检整体放行，缺模型不拦截（WF-05）
+
+- **症状**：隔离实例 `preflight=ask` 下，工作流引用两端都缺的模型，`verdict` 仍是 `allow`。
+- **根因**：`app/proxy/precheck.py::decide_action` 在 `result["note"]` 非空时直接 allow。
+  `note` 只代表「节点在场索引为空」（`scan` 已把缺失节点清零），模型侧结论仍然可靠，
+  空节点索引把模型缺口一并放行了。
+- **修复**：删除该提前放行；缺模型/云端专有模型仍按 strict/ask/auto 语义处理，`note`
+  继续写入 `rule_trace` 供诊断；`blocked_message` 增加空段落兜底。
+- **验证**：`tests/unit/test_precheck.py::test_decide_action_note_does_not_skip_model_gate`。
+
+### 5. P0 已修：非模型文件删除永久生效，与回收站 UI 不符（UI-23）
+
+- **症状**：删除 `input/` 等非模型文件时直接永久删除，但删除弹窗按钮写「移入回收站」，
+  回收站里也找不到、无法恢复。
+- **根因**：`app/api/v1/volume.py::delete_paths` 只对 `is_model_path(rel)` 走
+  `move_to_trash`，其余路径直接 `remove_file`。
+- **修复**：统一软删除——模型文件/非模型文件/空目录都经 `move_to_trash` 进
+  `.trash/<时间戳>/`；引用检查仍只对模型路径生效。前端文案同步为「该条目将移入 .trash…」。
+- **验证**：`tests/unit/test_model_deletion.py::test_delete_api_soft_deletes_non_model_file`
+  （断言走 `move_to_trash`、不碰永久删除通道）。
+
+### 本轮验证（非真机）
+
+- `ruff check app tests`：0 违规。
+- `mypy`（`files = ["app"]`）：84 文件，0 错误。
+- `pytest tests/unit -q`：**375 passed**；`pytest tests -q`：**423 passed, 10 skipped**
+  （沙箱外复跑；沙箱内 tempdir ACL 会报 fixture 错误）。
+- `tsc --noEmit`：0 错误。
+
+### 仍待处理（真机/环境）
+
+- 上述 5 项的真机复测：设置同步凭证失效、`ask` 预检拦截、覆盖下载失败状态、容器列表/停止、
+  非模型删除后回收站恢复。
+- `modal deploy` 相关用例（`NODE-03/05/06`、`OPS-04/05`、`SDK-02/06/07`）需在有网络权限的终端补测。
+- ~~本地 0.40.0 与云端 pin 0.39.2 版本漂移仍需执行「对齐云端」~~ — 已于 2026-10-15 真机对齐完成（见 §四十二）。
+
+## 四十二、10-15 下午真机验证：通道恢复 + 版本对齐 v0.40.0（2026-10-15）
+
+真机会话（管理台 + 桥接 API 驱动），验证云通道恢复、路由干跑、云端生图、
+本地实例拉起与版本对齐全链路。云端消耗约 $0.23（两次验证生图 $0.036 / $0.152
++ 部署与预热容器时间）。
+
+### 1. Modal 通道恢复
+
+- 应用此前被 `modal app stop`（state=stopped），预热/直连 web_url 均返回 404
+  （Modal 边缘对 stopped 应用不转发）；Modal 1.5.5 CLI 无 `app restart`，
+  恢复手段只有重新 `modal deploy modal-runner/runner.py`（11.8s，复用镜像缓存）。
+- 预热 19.3s 冷启动后 `/api/v1/health` 转 `app_state=deployed, online=true`。
+
+### 2. 云端生图与路由干跑
+
+- 路由干跑（`POST /api/v1/routing/preview`，fulltest-rgthree-cloud）：6 步 trace 完整，
+  无手动头时正确落 default→local。
+- 云端真机生图（`x-bridge-backend: modal` + 隐私确认头，换随机种子防缓存命中）：
+  请求 #181 `done / final_backend=modal`，GPU 66.98s / 估算 $0.0363，
+  `model_name=krea2_turbo-iq4_xs.gguf` 自动落库；
+  产物 `bridge_live_verify_20261015_00001_.png`（1.28MB）落 `output_dir` 并入媒体库。
+
+### 3. 本地实例经桥接器拉起（修正 §十七 口径）
+
+- `POST /api/v1/launch/local/start` 成功拉起本地 ComfyUI（pid 32428，42.3s 就绪）。
+- §十七 曾记录「嵌入式 python 无法直接命令行拉起」——本次确认桥接器固化的启动命令
+  （venv python + main.py + `--extra-model-paths-config` 等）可正常冷启动，
+  该限制仅适用于 standalone-env 裸 python 直调场景。
+
+### 4. 节点在场与版本对齐（§三十八/§四十遗留闭环）
+
+- `POST /nodes/presence/refresh` 刷新干净：local 1026 / cloud 1021 class，
+  此前本地离线期的 stale 错误清除。
+- `GET /nodes/version` 实测 drift=true（本地 0.40.0 @ 3541246a vs pin v0.39.2）；
+  `POST /nodes/version/align` 真机执行：deploy 182s，`outcome=ok`，
+  pin v0.39.2 → **v0.40.0**，`drift=false`，历史留痕入 `version_align_history.jsonl`。
+- 对齐后云端验证生图 `done`：`bridge_live_align_verify_00001_.png` 落盘 + 媒体库可见。
+
+### 5. 观察：升级后首跑性能
+
+- 0.39.2 → 0.40.0 首次云端执行 GPU **281s**（总 335s，估算 $0.152），
+  显著高于对齐前基线 67s；容器日志见 `ComfyUI-GGUF: Allowing full torch compile`，
+  判定为升级后 GGUF 节点 torch 编译预热，属预期一次性开销，后续执行应回落基线。
+
+### 仍待处理（真机/环境）
+
+- §四十一 5 处缺陷修复的真机复测（本轮未逐项覆盖）。
+- `modal deploy` 相关用例（`NODE-03/05/06`、`OPS-04/05`、`SDK-02/06/07`）补测
+  （deploy 通道本身已实测可用：cli_exe 解析 + 11.8s/182s 两次成功）。
+- API 格式工作流经 ComfyUI 0.40 侧边栏双击加载行为复核（WF-02）。
+- 发布前 live 冒烟与干净机器安装验收。
+
+## 四十三、复测剩余缺陷收口：UI-04 与 NODE-01（2026-10-15）
+
+### 1. UI-04：管理台「前往出图界面」必定导航
+
+- 原实现依赖 antd `Button href + target=_blank`；真机点击只弹出提示、未建立导航。
+  改为显式 `window.location.assign(bridgeUrl)`，让跳转不再受浏览器对按钮链接/新页
+  目标的处理差异影响。目标仍来自 `/health` 的 `bridge.url`，缺失时继续用本地默认地址。
+
+### 2. NODE-01：节点同步 manifest 写入有可写兜底
+
+- 原实现只使用系统临时目录；Windows ACL / 沙箱导致 `cb-node-manifest-write-*`
+  创建或写文件失败时，节点文件已成功落卷但作业整体误判 error。
+- 现在 manifest 先序列化，再在系统临时目录不可用或写失败时回退到
+  `<config_dir>/tmp/cb-node-manifest-write-*`；上传完成后两处临时目录都会清理。
+  该兜底只影响本地图，不改变数据卷远端路径。
+
+### 3. LIVE-10：无需再改代码
+
+- 兼容矩阵 `without_outputs` 3 项回归通过；真机记录 #179/#180 的无输出本地/云端
+  用例均已按 `done` 收尾。此前导出的失败对应旧运行时，不构成当前代码回归。
+
+### 验证
+
+- `ruff check app tests`：0 违规；`mypy app`：84 文件 0 错。
+- `pytest tests -q`：**424 passed / 10 skipped**（新增 manifest 回退单测 1 项）。
+- `pnpm exec tsc --noEmit`：0 错；`pnpm build`：构建成功（仅既有 chunk 体积提示）。
+
+## 四十四、20261015 全量测试计划真机执行与两处缺陷闭环（2026-10-16）
+
+执行《ComfyBridge-过程-全量测试计划-20261015.html》（258 项）的核心批次，
+覆盖约 130 项：§4 API 矩阵（只读全扫 30 端点 + 配置/预算/规则/账号写往返）、
+§5 数据面、§6 管理台点击、§7 生图链路、任务链（节点/工作流/卷）、§14 NEG、
+§15 PKG-01、**§17 LIVE 冒烟 8 passed / 2 skipped 全绿**。
+执行明细存 `tmp/fulltest-20261016/results.md`（运行杂物目录，gitignore；
+导入执行记录页的 JSON 同目录）。
+
+### 1. API-18：成本聚合导出 500（KeyError: 'share'）
+
+- `/cost/export?scope=workflow|model` 直读 `acost_breakdown()`，而 share 占比
+  只在 /report 端点层计算——导出端点 KeyError 500。
+- 修复：抽出 `cost.py::_attach_share()` 供 /report 与 /export 共用；
+  新增聚合导出回归单测（share 列存在 + 各行占比合计为 1）。
+- 真机复测三 scope 全 200（CSV utf-8-sig + 附件头）。
+
+### 2. GEN-03：云端图生图 400 Invalid image file（input_dir 路径分叉）
+
+- `config.input_dir()` 硬编码 `comfy_root/input`，忽略启动命令的
+  `--input-directory`（Desktop 安装指向共享目录 D:/Comfy-Desktop/...）。
+  数据面 /upload/image 写入本地 ComfyUI 真实 input，云端推送阶段却查
+  另一个根 → 误判「本地缺失，假定云端已有」→ 静默跳过输入推送 →
+  云端校验 400。LV-03 修复链的边界漏洞，只有真机图生图才暴露。
+- 修复：`input_dir()` 优先解析固化启动命令的 `--input-directory`，
+  否则回退 comfy_root/input；新增 3 项回归单测。
+- 真机复测：`输入已推送云端(comfy)` → done / GPU 49.5s / 产物回传。
+
+### 3. LIVE 用例基建：隐私确认与中断时序（test(live)）
+
+- P2-5 上线后 `_submit` 无确认头被 409 拦截：补
+  `X-Bridge-Privacy-Confirmed: 1`（LIVE 是已授权自动化提交方，等价浏览器确认）。
+- 中断用例时序：固定 sleep(3) 落在云端提交完成前空窗（暖容器 8 步 ~20s
+  跑完，"running" 早于实际采样开始），中断空转后收敛 done。改轮询请求
+  进入 running 再 /interrupt，并拉宽采样窗口 steps 8→40。
+- LIVE 终局：**8 passed / 2 skipped**（skip 含本地生图用例，按 AGENTS.md 退役）；
+  文生图/图生图/断线兜底/无输出全 done + 产物回传，中断收敛 cancelled。
+
+### 验证
+
+- 门禁：`ruff check app tests` 0 违规；`mypy app` 84 文件 0 错；
+  `test_cost` 23 passed、`test_input_push` 10 passed。
+- PKG-01：`build_package.py` 全链成功，wheel 99 文件自检通过。
+- API-11/12 扫描 65534 目录真实发现 ComfyUI 安装；API-22/23/24 启停重启
+  往返通过；UI-46 批量节点同步往返通过（作业 ok 2/2，diff 往返验证）。
+- 观察记录：升级 0.40.0 后首跑 GPU 281s 系 GGUF torch 编译预热（次日回落
+  51s 基线）；对账比值 4.68 触发偏差告警属 Modal 计量口径（含全部容器时间）；
+  启动期 VolumeListFiles 限流由 §37 退避重试吸收。
+- 云端消耗 ≈ $0.46（对齐验证 + 全量测试两日合计）。
+
+### 仍待处理
+
+- UI-31/33/69 设置保存细粒度点击、UI-53/54 上传暂停/取消、UI-55/56 URL 下载、
+  DP-11 WS 浏览器观察（DP-08 队列合成已旁证）。
+- F-75 干净机器 30 分钟安装验收（需真新机器/VM）；§15 PKG 安装态冒烟可并入。
+
+## 四十五、全量测试遗留观察收口：目录解析泛化与短 secret 掩码边界（2026-10-16）
+
+针对 §四十四 测试的两处观察项做主动收口：GEN-03 修复只覆盖了空格形式
+的 `--input-directory`，且 output 侧存在同类分叉隐患；API-07 的短 secret
+掩码观察需用回归测试给出定论。
+
+### 1. 启动命令目录解析泛化（config.py）
+
+- 新增 `_launch_arg_value()`：统一支持 `--flag <v>` 与 `--flag=<v>` 两种
+  argparse 形式；值缺失 / 以 `--` 开头（误把下一个 flag 当值）/ 空串一律
+  视为缺值回退，不再有旧实现 `args[i+1]` 盲取的边界。
+- `input_dir()` 改走该解析（GEN-03 修复的 `=` 形式补齐，Desktop 启动命令
+  两种写法均生效）。
+
+### 2. output 侧同类分叉收口：新增 `output_dir()` 解析器
+
+- 原状：媒体库与云端输出回传直读 `local.output_dir`，为空时 `Path("")`
+  退化为后端进程工作目录；启动命令重定向 `--output-directory` 时配置若
+  未同步即读错位置（与 GEN-03 input 完全同类的边界）。
+- 修复：`config.output_dir()` 解析链 = 显式配置（设置页必填项，优先）→
+  启动命令 `--output-directory` → 回退 `comfy_root/output`。
+- 消费方收口：`media.py::_output_root()` 与 `executor.py::_download_outputs()`
+  均改走解析器（全仓仅此两处直读 `local.output_dir`）。
+
+### 3. API-07 短 secret 掩码观察定论
+
+- 复核全部账号/配置响应路径（GET /config、accounts GET/PUT、activate
+  响应）：均经 `_mask_secret()`，长度 < 12 一律全掩码 `****`，无「原样
+  返回」分支；本轮新增 2 项单测以 7 字符 secret 锁定该边界（掩码值 +
+  全响应 blob 不含原文）。
+- 当时观察未能复现，判定为测试脚本读到了按设计回显的 `token_id` 字段
+  （或 config.toml 落盘明文——本地文件设计内存储）。掩码语义维持
+  「过短全掩码」不改为 first5+****+last4（那会泄露前 5 位）。
+
+### 验证
+
+- `ruff check app tests`：0 违规；`mypy app`：84 文件 0 错。
+- `pytest tests -q`：**434 passed / 10 skipped**（新增 input `=` 形式 1 项、
+  output_dir 解析器 3 项、短 secret 掩码边界 2 项）。

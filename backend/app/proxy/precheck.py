@@ -8,7 +8,7 @@
 - off    不校验（历史行为不变，默认）
 - strict 缺节点/缺模型 → 拦截（409，blocked 留痕，不带选项）
 - ask    拦截并附结构化可操作选项（上传哪些模型 / 安装哪些节点 / 改走云端）
-- auto   缺模型且本地有副本 → 自动 modal volume put 上传云端卷后放行；缺节点/本地目标仍按 ask 拦截
+- auto   缺模型且本地有副本 → 自动上传云端卷后放行；缺节点/本地目标仍按 ask 拦截
 
 未知取值一律按 off 处理（配置打错不改变历史行为）。
 """
@@ -111,10 +111,12 @@ def decide_action(mode: str, result: dict) -> tuple[str, list[dict] | None]:
     off 恒 allow；ok 恒 allow。auto：目标=modal 且缺失模型全部可本地供给时返回 auto_supply
     （即使同时缺节点——先上传，剩余问题由调用方供给后按 ask 语义拦截）；strict 拦截不附选项；
     ask 拦截附选项。未知取值按 off（配置打错不改变历史行为）。
+
+    result["note"] 只说明节点在场索引不可用（scan 已据此把缺失节点清零），
+    不代表模型侧不可判定：存在缺模型/云端专有模型时仍按模式拦截，否则 ask/strict
+    会被一个空节点索引整体放行（WF-05）。
     """
     if mode not in {"strict", "ask", "auto"} or result["ok"]:
-        return "allow", None
-    if result["note"]:  # 索引不可用：无法可靠判定，放行交由目标端权威校验
         return "allow", None
     options = block_options(result)
     if mode == "auto" and result["target"] == "modal" \
@@ -172,6 +174,8 @@ def blocked_message(result: dict) -> str:
     if result["missing_models"]:
         shown = "、".join(result["missing_models"][:5]) + ("…" if len(result["missing_models"]) > 5 else "")
         parts.append(f"两端都找不到模型文件 {shown}")
+    if not parts:  # 兜底：仅「本地有副本、云端缺失」等场景也不产出空文案
+        parts.append(f"{side}缺少执行所需资源")
     tail = "。提交已被预校验拦截（未产生任何执行与费用）"
     if result["supplyable_refs"]:
         tail += f"；其中 {len(result['supplyable_refs'])} 个模型本地有副本，可切 auto 模式自动上传"
@@ -182,7 +186,7 @@ async def auto_supply(items: list[tuple[str, str | None]]) -> dict:
     """把本地有副本的缺失模型上传云端卷 models/<分类>/<ref>（auto 供给）。
 
     逐个上传：单个失败不阻塞其余；本地找不到文件或无分类映射的条目记为失败。
-    全部经 `modal volume put -f`（免容器，与节点同步同一原语）。
+    全部经 SDK 网关 put_file（免容器，与节点同步同一原语）。
     """
     dirs = model_dirs_resolved()
     uploaded: list[str] = []
@@ -197,9 +201,7 @@ async def auto_supply(items: list[tuple[str, str | None]]) -> dict:
             continue
         remote = f"models/{cat}/{ref}"
         try:
-            await volume_cli.run(
-                "volume", "put", volume_cli.volume_name(), str(local_path), remote, "-f"
-            )
+            await volume_cli.put_file(str(local_path), remote, force=True)
         except ModalCliError as exc:
             failed.append({"ref": ref, "error": str(exc)[:200]})
             continue

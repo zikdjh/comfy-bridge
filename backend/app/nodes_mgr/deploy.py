@@ -10,13 +10,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import shutil
 import time
 from collections.abc import Callable
 
 from .. import runner_assets
 from ..events import publish
-from ..modal_volume.client import cli_env
+from ..modal_volume.client import cli_env, cli_exe
 
 RUNNER_FILE = runner_assets.runner_file("runner.py")
 
@@ -109,7 +108,7 @@ async def run_deploy(rollback) -> None:
     """执行 modal deploy（后台任务体，调用方 create_task）；失败调 rollback 并置 error。"""
     try:
         proc = await asyncio.create_subprocess_exec(
-            shutil.which("modal") or "modal", "deploy", str(RUNNER_FILE),
+            cli_exe(), "deploy", str(RUNNER_FILE),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=cli_env(),

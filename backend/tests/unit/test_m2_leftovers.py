@@ -284,13 +284,13 @@ async def test_compare_with_cloud_via_volume(monkeypatch, tmp_path):
     monkeypatch.setattr(wf_api, "workflows_dir", lambda: tmp_path)
     monkeypatch.setattr(ws_sync, "modal_configured", lambda: True)
 
-    async def fake_volume_get(*args, **kw):
-        # volume get <vol> <remote> <dest> --force：把云端内容写到 dest（args[4]）
-        dest = Path(args[4])
+    async def fake_volume_get(remote, dest, **kw):
+        assert remote.endswith("/x.json")
+        dest = Path(dest)
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(cloud_body, encoding="utf-8")
 
-    monkeypatch.setattr(wf_api.volume_cli, "run", fake_volume_get)
+    monkeypatch.setattr(wf_api.volume_cli, "get_file", fake_volume_get)
     data = await wf_api.workflows_compare(name="x.json")
     assert data["cloud"]["exists"] and data["cloud"]["node_count"] == 2
     assert data["identical"] is False

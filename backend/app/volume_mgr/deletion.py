@@ -312,7 +312,7 @@ async def cleanup_expired_trash(
         if age is None or age < retention_days:
             continue
         rel = f"{TRASH_ROOT}/{name}"
-        await modal_cli.run("volume", "rm", volume, rel, "-r")
+        await modal_cli.remove_file(rel, volume=volume, recursive=True)
         removed.append(rel)
         logger.info("回收站清理：卷 %s 删除过期条目 %s（%.1f 天）", volume, rel, age)
     return removed
@@ -321,14 +321,10 @@ async def cleanup_expired_trash(
 async def cleanup_all_expired_trash(retention_days: int = TRASH_RETENTION_DAYS) -> dict[str, list[str]]:
     """清理所有卷的过期回收站；单卷失败不阻断其余卷。"""
     out: dict[str, list[str]] = {}
-    if not modal_cli.cli_path():
-        # 安装态仅本地桥接（未装 modal CLI）属正常形态，不作为启动告警刷屏。
-        logger.debug("回收站清理：modal CLI 未安装，跳过云端回收站清理")
-        return out
     try:
-        rows = modal_cli.cli_json_list(await modal_cli.run("volume", "list", "--json"))
-    except Exception as exc:  # noqa: BLE001 —— 后台清理必须静默降级
-        logger.warning("回收站清理：无法列出数据卷: %s", exc)
+        rows = await modal_cli.volumes_list()
+    except Exception as exc:  # noqa: BLE001 —— 无 SDK/凭证属正常形态，后台清理静默降级
+        logger.debug("回收站清理：SDK 不可用或无法列出数据卷，跳过云端清理: %s", exc)
         return out
     for row in rows:
         name = str(row.get("name") or "")

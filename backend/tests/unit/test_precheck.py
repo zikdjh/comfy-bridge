@@ -80,8 +80,19 @@ def _result(**kw):
 def test_decide_action_off_and_ok_and_unknown_index():
     assert precheck.decide_action("off", _result()) == ("allow", None)
     assert precheck.decide_action("auto", _result(ok=True)) == ("allow", None)
-    assert precheck.decide_action("strict", _result(note="索引为空")) == ("allow", None)
     assert precheck.decide_action("bogus", _result()) == ("allow", None)  # 未知取值按 off
+
+
+def test_decide_action_note_does_not_skip_model_gate():
+    """WF-05：节点索引为空（note）只降级节点判定，模型缺口仍按模式拦截。"""
+    r = _result(note="云端 端节点在场索引为空，已跳过节点校验",
+                missing_models=["nowhere.safetensors"], supplyable=[], supplyable_refs=[])
+    assert precheck.decide_action("strict", r) == ("block", None)
+    action, options = precheck.decide_action("ask", r)
+    assert action == "block"
+    assert options and options[0]["action"] == "missing_models"
+    # 索引不可用但没有模型缺口时依旧放行
+    assert precheck.decide_action("ask", _result(ok=True, note="索引为空")) == ("allow", None)
 
 
 def test_decide_action_strict_vs_ask():
@@ -133,13 +144,12 @@ def supply_env(monkeypatch, tmp_path):
     (lora_dir / "a.safetensors").write_bytes(b"x" * 32)
     monkeypatch.setattr(precheck, "model_dirs_resolved", lambda: {"loras": str(lora_dir)})
     monkeypatch.setattr(precheck.volume_cli, "volume_name", lambda: "vol-x")
-    calls: list[list[str]] = []
+    calls: list[tuple] = []
 
-    async def fake_run(*args, **kw):
-        calls.append(list(args))
-        return "ok"
+    async def fake_put(local, remote, **kw):
+        calls.append((str(local), remote, kw))
 
-    monkeypatch.setattr(precheck.volume_cli, "run", fake_run)
+    monkeypatch.setattr(precheck.volume_cli, "put_file", fake_put)
     return calls, lora_dir
 
 
@@ -149,8 +159,8 @@ async def test_auto_supply_uploads(supply_env):
     out = await precheck.auto_supply([("a.safetensors", "loras"), ("b.safetensors", "loras")])
     assert out["uploaded"] == ["a.safetensors"]
     assert out["failed"] == [{"ref": "b.safetensors", "error": f"本地副本不存在：{lora_dir / 'b.safetensors'}"}]
-    assert calls == [["volume", "put", "vol-x", str(lora_dir / "a.safetensors"),
-                      "models/loras/a.safetensors", "-f"]]
+    assert calls == [(str(lora_dir / "a.safetensors"),
+                      "models/loras/a.safetensors", {"force": True})]
 
 
 @pytest.mark.asyncio
@@ -159,10 +169,10 @@ async def test_auto_supply_no_category_and_cli_error(monkeypatch, tmp_path):
     monkeypatch.setattr(precheck.volume_cli, "volume_name", lambda: "vol-x")
     (tmp_path / "y.safetensors").write_bytes(b"x" * 8)  # 本地有副本，才能走到 CLI 报错分支
 
-    async def fake_run(*args, **kw):
+    async def fake_put(*args, **kw):
         raise precheck.ModalCliError("put failed")
 
-    monkeypatch.setattr(precheck.volume_cli, "run", fake_run)
+    monkeypatch.setattr(precheck.volume_cli, "put_file", fake_put)
     out = await precheck.auto_supply([("x.bin", None), ("y.safetensors", "loras")])
     assert out["failed"][0] == {"ref": "x.bin", "error": "无法确定模型分类目录"}
     assert "put failed" in out["failed"][1]["error"]

@@ -65,6 +65,14 @@ def _check_days(days: int) -> int:
     return days
 
 
+def _attach_share(rows: list[dict]) -> list[dict]:
+    """聚合行就地补 share（占比）；total 为 0 时全部记 0。/report 与 /export 共用。"""
+    total = sum(r["est_cost_usd"] for r in rows)
+    for r in rows:
+        r["share"] = round(r["est_cost_usd"] / total, 4) if total > 0 else 0.0
+    return rows
+
+
 @router.get("/report")
 async def cost_report(
     by: Literal["workflow", "model"] = "workflow",
@@ -73,10 +81,8 @@ async def cost_report(
 ) -> dict:
     """成本按维度聚合（报表 v2）：返回行 + 合计，供表格与占比展示。"""
     _check_days(days)
-    rows = await cost_svc.store.acost_breakdown(by, days, min(max(limit, 1), 200))
+    rows = _attach_share(await cost_svc.store.acost_breakdown(by, days, min(max(limit, 1), 200)))
     total = sum(r["est_cost_usd"] for r in rows)
-    for r in rows:
-        r["share"] = round(r["est_cost_usd"] / total, 4) if total > 0 else 0.0
     return {"by": by, "days": days, "rows": rows, "total_est_cost_usd": round(total, 5)}
 
 
@@ -129,7 +135,7 @@ async def cost_export(
         )
     rows = [
         [r["key"], r["requests"], r["gpu_seconds"], r["est_cost_usd"], r["share"]]
-        for r in await cost_svc.store.acost_breakdown(scope, days, 200)
+        for r in _attach_share(await cost_svc.store.acost_breakdown(scope, days, 200))
     ]
     label = "工作流" if scope == "workflow" else "主模型"
     return _csv_response(

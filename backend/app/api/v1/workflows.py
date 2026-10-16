@@ -186,7 +186,7 @@ def _side_meta(path: Path, with_mtime: bool) -> dict:
 
 @router.get("/workflows/compare")
 async def workflows_compare(name: str) -> dict:
-    """冲突双列对比数据（name 为文件名）；云端版经 volume get 现读（mtime 不可得，略）。"""
+    """冲突双列对比数据（name 为文件名）；云端版经 SDK 网关现读（mtime 不可得，略）。"""
     if not valid_workflow_name(name):
         raise HTTPException(status_code=422, detail="非法工作流文件名")
     root = workflows_dir()
@@ -196,9 +196,7 @@ async def workflows_compare(name: str) -> dict:
         tmp_root = Path(tempfile.mkdtemp(prefix="cb-wf-cmp-"))
         try:
             dest = tmp_root / name
-            await volume_cli.run(
-                "volume", "get", volume_cli.volume_name(), f"{workflows_sync.CLOUD_DIR}/{name}", str(dest), "--force"
-            )
+            await volume_cli.get_file(f"{workflows_sync.CLOUD_DIR}/{name}", dest, force=True)
             cloud = await asyncio.to_thread(_side_meta, dest, False)
         except ModalCliError as exc:
             cloud = {"exists": False, "error": str(exc)[:300]}

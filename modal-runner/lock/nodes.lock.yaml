@@ -1,8 +1,18 @@
 {
   "schema": 1,
-  "generated_at": "2026-10-13T04:52:14.440398+00:00",
+  "generated_at": "2026-10-14T02:26:48.306965+00:00",
   "comfyui_version": "v0.39.2",
   "nodes": [
+    {
+      "name": "ComfyUI-GGUF",
+      "repo": "https://github.com/city96/ComfyUI-GGUF.git",
+      "commit": "6ea2651",
+      "requirements": [
+        "gguf>=0.13.0",
+        "sentencepiece",
+        "protobuf"
+      ]
+    },
     {
       "name": "comfybridge-openai-image",
       "repo": null,
@@ -11,6 +21,12 @@
         "requests",
         "pillow"
       ]
+    },
+    {
+      "name": "rgthree-comfy",
+      "repo": "https://gitcode.com/gh_mirrors/rg/rgthree-comfy.git",
+      "commit": "55ee1c7",
+      "requirements": []
     }
   ]
 }

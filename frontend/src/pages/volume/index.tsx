@@ -563,7 +563,7 @@ function VolumeBrowser({
       queryClient.invalidateQueries({ queryKey: ["volume", "usage"] });
       queryClient.invalidateQueries({ queryKey: ["volume", "trash", volume] });
       if (res.ok) {
-        message.success(`已删除 ${name}（模型文件已移入回收站）`);
+        message.success(`已删除 ${name}（已移入回收站）`);
         setDeletePreview(null);
       } else {
         const failed = res.results.find((r) => !r.ok);
@@ -770,10 +770,10 @@ function VolumeBrowser({
             />
           ) : (
             <Alert
-              type="warning"
+              type="info"
               showIcon
-              message="删除空目录"
-              description="目录含文件（递归）时会被后端拒绝；只有空目录才会删除。"
+              message="移入回收站"
+              description="该条目将移入 .trash，默认保留 7 天，可在下方回收站恢复；目录含文件（递归）时会被后端拒绝，只有空目录才会删除。"
             />
           )}
           <Typography.Text code>{deletePreview?.path}</Typography.Text>

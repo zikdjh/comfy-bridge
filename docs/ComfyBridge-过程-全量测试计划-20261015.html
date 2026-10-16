@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyBridge 全量真机测试计划 · 2026-10-15</title>
+<style>
+  :root {
+    --bg:#f6f7fb; --card:#ffffff; --ink:#1f2430; --ink-soft:#5a6272;
+    --line:#e4e7ef; --accent:#4f5be8; --accent-soft:#eef0fe;
+    --pass:#16803c; --pass-bg:#ecfdf3; --warn:#b45309; --warn-bg:#fffbeb;
+    --fail:#b91c1c; --fail-bg:#fef2f2; --code-bg:#14161f; --code-ink:#e6e9f2;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth;scroll-padding-top:70px}
+  body{margin:0;background:var(--bg);color:var(--ink);line-height:1.75;font-size:15px;
+    font-family:system-ui,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  header.hero{background:linear-gradient(135deg,#232a63 0%,#4f5be8 55%,#8a7bff 100%);
+    color:#fff;padding:36px 24px 28px;text-align:center}
+  header.hero h1{margin:0 0 8px;font-size:26px;letter-spacing:1px}
+  header.hero .meta{font-size:12.5px;opacity:.82;margin-top:8px}
+  nav.toc{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.96);
+    backdrop-filter:blur(6px);border-bottom:1px solid var(--line);padding:9px 16px;
+    display:flex;flex-wrap:wrap;gap:5px 12px;justify-content:center;font-size:13.5px}
+  nav.toc a{color:var(--ink-soft);text-decoration:none;padding:3px 8px;border-radius:6px}
+  nav.toc a:hover{color:var(--accent);background:var(--accent-soft)}
+  main{max-width:1240px;margin:0 auto;padding:28px 20px 44px}
+  h2{font-size:20px;margin:42px 0 14px;padding-left:12px;border-left:4px solid var(--accent);line-height:1.4}
+  main>h2:first-child{margin-top:0}
+  h3{font-size:16.5px;margin:24px 0 8px}
+  h4{font-size:14.5px;margin:18px 0 6px;color:#4353d8}
+  p{margin:10px 0}
+  ul,ol{margin:8px 0;padding-left:26px}
+  li{margin:5px 0}
+  li input[type="checkbox"]{margin-right:6px;vertical-align:-2px}
+  code,pre{font-family:"JetBrains Mono",Consolas,"Cascadia Code",monospace}
+  code{background:#f0f2fa;color:#33398f;padding:1.5px 6px;border-radius:5px;font-size:13px}
+  pre{background:var(--code-bg);color:var(--code-ink);border-radius:10px;padding:16px;
+    overflow-x:auto;font-size:13px;line-height:1.6;margin:12px 0}
+  pre code{background:none;color:inherit;padding:0}
+  table{width:100%;border-collapse:collapse;background:var(--card);font-size:13px;margin:12px 0}
+  th,td{border:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top}
+  thead th{background:var(--accent-soft);color:#4353d8;font-weight:600}
+  tbody tr:nth-child(even){background:#fafbfe}
+  td input[type="checkbox"]{vertical-align:-2px;margin-right:5px}
+  blockquote{margin:14px 0;padding:10px 16px;background:var(--accent-soft);
+    border-left:4px solid var(--accent);border-radius:0 8px 8px 0;color:#3a4160}
+  blockquote p{margin:4px 0}
+  .tag{display:inline-block;border-radius:999px;padding:1px 9px;font-size:12px;font-weight:600;white-space:nowrap}
+  .p0{color:var(--fail);background:var(--fail-bg)}
+  .p1{color:var(--warn);background:var(--warn-bg)}
+  .p2{color:var(--pass);background:var(--pass-bg)}
+  .note{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:10px 0}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+  .grid div{border:1px solid var(--line);border-radius:8px;background:#fff;padding:12px 14px}
+  .m{font-size:12px;color:var(--ink-soft);margin:2px 0 0}
+  .footer{text-align:center;color:var(--ink-soft);font-size:12.5px;padding:18px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header class="hero">
+  <h1>ComfyBridge 全量真机测试计划</h1>
+  <div class="meta">覆盖：后端管理面全部 89 个 API 操作 · 数据面与实时通道 · 11 个页面全部点击操作 · 生图/同步/运维/SDK/打包</div>
+  <div class="meta">版本基线：feature/modal-sdk-migration @ d3d8d05 · 准备日期：2026-10-15 · Asia/Shanghai · 共 258 项用例</div>
+</header>
+<nav class="toc">
+  <a href="#c1">1. 定位与规则</a>
+  <a href="#c2">2. 环境准备</a>
+  <a href="#c3">3. 执行顺序</a>
+  <a href="#c4">4. 管理面 API 矩阵</a>
+  <a href="#c5">5. 数据面与实时通道</a>
+  <a href="#c6">6. 管理台点击矩阵</a>
+  <a href="#c7">7. 生图链路</a>
+  <a href="#c8">8. 工作流与同步</a>
+  <a href="#c9">9. 节点管理</a>
+  <a href="#c10">10. 设置同步</a>
+  <a href="#c11">11. 卷功能</a>
+  <a href="#c12">12. 云端运维</a>
+  <a href="#c13">13. SDK 专项</a>
+  <a href="#c14">14. 异常与安全</a>
+  <a href="#c15">15. 打包与升级</a>
+  <a href="#c16">16. 修复回归</a>
+  <a href="#c17">17. LIVE 冒烟</a>
+  <a href="#c18">18. 证据与验收</a>
+</nav>
+<main>
+
+<div class="note">
+  <strong>执行时实时记录：</strong>打开
+  <a href="ComfyBridge-过程-真机测试执行记录-20261015.html">ComfyBridge-过程-真机测试执行记录-20261015.html</a>，
+  逐项填写状态、实际结果与证据。该页内置本计划全部 258 项用例，数据自动保存在浏览器本地
+  （独立存储键 <code>v2</code>，不覆盖 10-13 轮记录），可导出 JSON / Markdown / CSV 或导入续测。
+</div>
+
+<h2 id="c1">1. 测试定位与规则</h2>
+<blockquote>
+  <p>本计划是 2026-10-13 全量计划（102 项）的超集，新增：后端管理面 89 个 API 操作逐一验证（API-01..89）、
+  数据面与实时通道 15 项（DP-01..15）、前端细粒度点击 35 项（UI-36..70）、修复回归 6 项（REG-01..06）。</p>
+  <p>旧计划中的 UI-01..35、WF/SYNC/NODE/SET/VOL/OPS/SDK/NEG/PKG、LIVE 冒烟全部保留并沿用原编号，
+  与 10-13 轮执行记录兼容对照。</p>
+</blockquote>
+
+<h3>1.1 强制规则（AGENTS.md）</h3>
+<ul>
+  <li><input type="checkbox"> 真实出图一律走 Modal 云端通道：提交时显式携带 <code>x-bridge-backend: modal</code>，不传 <code>local</code>，不依赖默认路由把请求留在本地。</li>
+  <li><input type="checkbox"> 不为了跑通用例触发本地模型加载或本地推理；不为本地生图下载、安装或搬运模型权重。</li>
+  <li><input type="checkbox"> 本轮默认不执行任何本地生图用例（旧计划 GEN-01..03、LIVE-03 按此规则退役，见 §7/§17 说明）。</li>
+  <li><input type="checkbox"> 判定依据：每条生图请求终态记录里 <code>final_backend</code> 必须是 <code>modal</code>。</li>
+</ul>
+
+<h3>1.2 测试范围</h3>
+<table>
+  <thead><tr><th>层次</th><th>必须覆盖</th><th>禁止用假数据替代</th></tr></thead>
+  <tbody>
+    <tr><td>管理面 API</td><td>89 个 OpenAPI 操作逐一发起真实请求并核对响应与副作用</td><td>响应码、数据落盘、任务状态变化</td></tr>
+    <tr><td>数据面</td><td>ComfyUI 前端加载、/prompt 提交、object_info 合并、queue 合成、interrupt、WS 中继、history/view 透传</td><td>生图终态与产物文件</td></tr>
+    <tr><td>管理台</td><td>11 个页面全部可点控件（含 ConsolePane 8 个控件、配置向导 4 步、设置 6 Tab 表单）</td><td>页面渲染与按钮状态</td></tr>
+    <tr><td>同步面</td><td>工作流矩阵与冲突、节点同步、版本对齐、设置同步</td><td>云端卷文件与本地文件哈希</td></tr>
+    <tr><td>模型/数据卷</td><td>分块上传、续传、MD5、下载、软删除/恢复、移动、新建目录</td><td>真实 Modal Volume 文件</td></tr>
+    <tr><td>运维面</td><td>容器列表/停止、warmup、账单、状态自检、日志流</td><td>Modal App 与容器状态</td></tr>
+  </tbody>
+</table>
+
+<h2 id="c2">2. 环境准备与基线门禁</h2>
+<h3>2.1 入口条件</h3>
+<ul>
+  <li><input type="checkbox"> 当前分支 <code>feature/modal-sdk-migration</code>；后端 <code>backend/.venv</code> 可用；前端构建产物存在（管理台挂在 <code>/bridge</code>）。</li>
+  <li><input type="checkbox"> Modal Python SDK 1.5.x 可导入；状态页自检通过（应用未部署时允许 <code>app_state=None</code>）。</li>
+  <li><input type="checkbox"> Modal 凭证、代理鉴权凭证、数据卷 <code>comfyui-data</code> 均可访问。</li>
+  <li><input type="checkbox"> 已准备：1 个本地可执行工作流 JSON（API 格式）、1 张图生图输入图、1 个大于 8 MiB 的上传测试文件、1 个可直连的下载 URL。</li>
+  <li><input type="checkbox"> 已确认云端预算上限（建议单轮 ≤ $1.50）；镜像重建、预热、云端生图等高成本用例按 §3 顺序执行，超限立即停止。</li>
+  <li><input type="checkbox"> 本地 ComfyUI 已启动（<code>http://127.0.0.1:8188</code>）；桥接器已启动（<code>http://127.0.0.1:8189</code>）。</li>
+</ul>
+
+<h3>2.2 地址与凭证约定</h3>
+<table>
+  <thead><tr><th>项</th><th>值</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>桥接器管理面</td><td><code>http://127.0.0.1:8189/bridge/</code></td><td>前端静态资源；API 前缀 <code>/api/v1</code></td></tr>
+    <tr><td>出图界面</td><td><code>http://127.0.0.1:8189/</code></td><td>ComfyUI 数据面（桥接器代理）</td></tr>
+    <tr><td>本地 ComfyUI</td><td><code>http://127.0.0.1:8188</code></td><td>由桥接器启动/接管</td></tr>
+    <tr><td>测试前缀</td><td><code>fulltest</code></td><td>所有临时文件/目录/规则/账号/卷均用该前缀，测试后清理</td></tr>
+    <tr><td>管理令牌</td><td>默认关闭</td><td>NEG-09 时临时开启，测完关闭</td></tr>
+  </tbody>
+</table>
+
+<h2 id="c3">3. 执行顺序与断点</h2>
+<ol>
+  <li><strong>只读先行（无副作用）</strong>：§4.1 健康检查 → §4 其余全部 GET → §5 DP 只读项 → §6 页面只读点击。</li>
+  <li><strong>低风险写操作</strong>：配置读写（先改后还原）、路由规则临时规则、工作流对比/推送单条、目录/移动/软删恢复。</li>
+  <li><strong>任务型操作</strong>：分块上传、URL 下载、模型卷推拉、节点同步、设置同步。</li>
+  <li><strong>高成本云端操作（预算门禁）</strong>：预热（API-88/OPS-01）、云端生图（§7）、版本对齐与镜像重建（API-33/35、NODE-05/06、UI-47/48）、容器停止。</li>
+  <li><strong>破坏性/异常</strong>：§14 NEG 全部、彻底删除（VOL-09）、账号删除（API-08）、卷删除（API-74）。</li>
+  <li><strong>打包与升级</strong>（PKG，可独立窗口执行）。</li>
+</ol>
+<div class="note">断点规则：任何 P0 失败即停，记录后修复复测再继续；P1/P2 失败可先跳过并汇总。每完成一个模块在执行记录页即时改状态，不要攒到最后补填。</div>
+
+<h2 id="c4">4. 后端管理面 API 全量矩阵（API-01..89）</h2>
+<p class="m">共 89 个 OpenAPI 操作。统一验证方式：浏览器直接访问或 <code>curl -sS -X &lt;METHOD&gt; http://127.0.0.1:8189/api/v1&lt;path&gt;</code>；
+写操作先在管理台对应页面触发一遍（界面联动验证），再用 API 直接调用复核。所有写操作产生的临时数据用 <code>fulltest</code> 前缀并在 §4 结束前清理。</p>
+
+<h3>4.1 健康检查</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>方法与路径</th><th>步骤 / 参数 / 请求体</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>API-01</td><td><span class="tag p0">P0</span></td><td><code>GET /health</code></td><td>浏览器直接访问</td><td>200；local / modal 聚合状态与 <code>bridge.url</code> 可读；secret 类字段全部脱敏</td></tr>
+    <tr><td>API-02</td><td><span class="tag p1">P1</span></td><td><code>GET /health/modal-cli</code></td><td>浏览器直接访问</td><td>200；Modal CLI 可用性与版本信息；CLI 缺失时返回明确降级说明而非 500</td></tr>
+  </tbody>
+</table>
+
+<h3>4.2 配置</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>方法与路径</th><th>步骤 / 参数 / 请求体</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>API-03</td><td><span class="tag p0">P0</span></td><td><code>GET /config</code></td><td>浏览器直接访问</td><td>200；local / bridge / modal 三段配置完整；token secret 脱敏</td></tr>
+    <tr><td>API-04</td><td><span class="tag p1">P1</span></td><td><code>PUT /config</code></td><td>取 GET 返回体，修改一个非破坏字段后整体 PUT；复核后还原</td><td>200；GET 复核修改已持久化；还原后与基线一致</td></tr>
+    <tr><td>API-05</td><td><span class="tag p1">P1</span></td><td><code>GET /config/node-env</code></td><td>浏览器直接访问</td><td>200；运行环境标识与实际一致</td></tr>
+    <tr><td>API-06</td><td><span class="tag p0">P0</span></td><td><code>GET /config/accounts</code></td><td>浏览器直接访问</td><td>200；账号列表字段完整；token secret 不回显明文</td></tr>
+    <tr><td>API-07</td><td><span class="tag p1">P1</span></td><td><code>PUT /config/accounts</code></td><td><code>{"name":"fulltest-acct","token_id":"tid-test","token_secret":"tk-test","environment":"local"}</code></td><td>200；GET 复核新增成功；缺 <code>name</code> 时 422</td></tr>
+    <tr><td>API-08</td><td><span class="tag p1">P1</span></td><td><code>DELETE /config/accounts/fulltest-acct</code></td><td>删除 API-07 账号</td><td>200；GET 复核已消失；不存在账号返回可读 404</td></tr>
+    <tr><td>API-09</td><td><span class="tag p1">P1</span></td><td><code>POST /config/accounts/{name}/activate</code></td><td>对既有账号激活（body 可空或 <code>{"force":true}</code>）</td><td>200；GET 显示激活态；错误账号名 404 可读</td></tr>
+    <tr><td>API-10</td><td><span class="tag p1">P1</span></td><td><code>POST /config/validate-comfy</code></td><td><code>{"path":"&lt;真实 ComfyUI 根目录&gt;"}</code>；再传非法路径各一次</td><td>合法路径返回版本与校验结果；非法路径明确失败原因，不崩溃</td></tr>
+    <tr><td>API-11</td><td><span class="tag p1">P1</span></td><td><code>GET /config/scan-comfy</code></td><td>浏览器直接访问</td><td>200；返回当前扫描状态（idle / running / done 等）</td></tr>
+    <tr><td>API-12</td><td><span class="tag p1">P1</span></td><td><code>POST /config/scan-comfy</code></td><td>启动一次扫描，轮询 API-11 直到结束</td><td>扫描完成返回发现列表；重复启动有保护，不产生并发扫描</td></tr>
+    <tr><td>API-13</td><td><span class="tag p2">P2</span></td><td><code>POST /config/scan-comfy/cancel</code></td><td>扫描进行中调用取消</td><td>200；状态回到 idle / cancelled；无残留进程</td></tr>
+  </tbody>
+</table>
+
+<h3>4.3 成本</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>方法与路径</th><th>步骤 / 参数 / 请求体</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>API-14</td><td><span class="tag p0">P0</span></td><td><code>GET /cost/summary</code></td><td>浏览器直接访问</td><td>200；本月预算、已用、GPU 秒等聚合可读；与 /cost 页数据一致</td></tr>
+    <tr><td>API-15</td><td><span class="tag p1">P1</span></td><td><code>PUT /cost/budget</code></td><td><code>{"monthly_budget_usd":1.5,"on_budget_exceed":"reject","gpu_hourly_rate_usd":null}</code>，复核后还原</td><td>200；GET 复核持久化；非法 <code>on_budget_exceed</code> 值 422</td></tr>
+    <tr><td>API-16</td><td><span class="tag p0">P0</span></td><td><code>GET /cost/report</code></td><td><code>?by=workflow&amp;days=30&amp;limit=50</code>；再试 <code>by=model</code>、<code>days=7/90</code></td><td>200；次数、成功失败、GPU 秒、估算成本字段一致；非法 by 值 422</td></tr>
+    <tr><td>API-17</td><td><span class="tag p1">P1</span></td><td><code>GET /cost/reconciliation</code></td><td><code>?cycle=2026-10</code></td><td>200；对账行与 Modal 账单口径一致（取数时间差需留痕说明）</td></tr>
+    <tr><td>API-18</td><td><span class="tag p1">P1</span></td><td><code>GET /cost/export</code></td><td><code>?scope=report&amp;days=30</code> 浏览器直接下载</td><td>200；CSV 含中文表头与流水行；文件可正常打开</td></tr>
+  </tbody>
+</table>
+
+<h3>4.4 启动</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>方法与路径</th><th>步骤 / 参数 / 请求体</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>API-19</td><td><span class="tag p0">P0</span></td><td><code>GET /launch</code></td><td>浏览器直接访问</td><td>200；本地 / 云端启动配置与进程状态可读</td></tr>
+    <tr><td>API-20</td><td><span class="tag p1">P1</span></td><td><code>PUT /launch</code></td><td>取 GET 体修改 <code>local_extra</code>（先加后删同一测试参数）</td><td>200；持久化生效；还原后与基线一致</td></tr>
+    <tr><td>API-21</td><td><span class="tag p0">P0</span></td><td><code>GET /launch/local/status</code></td><td><code>?tail=true</code>；运行中与停止后各查一次</td><td>运行中：pid / 端口 / 日志尾可读；停止后明确 offline</td></tr>
+    <tr><td>API-22</td><td><span class="tag p1">P1</span></td><td><code>POST /launch/local/start</code></td><td><code>{"takeover":true}</code>（已运行时可跳过）</td><td>进程启动、status 转 online；重复启动有保护提示</td></tr>
+    <tr><td>API-23</td><td><span class="tag p1">P1</span></td><td><code>POST /launch/local/stop</code></td><td><code>{"force":false,"timeout":15}</code></td><td>进程退出、status 转 offline；/health local 状态同步</td></tr>
+    <tr><td>API-24</td><td><span class="tag p1">P1</span></td><td><code>POST /launch/local/restart</code></td><td><code>{}</code></td><td>重启完成、新 pid 与旧不同、status online</td></tr>
+    <tr><td>API-25</td><td><span class="tag p0">P0</span></td><td><code>GET /launch/modal/containers</code></td><td>应用已部署时访问</td><td>200；容器 ID / 状态 / GPU / 启动时间可读；未部署时返回可读空态</td></tr>
+    <tr><td>API-26</td><td><span class="tag p1">P1</span></td><td><code>POST /launch/modal/stop</code></td><td>停止测试容器（无容器时验证可读空态 / 错误）</td><td>200；容器列表刷新后无该容器；云端请求回到冷启动或不可用态</td></tr>
+  </tbody>
+</table>
+
+<h3>4.5 节点</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>方法与路径</th><th>步骤 / 参数 / 请求体</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>API-27</td><td><span class="tag p0">P0</span></td><td><code>GET /nodes/local</code></td><td>浏览器直接访问</td><td>200；本地节点清单与 /nodes 页一致，含 hash / 大小 / 路径</td></tr>
+    <tr><td>API-28</td><td><span class="tag p0">P0</span></td><td><code>GET /nodes/cloud</code></td><td>浏览器直接访问</td><td>200；云端 manifest 清单可读；SDK 不可用时有明确错误</td></tr>
+    <tr><td>API-29</td><td><span class="tag p0">P0</span></td><td><code>GET /nodes/diff</code></td><td><code>?deep=false</code> 与 <code>?force=true</code> 各一次</td><td>200；差异矩阵正确；force 绕过缓存；缓存失效生效</td></tr>
+    <tr><td>API-30</td><td><span class="tag p0">P0</span></td><td><code>POST /nodes/sync</code></td><td><code>{"names":["&lt;本地临时测试节点&gt;"]}</code>（先准备临时节点目录）</td><td>200；作业成功；manifest 更新；manifest 临时目录回退路径生效（联动 REG-02）</td></tr>
+    <tr><td>API-31</td><td><span class="tag p1">P1</span></td><td><code>POST /nodes/cloud/remove</code></td><td><code>{"names":["&lt;同一测试节点&gt;"]}</code></td><td>200；云端目录与 manifest 清除；差异矩阵回到缺失云端态</td></tr>
+    <tr><td>API-32</td><td><span class="tag p0">P0</span></td><td><code>GET /nodes/version</code></td><td>浏览器直接访问</td><td>200；本地 / 云端 comfyui 版本 pin 可读</td></tr>
+    <tr><td>API-33</td><td><span class="tag p0">P0</span></td><td><code>POST /nodes/version/align</code></td><td><code>{}</code>（空 body，预算门禁内执行）</td><td>200；云端 pin 对齐本地版本；对齐历史留痕</td></tr>
+    <tr><td>API-34</td><td><span class="tag p1">P1</span></td><td><code>GET /nodes/dependency-precheck</code></td><td><code>?force=true</code></td><td>200；依赖预检结果与缺失项可读</td></tr>
+    <tr><td>API-35</td><td><span class="tag p0">P0</span></td><td><code>POST /nodes/image/rebuild</code></td><td><code>{"align_version":true}</code>（高成本，预算门禁内执行）</td><td>200；重建作业受理；完成后应用状态 deployed、web_url 可访问</td></tr>
+    <tr><td>API-36</td><td><span class="tag p1">P1</span></td><td><code>POST /nodes/presence/refresh</code></td><td><code>{}</code></td><td>200；云端节点在线 / 加载状态刷新成功</td></tr>
+  </tbody>
+</table>
+
+<h3>4.6 工作流</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>方法与路径</th><th>步骤 / 参数 / 请求体</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>API-37</td><td><span class="tag p0">P0</span></td><td><code>GET /workflows/local</code></td><td>浏览器直接访问</td><td>200；本地清单含 name / hash / size / mtime，与磁盘一致</td></tr>
+    <tr><td>API-38</td><td><span class="tag p0">P0</span></td><td><code>GET /workflows/sync</code></td><td>浏览器直接访问</td><td>200；同步矩阵（本地 / 云端 / 冲突 / 双端一致）状态正确</td></tr>
+    <tr><td>API-39</td><td><span class="tag p0">P0</span></td><td><code>POST /workflows/sync</code></td><td><code>{"actions":[{"name":"&lt;测试工作流&gt;","action":"push"}]}</code>；再各测 <code>pull</code> 与 <code>keep_both</code></td><td>200；作业执行成功，云端 / 本地文件按动作变化，历史留痕</td></tr>
+    <tr><td>API-40</td><td><span class="tag p1">P1</span></td><td><code>GET /workflows/run-stats</code></td><td><code>?days=30&amp;limit=50</code>；days=7/30/90 各一次</td><td>200；次数 / 成功 / 失败 / 本地云端 / 耗时 / 成本与请求日志一致</td></tr>
+    <tr><td>API-41</td><td><span class="tag p1">P1</span></td><td><code>GET /workflows/compare</code></td><td><code>?name=&lt;双端存在且内容不同的工作流&gt;</code></td><td>200；双列 hash / 大小 / 时间对比正确；同名缺失时返回可读错误</td></tr>
+  </tbody>
+</table>
+
+<h3>4.7 作业</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>方法与路径</th><th>步骤 / 参数 / 请求体</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>API-42</td><td><span class="tag p0">P0</span></td><td><code>GET /jobs</code></td><td><code>?limit=50</code></td><td>200；作业列表含类型 / 状态 / 进度 / 时间</td></tr>
+    <tr><td>API-43</td><td><span class="tag p0">P0</span></td><td><code>GET /jobs/{job_id}</code></td><td>取 API-42 中一个 job_id 查详情；再查不存在 id</td><td>详情字段完整；404 有可读错误</td></tr>
+    <tr><td>API-44</td><td><span class="tag p1">P1</span></td><td><code>POST /jobs/{job_id}/cancel</code></td><td>对一个长作业（如大文件下载）取消</td><td>200；作业转 cancelled，无悬挂 pending</td></tr>
+  </tbody>
+</table>
+
+<h3>4.8 媒体</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>方法与路径</th><th>步骤 / 参数 / 请求体</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>API-45</td><td><span class="tag p0">P0</span></td><td><code>GET /media/local</code></td><td><code>?kind=image&amp;limit=50</code>；再试 <code>kind=video</code></td><td>200；清单含路径 / 大小 / 时间；kind 过滤生效</td></tr>
+    <tr><td>API-46</td><td><span class="tag p0">P0</span></td><td><code>GET /media/local/file</code></td><td><code>?path=&lt;清单中任一路径&gt;</code>；再试含 <code>../</code> 的路径</td><td>200 返回文件流可预览；越界路径被拒绝（400/422），无本地文件泄露</td></tr>
+  </tbody>
+</table>
+
+<h3>4.9 日志与事件</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>方法与路径</th><th>步骤 / 参数 / 请求体</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>API-47</td><td><span class="tag p0">P0</span></td><td><code>GET /logs/local</code></td><td><code>?tail=100</code></td><td>200；返回最近日志行数组</td></tr>
+    <tr><td>API-48</td><td><span class="tag p1">P1</span></td><td><code>GET /logs/local/stream</code></td><td><code>?tail=10</code>，curl -N 或浏览器 EventSource 连接</td><td>SSE 连接建立；先收 snapshot 再收增量；断开无残留连接</td></tr>
+    <tr><td>API-49</td><td><span class="tag p1">P1</span></td><td><code>GET /logs/modal</code></td><td><code>?tail=100</code></td><td>200；云端日志行可读；未部署时返回可读空态</td></tr>
+    <tr><td>API-50</td><td><span class="tag p1">P1</span></td><td><code>GET /logs/modal/stream</code></td><td><code>?tail=10</code>，SSE 连接</td><td>同 API-48；未部署时有明确状态事件而非静默挂起</td></tr>
+    <tr><td>API-51</td><td><span class="tag p0">P0</span></td><td><code>GET /events/stream</code></td><td>SSE 连接后触发一次预热或生图</td><td>收到对应 job / warmup / request 事件；长连接稳定无重连风暴</td></tr>
+  </tbody>
+</table>
+
+<h3>4.10 请求记录</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>方法与路径</th><th>步骤 / 参数 / 请求体</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>API-52</td><td><span class="tag p0">P0</span></td><td><code>GET /requests</code></td><td><code>?limit=50&amp;backend=modal&amp;status=done</code>；组合切换 backend / status 各试一组</td><td>200；筛选生效；行含 prompt_id / final_backend / rule_trace</td></tr>
+    <tr><td>API-53</td><td><span class="tag p0">P0</span></td><td><code>GET /requests/{req_id}</code></td><td>取列表中一条查详情；再查不存在 id</td><td>详情完整（决策链路、耗时、输出 hash）；404 可读</td></tr>
+    <tr><td>API-54</td><td><span class="tag p1">P1</span></td><td><code>GET /requests/{req_id}/graph</code></td><td>对有 graph 留痕的请求访问</td><td>200；返回提交时的 API 格式图；无留痕时返回可读空态</td></tr>
+  </tbody>
+</table>
+
+<h3>4.11 路由规则</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>方法与路径</th><th>步骤 / 参数 / 请求体</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>API-55</td><td><span class="tag p0">P0</span></td><td><code>POST /routing/preview</code></td><td><code>{"workflow_name":"&lt;测试工作流&gt;"}</code>；再试加 <code>"manual_backend":"modal"</code>；再试空 <code>{}</code></td><td>200；trace 与 final_backend 正确；manual 覆盖生效；空 body 422 或可读错误</td></tr>
+    <tr><td>API-56</td><td><span class="tag p0">P0</span></td><td><code>GET /routing/rules</code></td><td>浏览器直接访问</td><td>200；内置与自定义规则完整、顺序与启用态正确</td></tr>
+    <tr><td>API-57</td><td><span class="tag p0">P0</span></td><td><code>PUT /routing/rules</code></td><td>取 GET 体新增 <code>fulltest-temp</code> 规则并启停 / 调序后 PUT；复核后还原</td><td>200；规则持久化；还原后与基线一致</td></tr>
+  </tbody>
+</table>
+
+<h3>4.12 设置同步</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>方法与路径</th><th>步骤 / 参数 / 请求体</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>API-58</td><td><span class="tag p0">P0</span></td><td><code>GET /settings-sync</code></td><td>浏览器直接访问</td><td>200；键级差异矩阵可读；云端不可读时有明确错误而非空白</td></tr>
+    <tr><td>API-59</td><td><span class="tag p1">P1</span></td><td><code>POST /settings-sync/apply</code></td><td><code>{"directions":{"&lt;非敏感测试键&gt;":"push"}}</code>；复核后再 <code>"pull"</code> 拉回</td><td>200；推送 / 拉取生效；空 directions 422</td></tr>
+  </tbody>
+</table>
+
+<h3>4.13 模型卷</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>方法与路径</th><th>步骤 / 参数 / 请求体</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>API-60</td><td><span class="tag p0">P0</span></td><td><code>GET /modal-volume</code></td><td>浏览器直接访问</td><td>200；凭证状态、卷名、分类计数可读</td></tr>
+    <tr><td>API-61</td><td><span class="tag p0">P0</span></td><td><code>GET /modal-volume/overview</code></td><td><code>?category=checkpoints</code>；再切 loras / vae 等</td><td>200；本地 / 云端文件对比正确；分类切换联动</td></tr>
+    <tr><td>API-62</td><td><span class="tag p0">P0</span></td><td><code>POST /modal-volume/sync</code></td><td><code>{"direction":"push","category":"&lt;分类&gt;","names":["&lt;测试文件&gt;"]}</code>；再测 <code>pull</code></td><td>200；作业成功；文件在对应端出现且 hash 一致</td></tr>
+    <tr><td>API-63</td><td><span class="tag p0">P0</span></td><td><code>GET /modal-volume/jobs</code></td><td>浏览器直接访问</td><td>200；作业列表含方向 / 进度 / 状态</td></tr>
+    <tr><td>API-64</td><td><span class="tag p1">P1</span></td><td><code>POST /modal-volume/jobs/{job_id}/cancel</code></td><td>取消一个排队 / 进行中的大作业</td><td>200；作业转 cancelled；已完成作业取消返回可读错误</td></tr>
+  </tbody>
+</table>
+
+<h3>4.14 分块上传</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>方法与路径</th><th>步骤 / 参数 / 请求体</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>API-65</td><td><span class="tag p0">P0</span></td><td><code>POST /uploads/init</code></td><td><code>{"filename":"fulltest.bin","size":9437184,"md5":"&lt;实际 md5&gt;","category":"other"}</code></td><td>200；返回 upload_id 与分块参数；缺必填字段 422</td></tr>
+    <tr><td>API-66</td><td><span class="tag p1">P1</span></td><td><code>GET /uploads</code></td><td><code>?limit=20</code></td><td>200；会话列表含状态与进度</td></tr>
+    <tr><td>API-67</td><td><span class="tag p0">P0</span></td><td><code>GET /uploads/{upload_id}</code></td><td>查询 API-65 会话；再查不存在 id</td><td>进度 / 分块位图正确；404 可读</td></tr>
+    <tr><td>API-68</td><td><span class="tag p0">P0</span></td><td><code>PUT /uploads/{upload_id}/chunks/{index}</code></td><td>原始二进制 body + <code>x-chunk-md5</code> 头，按 init 返回的分块大小逐块上传</td><td>200；分块校验失败被拒且可重试；index 越界 4xx</td></tr>
+    <tr><td>API-69</td><td><span class="tag p0">P0</span></td><td><code>POST /uploads/{upload_id}/complete</code></td><td><code>{}</code></td><td>200；整体 MD5 校验通过后文件落卷；校验失败拒绝落卷且原因可读</td></tr>
+    <tr><td>API-70</td><td><span class="tag p1">P1</span></td><td><code>DELETE /uploads/{upload_id}</code></td><td>删除未完成会话</td><td>200；会话与临时分块清理；GET 复核 404</td></tr>
+  </tbody>
+</table>
+
+<h3>4.15 数据卷</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>方法与路径</th><th>步骤 / 参数 / 请求体</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>API-71</td><td><span class="tag p0">P0</span></td><td><code>GET /volume/meta</code></td><td>浏览器直接访问</td><td>200；总容量 / 文件数 / 卷数 / 水位可读</td></tr>
+    <tr><td>API-72</td><td><span class="tag p0">P0</span></td><td><code>GET /volume/volumes</code></td><td><code>?refresh=true</code></td><td>200；卷列表与 usage 正确；缓存刷新生效</td></tr>
+    <tr><td>API-73</td><td><span class="tag p1">P1</span></td><td><code>POST /volume/create</code></td><td><code>{"name":"fulltest-vol"}</code></td><td>200；列表出现新卷；重复名 / 非法名被拒</td></tr>
+    <tr><td>API-74</td><td><span class="tag p1">P1</span></td><td><code>POST /volume/volumes/fulltest-vol/delete</code></td><td><code>{}</code>（确认空卷后执行）</td><td>200；卷删除；默认卷 / 非空卷删除被拒且有明确原因</td></tr>
+    <tr><td>API-75</td><td><span class="tag p0">P0</span></td><td><code>GET /volume/list</code></td><td><code>?path=fulltest</code>；再试 <code>?path=../</code> 越界</td><td>200；目录 / 文件列表含大小与时间；越界路径被拒</td></tr>
+    <tr><td>API-76</td><td><span class="tag p0">P0</span></td><td><code>POST /volume/delete</code></td><td><code>{"paths":["fulltest/&lt;测试文件&gt;"]}</code>；先 <code>"dry_run":true</code> 再 false</td><td>dry_run 返回将删清单不实际删除；实际删除后列表消失；<code>allow_referenced:false</code> 时引用文件被拒</td></tr>
+    <tr><td>API-77</td><td><span class="tag p0">P0</span></td><td><code>GET /volume/trash</code></td><td><code>?volume=comfyui-data</code>（或省略）</td><td>200；回收站记录含原路径与时间</td></tr>
+    <tr><td>API-78</td><td><span class="tag p0">P0</span></td><td><code>POST /volume/trash/restore</code></td><td><code>{"path":"&lt;回收站记录路径&gt;"}</code></td><td>200；文件回原路径，hash 不变；重复恢复被拒</td></tr>
+    <tr><td>API-79</td><td><span class="tag p1">P1</span></td><td><code>POST /volume/trash/purge</code></td><td><code>{"paths":["&lt;测试记录&gt;"]}</code></td><td>200；记录与云端文件彻底删除，不可恢复</td></tr>
+    <tr><td>API-80</td><td><span class="tag p0">P0</span></td><td><code>POST /volume/mkdir</code></td><td><code>{"path":"fulltest/20261015"}</code></td><td>200；目录出现；重复 / 非法名被拒</td></tr>
+    <tr><td>API-81</td><td><span class="tag p1">P1</span></td><td><code>GET /volume/dirs</code></td><td><code>?volume=comfyui-data</code></td><td>200；目录树 / 移动目标下拉数据正确</td></tr>
+    <tr><td>API-82</td><td><span class="tag p0">P0</span></td><td><code>POST /volume/move</code></td><td><code>{"paths":["fulltest/&lt;测试文件&gt;"],"dest_dir":"fulltest/20261015"}</code></td><td>200；任务成功后原路径消失、目标出现；引用检查生效</td></tr>
+    <tr><td>API-83</td><td><span class="tag p0">P0</span></td><td><code>GET /volume/moves</code></td><td>浏览器直接访问</td><td>200；移动任务列表含进度与状态</td></tr>
+    <tr><td>API-84</td><td><span class="tag p1">P1</span></td><td><code>POST /volume/moves/{job_id}/cancel</code></td><td>取消进行中的移动任务</td><td>200；任务转 cancelled，无半完成状态</td></tr>
+    <tr><td>API-85</td><td><span class="tag p0">P0</span></td><td><code>POST /volume/download</code></td><td><code>{"url":"&lt;测试直链&gt;","dest_dir":"fulltest"}</code>；再试不可达 URL</td><td>200；下载作业成功且文件大小 / hash 正确；失败任务原因可读</td></tr>
+    <tr><td>API-86</td><td><span class="tag p0">P0</span></td><td><code>GET /volume/downloads</code></td><td>浏览器直接访问</td><td>200；下载任务列表正确</td></tr>
+    <tr><td>API-87</td><td><span class="tag p1">P1</span></td><td><code>POST /volume/downloads/{job_id}/cancel</code></td><td>取消进行中的下载任务</td><td>200；任务转 cancelled</td></tr>
+  </tbody>
+</table>
+
+<h3>4.16 Modal 预热</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>方法与路径</th><th>步骤 / 参数 / 请求体</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>API-88</td><td><span class="tag p0">P0</span></td><td><code>POST /modal/warmup</code></td><td><code>{}</code>（触发冷启动，按预算门禁执行）</td><td>200；warmup/status 变为完成；容器出现并在线</td></tr>
+    <tr><td>API-89</td><td><span class="tag p0">P0</span></td><td><code>GET /modal/warmup/status</code></td><td>预热前 / 中 / 后各查一次</td><td>状态机 idle → running → done 可读；失败时原因可读</td></tr>
+  </tbody>
+</table>
+
+<h2 id="c5">5. 数据面与实时通道（DP-01..15）</h2>
+<p class="m">数据面接口不在 OpenAPI 中（隐藏路由），是 ComfyUI 出图体验的核心通道。除 DP-02/03 的真实生图走云端外，其余均可只读验证。</p>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>路径 / 通道</th><th>步骤</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>DP-01</td><td><span class="tag p0">P0</span></td><td><code>GET /</code></td><td>浏览器打开 <code>http://127.0.0.1:8189/</code></td><td>ComfyUI 前端完整加载，可交互；非白屏 / 404</td></tr>
+    <tr><td>DP-02</td><td><span class="tag p0">P0</span></td><td><code>POST /prompt</code></td><td>出图界面提交云端工作流（UI 操作）；或 <code>curl -H "x-bridge-backend: modal"</code> 提交 API 格式图</td><td>受理返回 prompt_id；终态 done；<code>final_backend=modal</code>（AGENTS.md 规则）</td></tr>
+    <tr><td>DP-03</td><td><span class="tag p0">P0</span></td><td><code>POST /api/prompt</code></td><td>同 DP-02，走 <code>/api</code> 前缀提交</td><td>两条路径行为一致；路由与终态记录一致</td></tr>
+    <tr><td>DP-04</td><td><span class="tag p0">P0</span></td><td><code>GET /object_info</code></td><td>浏览器或 curl 访问</td><td>200；返回本地节点 + 云端模型清单合并结果；模型下拉数据完整</td></tr>
+    <tr><td>DP-05</td><td><span class="tag p1">P1</span></td><td><code>GET /object_info/{node_type}</code></td><td><code>?/object_info/KSampler</code> 等单节点查询</td><td>200；仅返回该节点定义；不存在节点返回明确错误</td></tr>
+    <tr><td>DP-06</td><td><span class="tag p1">P1</span></td><td><code>GET /api/object_info</code></td><td>同 DP-04，走 <code>/api</code> 前缀</td><td>与 DP-04 内容一致</td></tr>
+    <tr><td>DP-07</td><td><span class="tag p1">P1</span></td><td><code>GET /queue</code></td><td>本地空闲时访问</td><td>200；<code>queue_running</code> / <code>queue_pending</code> 结构正确</td></tr>
+    <tr><td>DP-08</td><td><span class="tag p0">P0</span></td><td><code>GET /queue</code>（合成）</td><td>云端任务 queued / running 期间访问</td><td>云端在途任务出现在合成队列中，ComfyUI 前端队列面板可见</td></tr>
+    <tr><td>DP-09</td><td><span class="tag p1">P1</span></td><td><code>POST /interrupt</code></td><td>本地空闲时调用（或经 /api/interrupt）</td><td>200；透传本地 ComfyUI，无异常</td></tr>
+    <tr><td>DP-10</td><td><span class="tag p0">P0</span></td><td><code>POST /interrupt</code>（云端转发）</td><td>云端生成进行中调用</td><td>200；云端任务收敛为 cancelled；<code>execution_interrupted</code> 事件留痕</td></tr>
+    <tr><td>DP-11</td><td><span class="tag p0">P0</span></td><td><code>WS /ws</code></td><td>出图界面保持打开，观察进度条 / 预览图 / 终态推送</td><td>双向中继工作：进度、预览、execution 事件实时到达；断线自动重连</td></tr>
+    <tr><td>DP-12</td><td><span class="tag p1">P1</span></td><td>catch-all <code>GET /history/{prompt_id}</code></td><td>对已完成 prompt_id 访问；再试不存在 id</td><td>200 返回历史记录；不存在时 ComfyUI 原样响应；桥接器不崩溃</td></tr>
+    <tr><td>DP-13</td><td><span class="tag p0">P0</span></td><td>catch-all <code>GET /view</code></td><td>对生成输出文件路径访问（从媒体库复制）</td><td>200 返回图片流，浏览器可预览</td></tr>
+    <tr><td>DP-14</td><td><span class="tag p1">P1</span></td><td>catch-all <code>POST /upload</code></td><td>出图界面「上传按钮」传一张本地图作图生图输入</td><td>上传成功返回文件名；云端执行可引用该输入（联动 GEN-07）</td></tr>
+    <tr><td>DP-15</td><td><span class="tag p2">P2</span></td><td>catch-all 静态资源</td><td>刷新出图界面，观察 Network 面板静态 JS / CSS 加载</td><td>静态资源全部 200，无桥接器误拦截</td></tr>
+  </tbody>
+</table>
+
+<h2 id="c6">6. 管理台点击矩阵（UI-01..70）</h2>
+<p class="m">UI-01..35 沿用 10-13 计划原编号；UI-36..70 为本轮新增的细粒度控件用例。除标注外均在 <code>http://127.0.0.1:8189/bridge/</code> 操作。</p>
+
+<h3>6.1 Shell 与全局</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>UI-01</td><td><span class="tag p0">P0</span></td><td>进入 /bridge 仪表盘</td><td>今日统计、通道状态、排队表、最近完成表正常渲染，无错误边界</td></tr>
+    <tr><td>UI-02</td><td><span class="tag p1">P1</span></td><td>点击顶部「任务」</td><td>任务抽屉打开，作业列表可读，可再次关闭</td></tr>
+    <tr><td>UI-03</td><td><span class="tag p0">P0</span></td><td>点击「预热」并在费用确认弹窗中点「取消」</td><td>显示费用提示；取消后不发起预热请求，无容器变化</td></tr>
+    <tr><td>UI-04</td><td><span class="tag p1">P1</span></td><td>点击「前往出图界面」</td><td>跳转到 <code>http://127.0.0.1:8189/</code>，ComfyUI 界面可加载（REG-01 复测项）</td></tr>
+    <tr><td>UI-36</td><td><span class="tag p2">P2</span></td><td>悬停仪表盘预算 Tag</td><td>Tooltip 显示月度预算与超限动作配置</td></tr>
+    <tr><td>UI-37</td><td><span class="tag p1">P1</span></td><td>打开预算 Modal，编辑月度预算与超限动作后保存</td><td>保存成功，Tag 数值刷新，与 <code>GET /cost/budget</code>（经 API-15 语义）一致</td></tr>
+    <tr><td>UI-38</td><td><span class="tag p0">P0</span></td><td>点击「中断」Popconfirm：先取消再确认</td><td>取消不发起 /interrupt；确认后运行中任务收敛（联动 DP-10）</td></tr>
+    <tr><td>UI-39</td><td><span class="tag p1">P1</span></td><td>查看容器数面板</td><td>容器数与状态和 <code>GET /launch/modal/containers</code> 一致</td></tr>
+  </tbody>
+</table>
+
+<h3>6.2 路由规则页（/bridge/routing）</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>UI-05</td><td><span class="tag p1">P1</span></td><td>进入 /routing，查看内置规则</td><td>manual、cloud 前缀、cloud_model 等规则可读，启用状态正确</td></tr>
+    <tr><td>UI-06</td><td><span class="tag p1">P1</span></td><td>点击「添加规则」，创建 <code>fulltest-temp</code>，保存</td><td>行内编辑、启用开关、上移 / 下移、删除按钮均可用，保存后列表刷新</td></tr>
+    <tr><td>UI-07</td><td><span class="tag p1">P1</span></td><td>在「干跑」区域选择或粘贴工作流，点击「干跑」</td><td>输出命中的规则与最终后端；未选择时给可读提示（联动 API-55）</td></tr>
+    <tr><td>UI-08</td><td><span class="tag p1">P1</span></td><td>删除 fulltest-temp 规则并保存</td><td>规则消失，刷新后不复活</td></tr>
+  </tbody>
+</table>
+
+<h3>6.3 节点管理页（/bridge/nodes）</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>UI-09</td><td><span class="tag p0">P0</span></td><td>切换「本地清单 / 差异矩阵 / 对齐历史」</td><td>Tab 切换不丢状态，本地节点数量、云端差异、历史记录可读</td></tr>
+    <tr><td>UI-10</td><td><span class="tag p1">P1</span></td><td>点击差异矩阵中的云端节点详情</td><td>能显示 hash、大小、路径或差异说明，无未处理异常</td></tr>
+    <tr><td>UI-11</td><td><span class="tag p1">P1</span></td><td>点击「刷新」或强制刷新入口</td><td>刷新后矩阵数据更新，loading 消失</td></tr>
+    <tr><td>UI-44</td><td><span class="tag p1">P1</span></td><td>切换节点页 Segmented 视图</td><td>视图切换状态保持，数据一致</td></tr>
+    <tr><td>UI-45</td><td><span class="tag p0">P0</span></td><td>对单个缺失云端节点点「安装 / 同步」</td><td>行内作业发起，完成后差异消除（联动 API-30）</td></tr>
+    <tr><td>UI-46</td><td><span class="tag p1">P1</span></td><td>勾选多个节点批量安装</td><td>批量作业受理，进度可查，成功数正确</td></tr>
+    <tr><td>UI-47</td><td><span class="tag p0">P0</span></td><td>点击「版本对齐」（预算门禁内）</td><td>与 API-33 一致，对齐历史留痕</td></tr>
+    <tr><td>UI-48</td><td><span class="tag p0">P0</span></td><td>点击「镜像重建」（预算门禁内）</td><td>与 API-35 一致，作业完成后应用 deployed</td></tr>
+  </tbody>
+</table>
+
+<h3>6.4 工作流页（/bridge/workflows）</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>UI-12</td><td><span class="tag p0">P0</span></td><td>点击「重新扫描」</td><td>本地清单更新，文件名、hash、大小、修改时间可读</td></tr>
+    <tr><td>UI-13</td><td><span class="tag p1">P1</span></td><td>查看同步矩阵，点击一条非冲突工作流</td><td>差异 / 已同步状态正确，可查看云端 hash 或对比信息</td></tr>
+    <tr><td>UI-14</td><td><span class="tag p2">P2</span></td><td>点击运行统计区域并切换 7/30/90 天</td><td>次数、成功、失败、云端 / 本地、平均耗时、估算成本展示一致</td></tr>
+    <tr><td>UI-49</td><td><span class="tag p1">P1</span></td><td>点击「对比」打开双列弹窗</td><td>hash / 大小 / 时间双列展示，与 API-41 一致</td></tr>
+    <tr><td>UI-50</td><td><span class="tag p0">P0</span></td><td>对单条记录点「推送 / 拉取」</td><td>与 API-39 单动作一致，任务留痕</td></tr>
+  </tbody>
+</table>
+
+<h3>6.5 模型卷页（/bridge/models）</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>UI-15</td><td><span class="tag p0">P0</span></td><td>进入 /models</td><td>显示 Modal 凭证已配置、数据卷名、SDK 可用</td></tr>
+    <tr><td>UI-16</td><td><span class="tag p1">P1</span></td><td>切换分类下拉：checkpoints、loras、vae 等</td><td>计数、按钮启停、列表随分类联动</td></tr>
+    <tr><td>UI-17</td><td><span class="tag p0">P0</span></td><td>点击「上传缺云端」并选择测试文件</td><td>进入分块上传流程，上传完成后云端列表出现该文件</td></tr>
+    <tr><td>UI-18</td><td><span class="tag p1">P1</span></td><td>点击云端文件的「下载到本地」</td><td>任务抽屉出现下载作业，文件落本地目录</td></tr>
+    <tr><td>UI-51</td><td><span class="tag p1">P1</span></td><td>勾选多个文件「批量推送」</td><td>批量作业受理，逐项进度可查</td></tr>
+    <tr><td>UI-52</td><td><span class="tag p1">P1</span></td><td>勾选多个文件「批量拉取」</td><td>批量作业受理，逐项进度可查</td></tr>
+    <tr><td>UI-53</td><td><span class="tag p1">P1</span></td><td>上传卡片「暂停」后再「继续」</td><td>暂停期间进度不动；继续后从断点续传（联动 VOL-02）</td></tr>
+    <tr><td>UI-54</td><td><span class="tag p1">P1</span></td><td>上传卡片「取消」与「移除」</td><td>取消终止上传；移除从列表清掉；会话清理（联动 API-70）</td></tr>
+  </tbody>
+</table>
+
+<h3>6.6 数据卷页（/bridge/volume）</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>UI-19</td><td><span class="tag p0">P0</span></td><td>进入 /volume，点击「重新统计」</td><td>总容量、文件数、卷数量、水位正常，二次点击后 loading 收敛</td></tr>
+    <tr><td>UI-20</td><td><span class="tag p1">P1</span></td><td>浏览目录并点击进入 / 返回</td><td>路径导航正确，目录列表不串目录</td></tr>
+    <tr><td>UI-21</td><td><span class="tag p1">P1</span></td><td>在 fulltest 中点击「新建文件夹」</td><td>新目录可见；重复名 / 非法名给出提示</td></tr>
+    <tr><td>UI-22</td><td><span class="tag p1">P1</span></td><td>选择测试文件，点击「移动到」</td><td>移动后原路径消失、目标路径出现，任务留痕</td></tr>
+    <tr><td>UI-23</td><td><span class="tag p0">P0</span></td><td>删除测试文件，打开回收站并恢复</td><td>软删除、回收站可见、恢复回原路径；重复恢复被拒绝</td></tr>
+    <tr><td>UI-55</td><td><span class="tag p1">P1</span></td><td>创建 URL 下载任务</td><td>任务抽屉出现下载作业，完成后文件在目标目录</td></tr>
+    <tr><td>UI-56</td><td><span class="tag p1">P1</span></td><td>任务列表点「取消」（下载 / 移动）</td><td>对应作业转 cancelled（联动 API-84/87）</td></tr>
+  </tbody>
+</table>
+
+<h3>6.7 媒体库（/bridge/media）</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>UI-24</td><td><span class="tag p1">P1</span></td><td>输入文件名过滤，点击缩略图</td><td>列表即时收敛；详情 Modal 显示大小、时间、预览与原文件链接</td></tr>
+    <tr><td>UI-57</td><td><span class="tag p2">P2</span></td><td>切换类型（图片 / 视频）</td><td>列表随类型收敛</td></tr>
+    <tr><td>UI-58</td><td><span class="tag p2">P2</span></td><td>切换文件夹选择</td><td>仅显示所选目录内容</td></tr>
+  </tbody>
+</table>
+
+<h3>6.8 成本页（/bridge/cost）</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>UI-25</td><td><span class="tag p1">P1</span></td><td>切换「按工作流 / 按主模型」，导出 CSV</td><td>表头与聚合联动；CSV 返回 200，中文表头与流水正确</td></tr>
+    <tr><td>UI-59</td><td><span class="tag p2">P2</span></td><td>切换月度周期</td><td>图表与汇总随周期变化（联动 API-17）</td></tr>
+  </tbody>
+</table>
+
+<h3>6.9 日志页（/bridge/logs）</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>UI-26</td><td><span class="tag p0">P0</span></td><td>切换后端筛选，点击请求行</td><td>列表筛选生效；详情抽屉包含决策链路、prompt_id、耗时、输出 hash</td></tr>
+    <tr><td>UI-27</td><td><span class="tag p1">P1</span></td><td>点击实时控制台开关</td><td>本地 / 云端日志流可开可关；断线或未部署状态给出可读提示</td></tr>
+    <tr><td>UI-60</td><td><span class="tag p1">P1</span></td><td>组合后端 + 状态筛选</td><td>筛选叠加生效，结果与 API-52 一致</td></tr>
+    <tr><td>UI-61</td><td><span class="tag p1">P1</span></td><td>ConsolePane 输入过滤关键字</td><td>即时过滤，行计数 visible/total 更新</td></tr>
+    <tr><td>UI-62</td><td><span class="tag p1">P1</span></td><td>ConsolePane 级别 Segmented（全部 / 警告 / 错误）</td><td>级别过滤正确</td></tr>
+    <tr><td>UI-63</td><td><span class="tag p1">P1</span></td><td>关闭跟随并向上滚动</td><td>自动暂停跟随；滚回底部可恢复吸底</td></tr>
+    <tr><td>UI-64</td><td><span class="tag p1">P1</span></td><td>点「暂停」再「继续」</td><td>暂停期间后台继续缓冲，继续后一次性放出</td></tr>
+    <tr><td>UI-65</td><td><span class="tag p2">P2</span></td><td>点「清空」</td><td>缓冲清空，后端日志不受影响</td></tr>
+    <tr><td>UI-66</td><td><span class="tag p2">P2</span></td><td>点「导出」</td><td>下载当前过滤后日志文件，内容与缓冲一致</td></tr>
+    <tr><td>UI-67</td><td><span class="tag p2">P2</span></td><td>切换缓冲上限档位</td><td>超限后最旧行被丢弃，计数不超过上限</td></tr>
+    <tr><td>UI-68</td><td><span class="tag p1">P1</span></td><td>切换实时控制台布局</td><td>双栏 / 单栏切换正常；窄屏变紧凑密度（图标化工具行）</td></tr>
+  </tbody>
+</table>
+
+<h3>6.10 状态页（/bridge/status）</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>UI-28</td><td><span class="tag p0">P0</span></td><td>点击「重新自检」</td><td>SDK 可用、版本 1.5.x、登录状态、应用状态、账单 / 失败留痕可读</td></tr>
+  </tbody>
+</table>
+
+<h3>6.11 设置页（/bridge/settings，6 个 Tab）</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>UI-30</td><td><span class="tag p0">P0</span></td><td>依次打开 6 个 Tab：本地 / 启动命令 / 桥接 / Modal / 护栏与预算 / 设置同步</td><td>均正常渲染，表单与当前配置一致</td></tr>
+    <tr><td>UI-31</td><td><span class="tag p1">P1</span></td><td>「本地」Tab 点击「扫描本机」，选发现结果点「采用」</td><td>真实扫描完成并回填 ComfyUI 根目录，不自动保存错误路径</td></tr>
+    <tr><td>UI-32</td><td><span class="tag p1">P1</span></td><td>点击「校验」</td><td>版本完整性与内置 venv 校验结果准确</td></tr>
+    <tr><td>UI-33</td><td><span class="tag p0">P0</span></td><td>点击「启动 / 停止 / 重启」</td><td>按钮状态联动，8188 在线 / 离线与实际进程一致</td></tr>
+    <tr><td>UI-34</td><td><span class="tag p0">P0</span></td><td>查看 Modal token 输入框</td><td>secret 始终脱敏，不在 DOM / 截图中暴露明文</td></tr>
+    <tr><td>UI-35</td><td><span class="tag p1">P1</span></td><td>「设置同步」Tab 查看云端差异</td><td>云端不可读时有提示；可读时差异矩阵与实际文件一致</td></tr>
+    <tr><td>UI-69</td><td><span class="tag p0">P0</span></td><td>各 Tab 修改可编辑字段并保存（先改后还原）</td><td>每个字段保存生效（PUT /config），刷新后不回跳；敏感字段脱敏</td></tr>
+  </tbody>
+</table>
+
+<h3>6.12 配置向导</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>UI-40</td><td><span class="tag p1">P1</span></td><td>打开配置向导第 1 步（检测）</td><td>检测项逐项出结果，无未处理异常</td></tr>
+    <tr><td>UI-41</td><td><span class="tag p1">P1</span></td><td>第 2 步填 Modal 凭证</td><td>secret 脱敏显示；校验通过 / 失败提示可读</td></tr>
+    <tr><td>UI-42</td><td><span class="tag p1">P1</span></td><td>第 3 步检测本地 ComfyUI</td><td>路径校验结果与 API-10 一致</td></tr>
+    <tr><td>UI-43</td><td><span class="tag p1">P1</span></td><td>第 4 步云端 Runner 检测并完成</td><td>完成页汇总正确；中途关闭向导不产生半保存配置</td></tr>
+  </tbody>
+</table>
+
+<h3>6.13 任务抽屉与 404</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>UI-70</td><td><span class="tag p1">P1</span></td><td>任务抽屉对进行中作业点「取消」</td><td>作业转 cancelled，列表状态更新（联动 API-44）</td></tr>
+    <tr><td>UI-29</td><td><span class="tag p2">P2</span></td><td>访问 /bridge/no-such-page</td><td>显示 404 页面，不白屏</td></tr>
+  </tbody>
+</table>
+
+<h2 id="c7">7. 生图链路（GEN-01..08）</h2>
+<blockquote><p><strong>AGENTS.md 规则适配：</strong>真实出图全部走 Modal 云端（<code>x-bridge-backend: modal</code>）。旧计划 GEN-01..03（本地生图）按规则退役，替换为云端等价项与约束核验项。</p></blockquote>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>GEN-01</td><td><span class="tag p0">P0</span></td><td>提交云端文生图（显式 <code>x-bridge-backend: modal</code>）</td><td>受理成功，请求状态 queued → running → done，终态 <code>final_backend=modal</code></td></tr>
+    <tr><td>GEN-02</td><td><span class="tag p0">P0</span></td><td>媒体库查看新图</td><td>图片存在，大小大于 0，预览可打开</td></tr>
+    <tr><td>GEN-03</td><td><span class="tag p0">P0</span></td><td>请求日志详情</td><td>决策后端与实际后端均为 modal，决策链路可读，prompt_id 可复制</td></tr>
+    <tr><td>GEN-04</td><td><span class="tag p0">P0</span></td><td>不指定后端按默认路由提交</td><td>按规则命中 modal 或明确拒绝；不允许静默落本地执行真实生图</td></tr>
+    <tr><td>GEN-05</td><td><span class="tag p0">P0</span></td><td>终态与输出回传</td><td>done，无执行错误；输出自动回传并出现在媒体库</td></tr>
+    <tr><td>GEN-06</td><td><span class="tag p1">P1</span></td><td>成本留痕</td><td>成本报表 / 请求详情记录 GPU 秒与估算成本</td></tr>
+    <tr><td>GEN-07</td><td><span class="tag p1">P1</span></td><td>图生图（云端）</td><td>输入图预上传（联动 DP-14），云端执行，输出回传</td></tr>
+    <tr><td>GEN-08</td><td><span class="tag p1">P1</span></td><td>本地生图约束核验</td><td>本轮全部生图请求 <code>final_backend</code> 均为 modal；不做真实本地生图（如确需覆盖「仅本地」场景，先向用户确认）</td></tr>
+  </tbody>
+</table>
+
+<h2 id="c8">8. 工作流与同步（WF / SYNC）</h2>
+<h3>8.1 工作流加载与执行（WF-01..05）</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>WF-01</td><td><span class="tag p0">P0</span></td><td>出图界面加载标准工作流 JSON</td><td>节点与连线完整恢复，参数不丢失</td></tr>
+    <tr><td>WF-02</td><td><span class="tag p1">P1</span></td><td>加载 API 格式 JSON 后提交（云端）</td><td>ComfyUI 能识别 prompt 结构并提交</td></tr>
+    <tr><td>WF-03</td><td><span class="tag p1">P1</span></td><td>保存为 fulltest-workflow.json，再重新加载</td><td>文件保存后可再次加载，hash 与保存时一致</td></tr>
+    <tr><td>WF-04</td><td><span class="tag p1">P1</span></td><td>导入一个无效 JSON</td><td>ComfyUI 给出解析错误，不崩溃；桥接器与管理台仍可用</td></tr>
+    <tr><td>WF-05</td><td><span class="tag p0">P0</span></td><td>选择缺失模型 / 缺失节点的工作流提交（云端）</td><td>预检给出明确缺失项；ask 模式下不自动上云，auto 模式下可自动供给</td></tr>
+  </tbody>
+</table>
+
+<h3>8.2 工作流同步（SYNC-01..07）</h3>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>SYNC-01</td><td><span class="tag p0">P0</span></td><td>点击「重新扫描」</td><td>本地工作流全部出现在清单中，hash / 大小 / 时间正确</td></tr>
+    <tr><td>SYNC-02</td><td><span class="tag p0">P0</span></td><td>推送一条仅本地存在的工作流到云端</td><td>云端卷出现同名文件，hash 与本地一致</td></tr>
+    <tr><td>SYNC-03</td><td><span class="tag p1">P1</span></td><td>从云端拉取一条仅云端存在的工作流</td><td>本地文件落盘，内容 hash 与云端一致</td></tr>
+    <tr><td>SYNC-04</td><td><span class="tag p0">P0</span></td><td>制造本地 / 云端内容冲突，打开对比弹窗</td><td>双列展示 hash、大小、时间；可选本地覆盖、云端覆盖或保留双副本</td></tr>
+    <tr><td>SYNC-05</td><td><span class="tag p1">P1</span></td><td>选择「本地覆盖云端」</td><td>云端 hash 变为本地值，任务成功，历史留痕</td></tr>
+    <tr><td>SYNC-06</td><td><span class="tag p2">P2</span></td><td>再次冲突并选择「保留双副本」</td><td>生成带后缀的双文件，原始两边文件均不丢失</td></tr>
+    <tr><td>SYNC-07</td><td><span class="tag p1">P1</span></td><td>点击「一键同步」</td><td>非冲突项同步完成，冲突项保留并提示；作业失败列表可读</td></tr>
+  </tbody>
+</table>
+
+<h2 id="c9">9. 节点管理（NODE-01..07）</h2>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>NODE-01</td><td><span class="tag p0">P0</span></td><td>上传或修改一个临时 custom_node，点击同步到云端</td><td>目录、requirements、manifest 均上传；任务列表 1/1 成功（REG-02 复测项）</td></tr>
+    <tr><td>NODE-02</td><td><span class="tag p1">P1</span></td><td>刷新差异矩阵</td><td>该节点变为已同步，缓存失效生效</td></tr>
+    <tr><td>NODE-03</td><td><span class="tag p2">P2</span></td><td>停止 / 禁用云端临时节点</td><td>manifest 状态更新，ComfyUI 冷启动后不再加载该节点</td></tr>
+    <tr><td>NODE-04</td><td><span class="tag p1">P1</span></td><td>从云端移除临时节点</td><td>目录删除，manifest 清除，差异矩阵回到缺失云端 / 已移除状态</td></tr>
+    <tr><td>NODE-05</td><td><span class="tag p0">P0</span></td><td>执行版本对齐</td><td>云端 pin 与本地版本一致，对齐历史留痕</td></tr>
+    <tr><td>NODE-06</td><td><span class="tag p0">P0</span></td><td>执行镜像重建 / deploy</td><td>deploy 成功，应用状态 deployed，web_url 可访问</td></tr>
+    <tr><td>NODE-07</td><td><span class="tag p1">P1</span></td><td>刷新云端 object_info</td><td>云端节点数量与预期一致，临时节点注册状态正确</td></tr>
+  </tbody>
+</table>
+
+<h2 id="c10">10. 设置同步（SET-01..04）</h2>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>SET-01</td><td><span class="tag p1">P1</span></td><td>打开设置同步矩阵</td><td>云端 settings 文件存在时展示键级差异，不存在时提示首次同步</td></tr>
+    <tr><td>SET-02</td><td><span class="tag p0">P0</span></td><td>选择一个非敏感测试键，推本地到云端</td><td>云端值更新，差异消除</td></tr>
+    <tr><td>SET-03</td><td><span class="tag p1">P1</span></td><td>修改本地值后从云端拉回</td><td>本地值恢复为云端值，hash / 差异状态一致</td></tr>
+    <tr><td>SET-04</td><td><span class="tag p1">P1</span></td><td>云端文件不可读时刷新</td><td>显示 SDK / 凭证 / 网络错误提示，页面不崩溃</td></tr>
+  </tbody>
+</table>
+
+<h2 id="c11">11. 模型卷与数据卷功能（VOL-01..10）</h2>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>VOL-01</td><td><span class="tag p0">P0</span></td><td>init / chunk / complete 分块上传（8 MiB 文件）</td><td>分块逻辑正确，complete 后云端文件存在（联动 API-65..69）</td></tr>
+    <tr><td>VOL-02</td><td><span class="tag p0">P0</span></td><td>断点续传：中断后重试</td><td>已完成分块保留，重传从剩余分块继续</td></tr>
+    <tr><td>VOL-03</td><td><span class="tag p0">P0</span></td><td>MD5 校验：故意传错误 md5</td><td>内容不一致时拒绝落卷，错误原因可读</td></tr>
+    <tr><td>VOL-04</td><td><span class="tag p0">P0</span></td><td>路径安全：<code>..</code>、绝对路径、非法分类</td><td>均被拒绝，无越界文件产生</td></tr>
+    <tr><td>VOL-05</td><td><span class="tag p0">P0</span></td><td>下载云端测试文件到本地</td><td>文件大小与云端一致，hash 一致，任务留痕</td></tr>
+    <tr><td>VOL-06</td><td><span class="tag p1">P1</span></td><td>移动 / 重命名测试文件</td><td>引用检查后完成移动，目标路径正确</td></tr>
+    <tr><td>VOL-07</td><td><span class="tag p0">P0</span></td><td>软删除测试文件</td><td>原目录消失，回收站出现记录，文件引用提示正确</td></tr>
+    <tr><td>VOL-08</td><td><span class="tag p0">P0</span></td><td>恢复测试文件</td><td>文件回到原路径，hash 不变，回收站记录消失</td></tr>
+    <tr><td>VOL-09</td><td><span class="tag p1">P1</span></td><td>再次软删除并执行彻底删除</td><td>回收站记录与云端文件均删除，无法恢复</td></tr>
+    <tr><td>VOL-10</td><td><span class="tag p2">P2</span></td><td>新建临时数据卷并删除</td><td>创建、列示、删除成功；删除前确认非默认卷</td></tr>
+  </tbody>
+</table>
+
+<h2 id="c12">12. 云端运维（OPS-01..05）</h2>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>OPS-01</td><td><span class="tag p1">P1</span></td><td>点击预热确认</td><td>Modal 容器冷启动成功，状态页变为在线 / 可用</td></tr>
+    <tr><td>OPS-02</td><td><span class="tag p1">P1</span></td><td>打开容器列表</td><td>显示容器 ID、状态、GPU、启动时间</td></tr>
+    <tr><td>OPS-03</td><td><span class="tag p1">P1</span></td><td>点击停止容器</td><td>容器停止，列表刷新，云端请求回到冷启动或不可用状态</td></tr>
+    <tr><td>OPS-04</td><td><span class="tag p0">P0</span></td><td>执行一次 modal deploy</td><td>部署成功，应用状态 deployed，日志流式输出</td></tr>
+    <tr><td>OPS-05</td><td><span class="tag p1">P1</span></td><td>执行一次流式 modal run 下载 / 移动任务</td><td>任务进度实时更新，完成后文件状态正确</td></tr>
+  </tbody>
+</table>
+
+<h2 id="c13">13. SDK 专项（SDK-01..07）</h2>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>SDK-01</td><td><span class="tag p0">P0</span></td><td>状态页重新自检</td><td>显示 SDK 1.5.x、登录有效、应用状态、最近成功 / 失败</td></tr>
+    <tr><td>SDK-02</td><td><span class="tag p0">P0</span></td><td>SDK 不可用模拟（卸载 / 环境隔离）</td><td>状态页与模型页出现 SDK 不可用告警，安装提示为 modal&gt;=1.5</td></tr>
+    <tr><td>SDK-03</td><td><span class="tag p0">P0</span></td><td>卷读写冒烟：put / ls / get / rm</td><td>全部成功，文件内容一致</td></tr>
+    <tr><td>SDK-04</td><td><span class="tag p1">P1</span></td><td>SDK 账单 summary 与 CLI 对照</td><td>同月金额误差小于 0.0001</td></tr>
+    <tr><td>SDK-05</td><td><span class="tag p1">P1</span></td><td>SDK 账单 report 与 CLI 对照</td><td>GPU、总成本、resources、apps、daily 聚合一致</td></tr>
+    <tr><td>SDK-06</td><td><span class="tag p0">P0</span></td><td>切换 Modal 账号后重新操作卷与账单</td><td>SDK client 重建，新账号凭证生效，旧缓存不串数据</td></tr>
+    <tr><td>SDK-07</td><td><span class="tag p2">P2</span></td><td>升级或降级 modal 包后跑状态自检</td><td>内部 AppList proto 契约自检能尽早暴露不兼容</td></tr>
+  </tbody>
+</table>
+
+<h2 id="c14">14. 异常与安全（NEG-01..10）</h2>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>NEG-01</td><td><span class="tag p1">P1</span></td><td>本地 ComfyUI 离线后打开管理台各页</td><td>状态显示离线 / 失败原因，页面不崩溃；恢复后可正常操作（不做本地生图）</td></tr>
+    <tr><td>NEG-02</td><td><span class="tag p1">P1</span></td><td>云端 Runner 离线时提交云端工作流</td><td>请求可恢复或明确失败；不会误报 done</td></tr>
+    <tr><td>NEG-03</td><td><span class="tag p0">P0</span></td><td>隐私确认拒绝：云端请求确认弹窗点取消</td><td>不发起云端提交，本地数据不上传</td></tr>
+    <tr><td>NEG-04</td><td><span class="tag p1">P1</span></td><td>运行中点击 Interrupt</td><td>请求收敛为 cancelled / error，无悬挂 pending</td></tr>
+    <tr><td>NEG-05</td><td><span class="tag p1">P1</span></td><td>桥接器重启后打开日志</td><td>pending 请求能通过 history 兜底恢复终态</td></tr>
+    <tr><td>NEG-06</td><td><span class="tag p0">P0</span></td><td>无效上传路径：提交含 <code>../</code> 的文件名</td><td>拒绝保存，无本地越界文件</td></tr>
+    <tr><td>NEG-07</td><td><span class="tag p0">P0</span></td><td>无 Modal 凭证访问状态页 / 模型页</td><td>提示未配置 / 未登录，不显示明文 secret；恢复后可用</td></tr>
+    <tr><td>NEG-08</td><td><span class="tag p1">P1</span></td><td>预算超限：调低预算后提交云端任务</td><td>按配置拒绝或回退，不继续产生云端费用</td></tr>
+    <tr><td>NEG-09</td><td><span class="tag p1">P1</span></td><td>管理令牌：缺 / 错 / 正确令牌访问管理 API</td><td>401 / 403 / 200；正确令牌可用，审计日志留痕；测完关闭令牌</td></tr>
+    <tr><td>NEG-10</td><td><span class="tag p1">P1</span></td><td>Origin 白名单：非允许 Origin 发起管理写操作</td><td>拒绝跨域写操作，不产生副作用</td></tr>
+  </tbody>
+</table>
+
+<h2 id="c15">15. 打包与升级（PKG-01..05）</h2>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>PKG-01</td><td><span class="tag p0">P0</span></td><td>构建 wheel</td><td>构建成功，包含 app、静态资源、modal-runner 副本</td></tr>
+    <tr><td>PKG-02</td><td><span class="tag p0">P0</span></td><td>pipx 安装 wheel 后启动</td><td>安装态可启动，管理台与 ComfyUI 代理均可用</td></tr>
+    <tr><td>PKG-03</td><td><span class="tag p0">P0</span></td><td>安装态执行状态页与卷冒烟</td><td>SDK、CLI、卷、账单均工作，静态资源不是 404</td></tr>
+    <tr><td>PKG-04</td><td><span class="tag p0">P0</span></td><td>安装态加载 ComfyUI 并生图（云端）</td><td>云端至少完成一次，无开发目录依赖</td></tr>
+    <tr><td>PKG-05</td><td><span class="tag p1">P1</span></td><td>卸载并检查残留</td><td>命令消失，用户配置 / 模型卷不被误删</td></tr>
+  </tbody>
+</table>
+
+<h2 id="c16">16. 修复回归专项（REG-01..06）</h2>
+<p class="m">针对 FIXLIST §四十三（2026-10-15）两处修复与配套验证的专项复测。</p>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>REG-01</td><td><span class="tag p0">P0</span></td><td>仪表盘点击「前往出图界面」（UI-04 修复复测）</td><td><code>window.location.assign(bridgeUrl)</code> 必定建立导航；目标来自 <code>/health</code> 的 <code>bridge.url</code>；缺失时用本地默认地址。反复点击均跳转，不出现只弹提示不跳转</td></tr>
+    <tr><td>REG-02</td><td><span class="tag p0">P0</span></td><td>节点同步 manifest 回退（NODE-01 修复复测）</td><td>正常路径：manifest 写系统临时目录成功；回退路径：系统临时目录不可写时回退 <code>&lt;config_dir&gt;/tmp/cb-node-manifest-write-*</code>，作业不误判 error；上传完成后两处临时文件均清理</td></tr>
+    <tr><td>REG-03</td><td><span class="tag p0">P0</span></td><td>运行新增 manifest 回退单测</td><td><code>pytest backend/tests/unit/test_node_cache.py -q</code> 通过（含回退用例）</td></tr>
+    <tr><td>REG-04</td><td><span class="tag p0">P0</span></td><td>本地门禁全量复跑</td><td><code>ruff check app tests</code> 0 违规；<code>mypy app</code> 0 错；<code>pytest tests -q</code> 全绿；<code>pnpm exec tsc --noEmit</code> 0 错；<code>pnpm build</code> 成功</td></tr>
+    <tr><td>REG-05</td><td><span class="tag p1">P1</span></td><td>LIVE-10 无输出工作流终态</td><td>无输出本地 / 云端工作流均按 <code>done</code> 收尾，不误报成功 / 失败（FIXLIST §四十三.3）</td></tr>
+    <tr><td>REG-06</td><td><span class="tag p2">P2</span></td><td>comfyui_version.txt 锁定一致性</td><td><code>modal-runner/lock/comfyui_version.txt</code> 与镜像 pin / 本地版本一致，版本对齐历史可追溯</td></tr>
+  </tbody>
+</table>
+
+<h2 id="c17">17. LIVE 冒烟（LIVE-01..10）</h2>
+<blockquote><p><strong>AGENTS.md 规则适配：</strong>LIVE-03（本地通道真实出图）本轮默认跳过，如确需执行先向用户确认。其余按原样执行。</p></blockquote>
+<table>
+  <thead><tr><th>ID</th><th>P</th><th>脚本 / 操作</th><th>预期与证据</th></tr></thead>
+  <tbody>
+    <tr><td>LIVE-01</td><td><span class="tag p0">P0</span></td><td><code>test_bridge_health</code></td><td>桥接器进程、本地端、Modal 端聚合状态可读</td></tr>
+    <tr><td>LIVE-02</td><td><span class="tag p0">P0</span></td><td><code>test_local_comfy_object_info</code></td><td>本地 ComfyUI /object_info 可读且包含基础节点</td></tr>
+    <tr><td>LIVE-03</td><td><span class="tag p1">P1</span></td><td><code>test_local_text_to_image</code></td><td>本轮默认跳过（禁止本地生图）；如经确认执行，终态应自行收敛为 done</td></tr>
+    <tr><td>LIVE-04</td><td><span class="tag p0">P0</span></td><td><code>test_modal_runner_reachable</code></td><td>Modal Runner 状态可探；不产生生成请求</td></tr>
+    <tr><td>LIVE-05</td><td><span class="tag p2">P2</span></td><td><code>test_existing_request_readonly</code></td><td>可选：对既有 prompt_id 做只读终态与输出检查</td></tr>
+    <tr><td>LIVE-06</td><td><span class="tag p0">P0</span></td><td><code>test_modal_text_to_image</code></td><td>云端文生图：受理、执行、输出回传、rule_trace 与 graph_hash 留痕</td></tr>
+    <tr><td>LIVE-07</td><td><span class="tag p0">P0</span></td><td><code>test_modal_image_to_image</code></td><td>图生图：输入预上传、云端执行、输出回传</td></tr>
+    <tr><td>LIVE-08</td><td><span class="tag p1">P1</span></td><td><code>test_modal_interrupt</code></td><td>运行中中断：终态收敛为 cancelled</td></tr>
+    <tr><td>LIVE-09</td><td><span class="tag p1">P1</span></td><td><code>test_modal_reconnect_history_fallback</code></td><td>断线重连：不依赖浏览器 WS，终态仍能从 history 兜底收敛</td></tr>
+    <tr><td>LIVE-10</td><td><span class="tag p1">P1</span></td><td><code>test_modal_no_output_workflow</code></td><td>无输出工作流：合法 done，不因 0 文件误报成功 / 失败（REG-05 联动）</td></tr>
+  </tbody>
+</table>
+
+<h2 id="c18">18. 证据与验收</h2>
+<h3>18.1 证据要求</h3>
+<ul>
+  <li><input type="checkbox"> 每个 P0 用例至少 1 张截图（或导出 JSON 中的实际结果字段）；P1/P2 失败项必须留证。</li>
+  <li><input type="checkbox"> 生图类用例必须附请求详情（rule_trace、final_backend、prompt_id）与产物截图。</li>
+  <li><input type="checkbox"> 写操作类用例记录「前 / 后」各一张（或 API 返回对照），证明副作用生效。</li>
+  <li><input type="checkbox"> 高成本用例记录当时预算余量与实际消耗。</li>
+</ul>
+
+<h3>18.2 验收标准</h3>
+<ul>
+  <li><strong>通过</strong>：P0 全部通过，P1 通过率 ≥ 90%，P2 失败不阻塞。</li>
+  <li><strong>带问题通过</strong>：P0 全部通过，P1 有明确缺陷单且不影响主链路。</li>
+  <li><strong>不通过</strong>：任一 P0 失败且无绕行方案。</li>
+</ul>
+
+<h3>18.3 测试后清理</h3>
+<ul>
+  <li><input type="checkbox"> 删除全部 <code>fulltest</code> 前缀文件 / 目录 / 规则 / 账号 / 卷 / 上传会话。</li>
+  <li><input type="checkbox"> 还原 /config、/launch、/routing/rules、/cost/budget 基线（先改后还原项逐项核对）。</li>
+  <li><input type="checkbox"> 停止测试容器（可选），确认无遗留 Modal 计费进程。</li>
+  <li><input type="checkbox"> 导出执行记录 JSON 归档到 <code>docs/</code>。</li>
+</ul>
+
+</main>
+<div class="footer">ComfyBridge · 全量真机测试计划 · 2026-10-15 · 配套执行记录页数据仅保存在本机浏览器 localStorage</div>
+</body>
+</html>

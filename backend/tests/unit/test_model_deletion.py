@@ -36,6 +36,13 @@ def _client(monkeypatch) -> TestClient:
         "get_settings",
         lambda: type("Settings", (), {"modal": type("Modal", (), {"volume": "comfyui-data"})()})(),
     )
+    async def fake_volume_exists(name: str) -> bool:
+        return name == "comfyui-data"
+
+    # 避免测试真连 Modal：卷存在性在 API 层即被短路。
+    monkeypatch.setattr(volume_api.volume_cli, "volume_exists", fake_volume_exists)
+    # 后台用量统计会跨请求留在事件循环里，测试不验证它，显式隔离。
+    monkeypatch.setattr(volume_api.usage, "get_usage", lambda force=False: None)
     return TestClient(app)
 
 
@@ -162,12 +169,12 @@ async def test_move_restore_and_cleanup_only_touch_valid_trash_paths(
 
     removed: list[tuple] = []
 
-    async def fake_run(*args: str) -> str:
-        removed.append(args)
-        return ""
+    async def fake_remove(remote: str, *, volume: str | None = None,
+                          recursive: bool = False) -> None:
+        removed.append((remote, volume, recursive))
 
     monkeypatch.setattr(deletion.modal_cli, "list_dir", fake_list_dir)
-    monkeypatch.setattr(deletion.modal_cli, "run", fake_run)
+    monkeypatch.setattr(deletion.modal_cli, "remove_file", fake_remove)
     now = datetime(2026, 10, 10, tzinfo=UTC)
     result = await deletion.cleanup_expired_trash(
         "comfyui-data",
@@ -176,7 +183,7 @@ async def test_move_restore_and_cleanup_only_touch_valid_trash_paths(
     )
     assert result == [".trash/20261003T000000Z"]
     assert len(removed) == 1
-    assert removed[0][:5] == ("volume", "rm", "comfyui-data", ".trash/20261003T000000Z", "-r")
+    assert removed[0] == (".trash/20261003T000000Z", "comfyui-data", True)
 
 
 @pytest.mark.asyncio
@@ -208,14 +215,12 @@ async def test_list_trash_returns_entries_and_marks_unreadable_timestamp(
 
 
 @pytest.mark.asyncio
-async def test_cleanup_all_skips_silently_without_cli(monkeypatch) -> None:
-    """安装态仅本地桥接（无 modal CLI）：静默跳过，不产生启动告警。"""
-    monkeypatch.setattr(deletion.modal_cli, "cli_path", lambda: "")
-
+async def test_cleanup_all_skips_silently_when_volumes_list_fails(monkeypatch) -> None:
+    """SDK/凭证不可用属正常安装形态：静默跳过，不产生启动告警。"""
     async def _boom(*args, **kwargs):
-        raise AssertionError("must not invoke CLI when not installed")
+        raise deletion.modal_cli.ModalCliError("SDK 不可用", category="not_installed")
 
-    monkeypatch.setattr(deletion.modal_cli, "run", _boom)
+    monkeypatch.setattr(deletion.modal_cli, "volumes_list", _boom)
     result = await deletion.cleanup_all_expired_trash()
     assert result == {}
 
@@ -273,6 +278,35 @@ def test_delete_api_dry_run_and_reference_gate(monkeypatch) -> None:
     assert moved == [("comfyui-data", "models/checkpoints/demo.safetensors", "file")]
 
 
+def test_delete_api_soft_deletes_non_model_file(monkeypatch) -> None:
+    """UI-23：非模型文件同样进回收站，不能静默永久删除。"""
+    client = _client(monkeypatch)
+    moved: list[tuple] = []
+
+    async def fake_entry_kind(vol: str, rel: str) -> str:
+        assert vol == "comfyui-data"
+        assert rel == "input/photo.png"
+        return "file"
+
+    async def fake_move_to_trash(vol: str, rel: str, kind: str) -> str:
+        moved.append((vol, rel, kind))
+        return f".trash/20261015T000000Z/{rel}"
+
+    async def fail_remove(*args, **kwargs) -> None:
+        pytest.fail("非模型删除不应走永久删除通道")
+
+    monkeypatch.setattr(volume_api, "_entry_kind", fake_entry_kind)
+    monkeypatch.setattr(volume_api.deletion, "move_to_trash", fake_move_to_trash)
+    monkeypatch.setattr(volume_api.volume_cli, "remove_file", fail_remove)
+
+    res = client.post("/api/v1/volume/delete", json={"paths": ["input/photo.png"]})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["ok"] is True
+    assert body["results"][0]["trash_path"].startswith(".trash/")
+    assert moved == [("comfyui-data", "input/photo.png", "file")]
+
+
 def test_trash_restore_rejects_existing_target_and_purge_guard(monkeypatch) -> None:
     client = _client(monkeypatch)
     trash_path = ".trash/20261010T000000Z/models/checkpoints/demo.safetensors"
@@ -296,11 +330,11 @@ def test_trash_restore_rejects_existing_target_and_purge_guard(monkeypatch) -> N
 
     calls: list[tuple] = []
 
-    async def fake_run(*args: str) -> str:
-        calls.append(args)
-        return ""
+    async def fake_remove(remote: str, *, volume: str | None = None,
+                          recursive: bool = False) -> None:
+        calls.append((remote, volume, recursive))
 
-    monkeypatch.setattr(volume_api.volume_cli, "run", fake_run)
+    monkeypatch.setattr(volume_api.volume_cli, "remove_file", fake_remove)
     rejected = client.post(
         "/api/v1/volume/trash/purge",
         json={
@@ -321,5 +355,5 @@ def test_trash_restore_rejects_existing_target_and_purge_guard(monkeypatch) -> N
     )
     assert purged.status_code == 200
     assert purged.json()["ok"] is True
-    assert ("volume", "rm", "comfyui-data", trash_path, "-r") in calls
+    assert (trash_path, "comfyui-data", True) in calls
 
