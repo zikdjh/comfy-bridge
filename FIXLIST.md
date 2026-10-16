@@ -1422,7 +1422,8 @@ P3-1 遗留的「mypy 尚未形成发布门禁」项闭环。
 覆盖约 130 项：§4 API 矩阵（只读全扫 30 端点 + 配置/预算/规则/账号写往返）、
 §5 数据面、§6 管理台点击、§7 生图链路、任务链（节点/工作流/卷）、§14 NEG、
 §15 PKG-01、**§17 LIVE 冒烟 8 passed / 2 skipped 全绿**。
-执行明细存 `tmp/fulltest-20261016/results.md`（工作区外档）。
+执行明细存 `tmp/fulltest-20261016/results.md`（运行杂物目录，gitignore；
+导入执行记录页的 JSON 同目录）。
 
 ### 1. API-18：成本聚合导出 500（KeyError: 'share'）
 
