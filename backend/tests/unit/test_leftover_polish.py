@@ -217,11 +217,32 @@ def test_stop_modal_containers_invalidates_cache(launch_env, monkeypatch):
     result = launch_api._stop_modal_containers()
     assert result["ok"] and result["running"] == 1 and result["stopped"] == ["c1"]
     assert launch_api._containers_cache is None  # 停止后面板立即读到新状态
-    # OPS-02/03：必须走 cli_exe() 解析（venv Scripts 不在 PATH 时裸 "modal" 会 WinError 2）
-    exe = launch_api.cli_exe()
-    assert [exe, "container", "list", "--json"] in calls
-    assert [exe, "container", "stop", "c1", "-y"] in calls
-    assert all(argv[0] == exe for argv in calls)
+    # OPS-02/03：必须走统一 CLI argv 解析（venv Scripts 不在 PATH 时裸 "modal" 会 WinError 2），
+    # 且回落解释器时自动补 `-m modal`（整合包 runtime 不带 Scripts/ 入口）。
+    expected_list = launch_api.cli_argv("container", "list", "--json")
+    expected_stop = launch_api.cli_argv("container", "stop", "c1", "-y")
+    assert expected_list in calls
+    assert expected_stop in calls
+    assert all(argv[0] == expected_list[0] for argv in calls)
+
+
+def test_cli_argv_falls_back_to_module_invocation(monkeypatch):
+    """无 console script 时（整合包）回落 `python -m modal`，保证 CLI 通道自足。"""
+    from app.modal_volume import client as volume_client
+
+    monkeypatch.setattr(volume_client, "_EXE", None)
+    monkeypatch.setattr(volume_client.sys, "executable", r"X:\bundle\runtime\python.exe")
+    monkeypatch.setattr(volume_client.shutil, "which", lambda _name: None)
+    argv = volume_client.cli_argv("container", "list", "--json")
+    assert argv == [
+        r"X:\bundle\runtime\python.exe", "-m", "modal", "container", "list", "--json",
+    ]
+
+    monkeypatch.setattr(volume_client, "_EXE", None)
+    monkeypatch.setattr(volume_client.shutil, "which", lambda _name: r"C:\tools\modal.exe")
+    assert volume_client.cli_argv("deploy", "runner.py") == [
+        r"C:\tools\modal.exe", "deploy", "runner.py",
+    ]
 
 
 # ---------------------------------------------------------------- 配置视图（M4-3）

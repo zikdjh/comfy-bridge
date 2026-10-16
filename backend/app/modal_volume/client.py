@@ -127,18 +127,34 @@ def _normalize_entry(entry: Any) -> dict:
 def _exe() -> str:
     global _EXE
     if _EXE is None:
-        # 优先取当前解释器同目录的 modal.exe（venv Scripts 不保证在 PATH 里，
-        # pip 安装的 CLI 入口与 SDK 同环境，这是最可靠的落点），PATH 兜底。
+        # 解析顺序：解释器同目录的 modal 入口 → PATH 上的 modal → 回落
+        # `python -m modal`（当前解释器自身）。
+        #
+        # 第三级是整合包场景的关键：pip 生成的 modal.exe 启动器把构建机的
+        # 绝对解释器路径写进 shebang，随包分发后必然失效，因此整合包 runtime
+        # 不带 Scripts/ 入口；此时只要 SDK 已装在本解释器里，`python -m modal`
+        # 与 console script 等价，CLI 通道（deploy / container）无需外部安装。
         venv_exe = Path(sys.executable).with_name("modal.exe")
         if not venv_exe.is_file():  # POSIX：无 .exe 后缀
             venv_exe = Path(sys.executable).with_name("modal")
-        _EXE = str(venv_exe) if venv_exe.is_file() else (shutil.which("modal") or "modal")
+        if venv_exe.is_file():
+            _EXE = str(venv_exe)
+        else:
+            _EXE = shutil.which("modal") or str(sys.executable)
     return _EXE
 
 
 def cli_exe() -> str:
     """modal CLI 可执行路径（deploy 等子进程通道共用，避免各处重复解析漂移）。"""
     return _exe()
+
+
+def cli_argv(*args: str) -> list[str]:
+    """完整 CLI argv：console script 直接接参数，回落解释器时补 `-m modal`。"""
+    exe = _exe()
+    if Path(exe).name.lower().startswith("python"):
+        return [exe, "-m", "modal", *args]
+    return [exe, *args]
 
 
 _ERROR_LABELS = {
@@ -351,7 +367,7 @@ def _popen(*args: str, extra_env: dict[str, str] | None = None) -> subprocess.Po
         # PYTHONWARNINGS=ignore：modal CLI 启动时向 stderr 打 DeprecationWarning，
         # 污染所有错误消息（破坏 "No such file or directory" 等匹配）
         return subprocess.Popen(
-            [_exe(), *args],
+            cli_argv(*args),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env=cli_env(extra_env),

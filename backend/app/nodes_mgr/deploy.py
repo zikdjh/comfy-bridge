@@ -15,7 +15,7 @@ from collections.abc import Callable
 
 from .. import runner_assets
 from ..events import publish
-from ..modal_volume.client import cli_env, cli_exe
+from ..modal_volume.client import cli_argv, cli_env
 
 RUNNER_FILE = runner_assets.runner_file("runner.py")
 
@@ -108,7 +108,7 @@ async def run_deploy(rollback) -> None:
     """执行 modal deploy（后台任务体，调用方 create_task）；失败调 rollback 并置 error。"""
     try:
         proc = await asyncio.create_subprocess_exec(
-            cli_exe(), "deploy", str(RUNNER_FILE),
+            *cli_argv("deploy", str(RUNNER_FILE)),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=cli_env(),

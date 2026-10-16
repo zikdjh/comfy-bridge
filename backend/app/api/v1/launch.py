@@ -34,7 +34,7 @@ from pydantic import BaseModel
 from ...core import local_proc
 from ...core.config import CONFIG_PATH, AppConfig, get_settings
 from ...modal_volume import client as volume_cli
-from ...modal_volume.client import ModalCliError, cli_env, cli_exe
+from ...modal_volume.client import ModalCliError, cli_argv, cli_env
 from ...runner import client as runner_client
 from .config import _dump_toml
 
@@ -217,7 +217,7 @@ def _container_rows() -> tuple[list[dict], int, str | None]:
     app_name = settings.modal.app_name
     try:
         proc = subprocess.run(
-            [cli_exe(), "container", "list", "--json"],
+            cli_argv("container", "list", "--json"),
             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90, check=False,
             env=cli_env(),
         )
@@ -303,7 +303,7 @@ def _stop_modal_containers() -> dict:
     for cid in ids:
         try:
             s = subprocess.run(
-                [cli_exe(), "container", "stop", cid, "-y"],
+                cli_argv("container", "stop", cid, "-y"),
                 capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90, check=False,
                 env=cli_env(),
             )
