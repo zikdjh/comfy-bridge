@@ -170,7 +170,15 @@ def workflows_dir() -> Path:
 
 
 def input_dir() -> Path:
-    """本地 ComfyUI 输入目录（LoadImage 等上传文件的查找根）。"""
+    """本地 ComfyUI 输入目录（LoadImage 等上传文件的查找根）。
+
+    启动命令带 --input-directory 时以其实际目录为准（Desktop 安装常用
+    共享目录），否则回退 comfy_root/input。
+    """
+    args = get_settings().local.launch_command
+    for i, arg in enumerate(args[:-1]):
+        if arg == "--input-directory":
+            return Path(args[i + 1])
     return Path(get_settings().local.comfy_root) / "input"
 
 

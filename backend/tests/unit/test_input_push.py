@@ -7,6 +7,7 @@ LoadImage 报 "Invalid image file: <name>"；必须先把文件写进容器自�
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -146,3 +147,43 @@ async def test_post_input_file_raises_on_bad_status(monkeypatch) -> None:
 
     with pytest.raises(RuntimeError, match="HTTP 404"):
         await runner_client.post_input_file("a.png", b"payload")
+
+
+def test_input_dir_honors_launch_input_directory(monkeypatch, tmp_path: Path) -> None:
+    """启动命令带 --input-directory 时 input_dir 以其实际目录为准（GEN-03 回归）。"""
+    from app.core import config as cfg
+
+    fake = SimpleNamespace(
+        local=SimpleNamespace(
+            comfy_root=str(tmp_path / "root"),
+            launch_command=[
+                "python", "main.py",
+                "--input-directory", str(tmp_path / "shared-input"),
+                "--output-directory", str(tmp_path / "shared-output"),
+            ],
+        )
+    )
+    monkeypatch.setattr(cfg, "get_settings", lambda: fake)
+    assert cfg.input_dir() == tmp_path / "shared-input"
+
+
+def test_input_dir_falls_back_to_comfy_root(monkeypatch, tmp_path: Path) -> None:
+    from app.core import config as cfg
+
+    fake = SimpleNamespace(
+        local=SimpleNamespace(comfy_root=str(tmp_path / "root"), launch_command=["python", "main.py"])
+    )
+    monkeypatch.setattr(cfg, "get_settings", lambda: fake)
+    assert cfg.input_dir() == tmp_path / "root" / "input"
+
+
+def test_input_dir_flag_without_value_falls_back(monkeypatch, tmp_path: Path) -> None:
+    from app.core import config as cfg
+
+    fake = SimpleNamespace(
+        local=SimpleNamespace(
+            comfy_root=str(tmp_path / "root"), launch_command=["python", "main.py", "--input-directory"]
+        )
+    )
+    monkeypatch.setattr(cfg, "get_settings", lambda: fake)
+    assert cfg.input_dir() == tmp_path / "root" / "input"

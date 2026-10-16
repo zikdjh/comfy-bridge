@@ -506,3 +506,35 @@ def test_backfill_model_names(tmp_db, monkeypatch, tmp_path):
     assert rows["bf-1"]["model_name"] == "a.safetensors"
     assert rows["bf-2"]["model_name"] == ""  # 快照缺失 → 空串哨兵，不再重扫
     assert cost_svc.backfill_model_names() == 0  # 第二次启动无 NULL 行可回填
+
+
+# ---------------------------------------------------------------- 报表 v2：CSV 导出回归
+async def test_export_aggregate_scope_includes_share(tmp_db):
+    """聚合导出必须含 share 列：/report 端点层计算占比，/export 直接读 store 曾 KeyError（回归）。"""
+    from datetime import datetime, timedelta
+
+    from fastapi.responses import Response
+
+    from app.api.v1.cost import cost_export, cost_report
+
+    now = datetime.now().astimezone()
+    _insert("modal", 0.75, 300.0, now - timedelta(days=1), model_name="m-a.safetensors", workflow_name="wf-a")
+    _insert("modal", 0.25, 100.0, now - timedelta(days=2), model_name="m-b.safetensors", workflow_name="wf-a")
+
+    for scope, key in (("workflow", "wf-a"), ("model", "m-a.safetensors")):
+        resp = await cost_export(scope=scope, days=30)
+        assert isinstance(resp, Response) and resp.status_code == 200
+        text = resp.body.decode("utf-8-sig")
+        lines = [line for line in text.strip().splitlines() if line]
+        assert lines[0].split(",")[-1] == "占比"
+        cells = [line.split(",") for line in lines[1:]]
+        target = [row for row in cells if row[0] == key]
+        assert target, text
+        # 占比列可解析为浮点，且各行列占比合计为 1
+        shares = [float(row[-1]) for row in cells]
+        assert abs(sum(shares) - 1.0) < 1e-6, text
+        if scope == "workflow":
+            assert target[0][-1] == "1.0"  # 单一工作流聚合 → 占比 1
+
+    rows = (await cost_report(by="workflow", days=30))["rows"]
+    assert rows[0]["share"] == 1.0
