@@ -171,6 +171,24 @@ def test_accounts_never_leak_plaintext_secrets(monkeypatch, tmp_path):
     assert "****" in blob
 
 
+def test_upsert_short_secret_fully_masked(monkeypatch, tmp_path):
+    """超短 secret（API-07 观察的长度边界）必须全掩码，任何响应路径不得回显原文。"""
+    _install(monkeypatch, tmp_path, _modal())
+    out = _upsert(name="tiny", token_id="ak-tiny", token_secret="7chars!")
+    entry = next(a for a in out["accounts"] if a["name"] == "tiny")
+    assert entry["has_secret"] is True
+    assert entry["secret_masked"] == "****"
+    assert "7chars!" not in str(out)
+
+
+def test_config_view_masks_short_modal_secret(monkeypatch, tmp_path):
+    _install(monkeypatch, tmp_path, _modal(token_secret="tiny7", proxy_token_secret="ws-tiny7"))
+    view = config_api._view()
+    assert view["modal"]["secret_masked"] == "****"
+    assert view["modal"]["proxy_secret_masked"] == "****"
+    assert "tiny7" not in str(view)
+
+
 def test_accounts_toml_roundtrip(tmp_path):
     modal = _modal(accounts=[
         AccountProfile(name="team", token_id="ak-team", token_secret="as-team", web_url="https://team.modal.run"),

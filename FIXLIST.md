@@ -1471,3 +1471,43 @@ P3-1 遗留的「mypy 尚未形成发布门禁」项闭环。
 - UI-31/33/69 设置保存细粒度点击、UI-53/54 上传暂停/取消、UI-55/56 URL 下载、
   DP-11 WS 浏览器观察（DP-08 队列合成已旁证）。
 - F-75 干净机器 30 分钟安装验收（需真新机器/VM）；§15 PKG 安装态冒烟可并入。
+
+## 四十五、全量测试遗留观察收口：目录解析泛化与短 secret 掩码边界（2026-10-16）
+
+针对 §四十四 测试的两处观察项做主动收口：GEN-03 修复只覆盖了空格形式
+的 `--input-directory`，且 output 侧存在同类分叉隐患；API-07 的短 secret
+掩码观察需用回归测试给出定论。
+
+### 1. 启动命令目录解析泛化（config.py）
+
+- 新增 `_launch_arg_value()`：统一支持 `--flag <v>` 与 `--flag=<v>` 两种
+  argparse 形式；值缺失 / 以 `--` 开头（误把下一个 flag 当值）/ 空串一律
+  视为缺值回退，不再有旧实现 `args[i+1]` 盲取的边界。
+- `input_dir()` 改走该解析（GEN-03 修复的 `=` 形式补齐，Desktop 启动命令
+  两种写法均生效）。
+
+### 2. output 侧同类分叉收口：新增 `output_dir()` 解析器
+
+- 原状：媒体库与云端输出回传直读 `local.output_dir`，为空时 `Path("")`
+  退化为后端进程工作目录；启动命令重定向 `--output-directory` 时配置若
+  未同步即读错位置（与 GEN-03 input 完全同类的边界）。
+- 修复：`config.output_dir()` 解析链 = 显式配置（设置页必填项，优先）→
+  启动命令 `--output-directory` → 回退 `comfy_root/output`。
+- 消费方收口：`media.py::_output_root()` 与 `executor.py::_download_outputs()`
+  均改走解析器（全仓仅此两处直读 `local.output_dir`）。
+
+### 3. API-07 短 secret 掩码观察定论
+
+- 复核全部账号/配置响应路径（GET /config、accounts GET/PUT、activate
+  响应）：均经 `_mask_secret()`，长度 < 12 一律全掩码 `****`，无「原样
+  返回」分支；本轮新增 2 项单测以 7 字符 secret 锁定该边界（掩码值 +
+  全响应 blob 不含原文）。
+- 当时观察未能复现，判定为测试脚本读到了按设计回显的 `token_id` 字段
+  （或 config.toml 落盘明文——本地文件设计内存储）。掩码语义维持
+  「过短全掩码」不改为 first5+****+last4（那会泄露前 5 位）。
+
+### 验证
+
+- `ruff check app tests`：0 违规；`mypy app`：84 文件 0 错。
+- `pytest tests -q`：**434 passed / 10 skipped**（新增 input `=` 形式 1 项、
+  output_dir 解析器 3 项、短 secret 掩码边界 2 项）。

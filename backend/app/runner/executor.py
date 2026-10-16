@@ -432,7 +432,7 @@ async def _finish(prompt_id: str, state: dict, kind: str, entry: dict | None, de
 
 async def _download_outputs(outputs: dict) -> int:
     """把 history 输出逐文件经 /view 拉回本地 output_dir（保持原相对路径）。"""
-    out_root = Path(config.get_settings().local.output_dir)
+    out_root = config.output_dir()
     count = 0
     for node_out in outputs.values():
         if not isinstance(node_out, dict):

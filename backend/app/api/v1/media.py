@@ -1,18 +1,18 @@
 """GET /api/v1/media/local —— 本地产出媒体（图片/视频）浏览。
 
-数据源：配置的 local.output_dir（ComfyUI output 目录，M1 后远端回传结果也落在这里）。
+数据源：config.output_dir()（显式配置优先，未配置时解析启动命令
+--output-directory，回退 comfy_root/output；M1 后远端回传结果也落在这里）。
 文件本体经 /media/local/file 下发，path 参数限制在 output_dir 内以防目录穿越。
 """
 
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 
-from ...core.config import get_settings
+from ...core import config as core_config
 
 router = APIRouter(prefix="/media", tags=["media"])
 
@@ -21,7 +21,7 @@ VIDEO_EXTS = {".mp4", ".webm", ".mov", ".avi", ".mkv"}
 
 
 def _output_root():
-    return Path(get_settings().local.output_dir)
+    return core_config.output_dir()
 
 
 @router.get("/local")

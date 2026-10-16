@@ -187,3 +187,54 @@ def test_input_dir_flag_without_value_falls_back(monkeypatch, tmp_path: Path) ->
     )
     monkeypatch.setattr(cfg, "get_settings", lambda: fake)
     assert cfg.input_dir() == tmp_path / "root" / "input"
+
+
+def test_input_dir_honors_equals_form(monkeypatch, tmp_path: Path) -> None:
+    from app.core import config as cfg
+
+    fake = SimpleNamespace(
+        local=SimpleNamespace(
+            comfy_root=str(tmp_path / "root"),
+            launch_command=["python", "main.py", f"--input-directory={tmp_path / 'shared-input'}"],
+        )
+    )
+    monkeypatch.setattr(cfg, "get_settings", lambda: fake)
+    assert cfg.input_dir() == tmp_path / "shared-input"
+
+
+def test_output_dir_explicit_config_wins(monkeypatch, tmp_path: Path) -> None:
+    from app.core import config as cfg
+
+    fake = SimpleNamespace(
+        local=SimpleNamespace(
+            comfy_root=str(tmp_path / "root"),
+            output_dir=str(tmp_path / "cfg-output"),
+            launch_command=["python", "main.py", "--output-directory", str(tmp_path / "arg-output")],
+        )
+    )
+    monkeypatch.setattr(cfg, "get_settings", lambda: fake)
+    assert cfg.output_dir() == tmp_path / "cfg-output"
+
+
+def test_output_dir_falls_back_to_launch_args(monkeypatch, tmp_path: Path) -> None:
+    from app.core import config as cfg
+
+    fake = SimpleNamespace(
+        local=SimpleNamespace(
+            comfy_root=str(tmp_path / "root"),
+            output_dir="",
+            launch_command=["python", "main.py", "--output-directory", str(tmp_path / "arg-output")],
+        )
+    )
+    monkeypatch.setattr(cfg, "get_settings", lambda: fake)
+    assert cfg.output_dir() == tmp_path / "arg-output"
+
+
+def test_output_dir_all_empty_uses_comfy_root(monkeypatch, tmp_path: Path) -> None:
+    from app.core import config as cfg
+
+    fake = SimpleNamespace(
+        local=SimpleNamespace(comfy_root=str(tmp_path / "root"), output_dir="", launch_command=[])
+    )
+    monkeypatch.setattr(cfg, "get_settings", lambda: fake)
+    assert cfg.output_dir() == tmp_path / "root" / "output"
