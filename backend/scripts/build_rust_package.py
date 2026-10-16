@@ -15,13 +15,13 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parents[1]
 REPO = BACKEND.parent
 STATIC = BACKEND / "app" / "static"
-PKG_ASSETS = BACKEND / "pkg_assets"
 VENV_SITE = BACKEND / ".venv" / "Lib" / "site-packages"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -217,50 +217,53 @@ def main() -> None:
     version = wheel_version(wheel.name)
     base = runtime_base()
 
-    bundle = PKG_ASSETS / "bundle"
-    if bundle.exists():
-        shutil.rmtree(bundle)
+    # staging 放系统临时目录：留在仓库内会被 pytest 递归收集第三方测试
+    workdir = Path(tempfile.mkdtemp(prefix="cb-bundle-"))
+    bundle = workdir
     stage = bundle / f"ComfyBridge-{version}"
     runtime = stage / "runtime"
 
-    print(f"组装运行时: {base} -> {runtime}")
-    assemble_runtime(base, runtime)
+    try:
+        print(f"组装运行时: {base} -> {runtime}")
+        assemble_runtime(base, runtime)
 
-    if not VENV_SITE.is_dir():
-        sys.exit(f"未找到 {VENV_SITE}；先执行 uv sync 初始化开发环境")
-    site_dst = runtime / "Lib" / "site-packages"
-    if sys.platform == "win32":
-        _robocopy(
-            VENV_SITE,
-            site_dst,
-            dirs_exclude=dev_dir_names(VENV_SITE),
-            files_exclude=["*.pyc"],
-        )
-    else:
-        shutil.copytree(VENV_SITE, site_dst, ignore=site_ignore)
+        if not VENV_SITE.is_dir():
+            sys.exit(f"未找到 {VENV_SITE}；先执行 uv sync 初始化开发环境")
+        site_dst = runtime / "Lib" / "site-packages"
+        if sys.platform == "win32":
+            _robocopy(
+                VENV_SITE,
+                site_dst,
+                dirs_exclude=dev_dir_names(VENV_SITE),
+                files_exclude=["*.pyc"],
+            )
+        else:
+            shutil.copytree(VENV_SITE, site_dst, ignore=site_ignore)
 
-    # wheel 内含 app 代码 + GUI 产物 + modal-runner 副本，直接解包进 site-packages
-    with zipfile.ZipFile(wheel) as zf:
-        zf.extractall(runtime / "Lib" / "site-packages")
+        # wheel 内含 app 代码 + GUI 产物 + modal-runner 副本，直接解包进 site-packages
+        with zipfile.ZipFile(wheel) as zf:
+            zf.extractall(runtime / "Lib" / "site-packages")
 
-    cargo = shutil.which("cargo")
-    if not cargo:
-        sys.exit("未找到 cargo（需要 Rust 工具链）")
-    run([cargo, "build", "--release"], cwd=REPO / "packager")
-    exe_name = "comfy-bridge.exe" if sys.platform == "win32" else "comfy-bridge"
-    built = REPO / "packager" / "target" / "release" / exe_name
-    if not built.is_file():
-        sys.exit(f"cargo 产物缺失: {built}")
-    shutil.copy2(built, stage / exe_name)
+        cargo = shutil.which("cargo")
+        if not cargo:
+            sys.exit("未找到 cargo（需要 Rust 工具链）")
+        run([cargo, "build", "--release"], cwd=REPO / "packager")
+        exe_name = "comfy-bridge.exe" if sys.platform == "win32" else "comfy-bridge"
+        built = REPO / "packager" / "target" / "release" / exe_name
+        if not built.is_file():
+            sys.exit(f"cargo 产物缺失: {built}")
+        shutil.copy2(built, stage / exe_name)
 
-    (stage / "使用说明.txt").write_text(usage_text(version), encoding="utf-8-sig")
+        (stage / "使用说明.txt").write_text(usage_text(version), encoding="utf-8-sig")
 
-    python = runtime / "python.exe" if sys.platform == "win32" else runtime / "bin" / "python3"
-    smoke_check(python)
+        python = runtime / "python.exe" if sys.platform == "win32" else runtime / "bin" / "python3"
+        smoke_check(python)
 
-    out = BACKEND / "dist" / f"ComfyBridge-{version}-win64.zip"
-    make_zip(bundle, stage, out)
-    print(f"OK {out.name}  ({out.stat().st_size / 1024 / 1024:.1f} MiB)  app={wheel.name}  python={base.name}")
+        out = BACKEND / "dist" / f"ComfyBridge-{version}-win64.zip"
+        make_zip(bundle, stage, out)
+        print(f"OK {out.name}  ({out.stat().st_size / 1024 / 1024:.1f} MiB)  app={wheel.name}  python={base.name}")
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
 
 
 if __name__ == "__main__":
