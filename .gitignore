@@ -22,6 +22,9 @@ dist/
 backend/app/static/
 backend/pkg_assets/
 
+# Rust 启动器
+packager/target/
+
 # 环境与密钥
 .env
 *.local.toml
