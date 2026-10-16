@@ -257,7 +257,12 @@ export function Shell() {
               </Badge>
             </Tooltip>
             <Tooltip title={`经桥接器 ${bridgeUrl}（生成请求将被拦截路由）`} placement="bottom">
-              <Button type="primary" ghost icon={<PictureOutlined />} href={bridgeUrl} target="_blank">
+              <Button
+                type="primary"
+                ghost
+                icon={<PictureOutlined />}
+                onClick={() => window.location.assign(bridgeUrl)}
+              >
                 前往出图界面
               </Button>
             </Tooltip>

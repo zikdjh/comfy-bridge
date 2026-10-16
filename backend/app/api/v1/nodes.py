@@ -33,6 +33,7 @@ import hashlib
 import json
 import shutil
 import tempfile
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -41,7 +42,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from ...core import comfy_client
-from ...core.config import custom_nodes_dir, get_settings, modal_configured
+from ...core.config import config_dir, custom_nodes_dir, get_settings, modal_configured
 from ...modal_volume import client as volume_cli
 from ...modal_volume.client import ModalCliError
 from ...models_mgr import node_presence
@@ -126,15 +127,26 @@ async def _read_cloud_manifest() -> dict | None:
 
 
 async def _write_cloud_manifest(manifest: dict) -> None:
-    tmp_root = Path(tempfile.mkdtemp(prefix="cb-node-manifest-write-"))
+    payload = json.dumps(manifest, ensure_ascii=False, indent=2)
+    try:
+        tmp_root = Path(tempfile.mkdtemp(prefix="cb-node-manifest-write-"))
+    except OSError:
+        tmp_root = config_dir() / "tmp" / f"cb-node-manifest-write-{uuid.uuid4().hex}"
+        tmp_root.mkdir(parents=True, exist_ok=True)
     manifest_path = tmp_root / "manifest.json"
     try:
-        manifest_path.write_text(
-            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        try:
+            manifest_path.write_text(payload, encoding="utf-8")
+        except OSError:
+            fallback_root = config_dir() / "tmp" / f"cb-node-manifest-write-{uuid.uuid4().hex}"
+            fallback_root.mkdir(parents=True, exist_ok=True)
+            manifest_path = fallback_root / "manifest.json"
+            manifest_path.write_text(payload, encoding="utf-8")
         await _volume_put(manifest_path, _MANIFEST_REMOTE)
     finally:
         shutil.rmtree(tmp_root, ignore_errors=True)
+        if manifest_path.parent != tmp_root:
+            shutil.rmtree(manifest_path.parent, ignore_errors=True)
 
 
 async def _local_class_types() -> list[str] | None:
