@@ -79,10 +79,12 @@ def _submit(
     client_id: str,
     headers: dict[str, str] | None = None,
 ) -> str:
+    # LIVE 是已授权的自动化提交方：等价于浏览器弹窗确认（P2-5），显式携带确认头。
+    merged = {"X-Bridge-Privacy-Confirmed": "1", **(headers or {})}
     resp = client.post(
         "/prompt",
         json={"prompt_id": "", "client_id": client_id, "prompt": prompt},
-        headers=headers,
+        headers=merged,
     )
     assert resp.status_code == 200, f"提交失败: HTTP {resp.status_code} {resp.text[:500]}"
     prompt_id = resp.json().get("prompt_id")
@@ -201,9 +203,19 @@ def test_modal_interrupt(live_env: LiveEnv, bridge_client: httpx.Client, bridge_
         inputs = node.get("inputs") if isinstance(node, dict) else None
         if node.get("class_type") == "KSampler" and isinstance(inputs, dict):
             inputs["seed"] = int(time.time()) % 2**31
+            # 拉长采样窗口：暖容器 + 8 步 ~15-20s 就跑完，"running"（桥接器开始跟踪）
+            # 早于云端实际开始采样，中断容易落空。40 步给中断留出可靠落点。
+            inputs["steps"] = 40
     prompt_id = _submit(bridge_client, fixture["prompt"], "bridge-live-interrupt")
-    # 提交返回即由后台执行器接管；短等待后中断，覆盖“运行中”而不是排队前后的空窗。
-    time.sleep(3)
+    # 等请求真正进入 running 再中断：固定短睡会落在云端提交完成前的空窗，
+    # /interrupt 空转后任务照常跑完（真机 2026-10-16：暖容器 ~20s 跑完 → done）。
+    deadline = time.time() + 120
+    while time.time() < deadline:
+        recs = bridge_client.get("/api/v1/requests?limit=5").json().get("items") or []
+        cur = next((r for r in recs if r.get("prompt_id") == prompt_id), None)
+        if cur and cur.get("status") == "running":
+            break
+        time.sleep(2)
     resp = bridge_client.post("/interrupt")
     assert resp.status_code < 500, f"中断端点异常: HTTP {resp.status_code} {resp.text[:300]}"
     rec = _wait_terminal(bridge_client, prompt_id, timeout_s=900)
