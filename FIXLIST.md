@@ -1415,3 +1415,58 @@ P3-1 遗留的「mypy 尚未形成发布门禁」项闭环。
 - `ruff check app tests`：0 违规；`mypy app`：84 文件 0 错。
 - `pytest tests -q`：**424 passed / 10 skipped**（新增 manifest 回退单测 1 项）。
 - `pnpm exec tsc --noEmit`：0 错；`pnpm build`：构建成功（仅既有 chunk 体积提示）。
+
+## 四十四、20261015 全量测试计划真机执行与两处缺陷闭环（2026-10-16）
+
+执行《ComfyBridge-过程-全量测试计划-20261015.html》（258 项）的核心批次，
+覆盖约 130 项：§4 API 矩阵（只读全扫 30 端点 + 配置/预算/规则/账号写往返）、
+§5 数据面、§6 管理台点击、§7 生图链路、任务链（节点/工作流/卷）、§14 NEG、
+§15 PKG-01、**§17 LIVE 冒烟 8 passed / 2 skipped 全绿**。
+执行明细存 `tmp/fulltest-20261016/results.md`（工作区外档）。
+
+### 1. API-18：成本聚合导出 500（KeyError: 'share'）
+
+- `/cost/export?scope=workflow|model` 直读 `acost_breakdown()`，而 share 占比
+  只在 /report 端点层计算——导出端点 KeyError 500。
+- 修复：抽出 `cost.py::_attach_share()` 供 /report 与 /export 共用；
+  新增聚合导出回归单测（share 列存在 + 各行占比合计为 1）。
+- 真机复测三 scope 全 200（CSV utf-8-sig + 附件头）。
+
+### 2. GEN-03：云端图生图 400 Invalid image file（input_dir 路径分叉）
+
+- `config.input_dir()` 硬编码 `comfy_root/input`，忽略启动命令的
+  `--input-directory`（Desktop 安装指向共享目录 D:/Comfy-Desktop/...）。
+  数据面 /upload/image 写入本地 ComfyUI 真实 input，云端推送阶段却查
+  另一个根 → 误判「本地缺失，假定云端已有」→ 静默跳过输入推送 →
+  云端校验 400。LV-03 修复链的边界漏洞，只有真机图生图才暴露。
+- 修复：`input_dir()` 优先解析固化启动命令的 `--input-directory`，
+  否则回退 comfy_root/input；新增 3 项回归单测。
+- 真机复测：`输入已推送云端(comfy)` → done / GPU 49.5s / 产物回传。
+
+### 3. LIVE 用例基建：隐私确认与中断时序（test(live)）
+
+- P2-5 上线后 `_submit` 无确认头被 409 拦截：补
+  `X-Bridge-Privacy-Confirmed: 1`（LIVE 是已授权自动化提交方，等价浏览器确认）。
+- 中断用例时序：固定 sleep(3) 落在云端提交完成前空窗（暖容器 8 步 ~20s
+  跑完，"running" 早于实际采样开始），中断空转后收敛 done。改轮询请求
+  进入 running 再 /interrupt，并拉宽采样窗口 steps 8→40。
+- LIVE 终局：**8 passed / 2 skipped**（skip 含本地生图用例，按 AGENTS.md 退役）；
+  文生图/图生图/断线兜底/无输出全 done + 产物回传，中断收敛 cancelled。
+
+### 验证
+
+- 门禁：`ruff check app tests` 0 违规；`mypy app` 84 文件 0 错；
+  `test_cost` 23 passed、`test_input_push` 10 passed。
+- PKG-01：`build_package.py` 全链成功，wheel 99 文件自检通过。
+- API-11/12 扫描 65534 目录真实发现 ComfyUI 安装；API-22/23/24 启停重启
+  往返通过；UI-46 批量节点同步往返通过（作业 ok 2/2，diff 往返验证）。
+- 观察记录：升级 0.40.0 后首跑 GPU 281s 系 GGUF torch 编译预热（次日回落
+  51s 基线）；对账比值 4.68 触发偏差告警属 Modal 计量口径（含全部容器时间）；
+  启动期 VolumeListFiles 限流由 §37 退避重试吸收。
+- 云端消耗 ≈ $0.46（对齐验证 + 全量测试两日合计）。
+
+### 仍待处理
+
+- UI-31/33/69 设置保存细粒度点击、UI-53/54 上传暂停/取消、UI-55/56 URL 下载、
+  DP-11 WS 浏览器观察（DP-08 队列合成已旁证）。
+- F-75 干净机器 30 分钟安装验收（需真新机器/VM）；§15 PKG 安装态冒烟可并入。
