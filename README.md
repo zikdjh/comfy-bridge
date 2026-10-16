@@ -11,6 +11,8 @@
 - 真机测试执行记录（实时填写）：`docs/ComfyBridge-过程-真机测试执行记录.html`
   （内置全量测试计划 102 项 + live 冒烟 10 项，自动本地保存，可导出 JSON/Markdown/CSV）
 - SDK 迁移记录：docs/ComfyBridge-设计-ModalSDK迁移.html（控制面已切 Python SDK；deploy / 流式 run / container 保留 CLI）
+- 使用说明手册：`docs/ComfyBridge-运维-使用说明手册.html`（安装/配置/管理台导览/出图流程/配置项与 API）
+- Modal 密钥指南：`docs/ComfyBridge-运维-Modal密钥获取指南.html`（账户 API Token 与代理鉴权 Token 两套凭证）
 - 速查：`docs/ComfyBridge-参考-ComfyUI启动命令与参数.html`、`docs/ComfyBridge-参考-Modal云平台与SDK.html`
 
 ## 目录

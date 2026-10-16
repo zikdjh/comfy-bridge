@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyBridge Modal 密钥获取指南 · ComfyBridge 文档</title>
+<style>
+  :root {
+    --bg: #f6f7fb; --card: #ffffff; --ink: #1f2430; --ink-soft: #5a6272;
+    --line: #e4e7ef; --accent: #4f5be8; --accent-soft: #eef0fe;
+    --code-bg: #14161f; --code-ink: #e6e9f2;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 70px; }
+  body {
+    margin: 0; font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.75; font-size: 15px;
+  }
+  code, pre { font-family: "JetBrains Mono", Consolas, "Cascadia Code", monospace; }
+  header.hero {
+    background: linear-gradient(135deg, #232a63 0%, #4f5be8 55%, #8a7bff 100%);
+    color: #fff; padding: 34px 24px 26px; text-align: center;
+  }
+  header.hero h1 { margin: 0 0 8px; font-size: 25px; letter-spacing: 1px; }
+  header.hero .meta { font-size: 12.5px; opacity: .82; margin-top: 8px; }
+  nav.toc {
+    position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,.95);
+    backdrop-filter: blur(6px); border-bottom: 1px solid var(--line);
+    padding: 9px 16px; display: flex; flex-wrap: wrap; gap: 5px 12px;
+    justify-content: center; font-size: 13.5px;
+  }
+  nav.toc a { color: var(--ink-soft); text-decoration: none; padding: 3px 8px; border-radius: 6px; }
+  nav.toc a:hover { color: var(--accent); background: var(--accent-soft); }
+  main { max-width: 1000px; margin: 0 auto; padding: 26px 20px 40px; }
+  h2 {
+    font-size: 20px; margin: 40px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--accent); line-height: 1.4;
+  }
+  main > h2:first-child { margin-top: 0; }
+  h3 { font-size: 16.5px; margin: 24px 0 8px; }
+  h4 { font-size: 14.5px; margin: 18px 0 6px; color: #4353d8; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 26px; }
+  li { margin: 4px 0; }
+  blockquote {
+    margin: 12px 0; padding: 10px 16px; background: var(--accent-soft);
+    border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; color: #3a4160;
+  }
+  blockquote p { margin: 4px 0; }
+  pre {
+    position: relative; background: var(--code-bg); color: var(--code-ink);
+    border-radius: 10px; padding: 30px 16px 13px; overflow-x: auto;
+    font-size: 13px; line-height: 1.6; margin: 12px 0;
+  }
+  pre .lang {
+    position: absolute; top: 6px; right: 12px; font-size: 11px; opacity: .55;
+    text-transform: uppercase; letter-spacing: 1px; font-family: system-ui, sans-serif;
+  }
+  code {
+    background: #f0f2fa; color: #33398f; padding: 1.5px 6px;
+    border-radius: 5px; font-size: 13px;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  table {
+    width: 100%; border-collapse: collapse; background: var(--card);
+    font-size: 13.5px; margin: 12px 0;
+  }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  thead th { background: var(--accent-soft); color: #4353d8; font-weight: 600; }
+  tbody tr:nth-child(even) { background: #fafbfe; }
+  td code, th code { background: #f0f2fa; color: #33398f; }
+  hr { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
+  a { color: var(--accent); }
+  .warn {
+    margin: 12px 0; padding: 10px 16px; background: #fff4e8;
+    border-left: 4px solid #e08a2e; border-radius: 0 8px 8px 0; color: #6b4210;
+  }
+  .footer { text-align: center; color: var(--ink-soft); font-size: 12.5px; padding: 18px; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header class="hero">
+  <h1>Modal 密钥获取指南</h1>
+  <div class="meta">ComfyBridge 文档 · 生成于 2026-10-16 · 控制台路径以 Modal 官网实时页面为准</div>
+</header>
+<nav class="toc"><a href="#c1">1. 需要哪两套密钥</a><a href="#c2">2. 准备工作区</a><a href="#c3">3. 获取账户 API Token</a><a href="#c4">4. 获取代理鉴权 Token</a><a href="#c5">5. 填入 ComfyBridge</a><a href="#c6">6. 验证</a><a href="#c7">7. 安全与轮换</a><a href="#c8">8. 常见问题</a></nav>
+<main>
+<p>ComfyBridge 连接 Modal 需要<strong>两套互相独立的密钥</strong>：账户 API Token 用于部署与平台数据访问，代理鉴权 Token 用于访问开启了鉴权的 Runner 端点。两套不能混用，这是最容易出错的地方。</p>
+
+<h2 id="c1">1. 需要哪两套密钥</h2>
+<table>
+<thead><tr><th>用途</th><th>前缀</th><th>ComfyBridge 配置项</th><th>在哪里创建</th></tr></thead>
+<tbody>
+<tr><td>账户 API Token</td><td><code>ak-</code> / <code>as-</code></td><td><code>modal.token_id</code> / <code>modal.token_secret</code></td><td>Modal 控制台 API Tokens，或 <code>modal token new</code></td></tr>
+<tr><td>代理鉴权 Token</td><td><code>wk-</code> / <code>ws-</code></td><td><code>modal.proxy_token_id</code> / <code>modal.proxy_token_secret</code></td><td>Modal 控制台 Proxy Auth Tokens</td></tr>
+</tbody>
+</table>
+<blockquote><p>账户 API Token 覆盖卷读写、应用状态、账单查询与 <code>modal deploy</code>；代理鉴权 Token 只用于 Runner 端点（<code>web_server</code> 开启了 <code>requires_proxy_auth</code>），请求时以 <code>Modal-Key</code> / <code>Modal-Secret</code> 请求头携带。<strong>两族凭证互不通用</strong>，把 <code>ak-/as-</code> 填到代理位会得到 401。</p></blockquote>
+
+<h2 id="c2">2. 准备工作区</h2>
+<ol>
+<li>在 <a href="https://modal.com/" target="_blank">modal.com</a> 注册并登录。</li>
+<li>确认已创建 Workspace（工作区），ComfyBridge 的卷、应用都归属该工作区。</li>
+<li>云端 GPU 需要账户绑定有效支付方式；免费额度耗尽后未绑卡会直接失败。</li>
+<li>如果团队用多个环境（dev / prod），在控制台记下要使用的 Environment 名称，稍后填入 <code>modal.environment</code>。</li>
+</ol>
+
+<h2 id="c3">3. 获取账户 API Token</h2>
+<h3>3.1 方式一：控制台创建（推荐）</h3>
+<ol>
+<li>登录 <a href="https://modal.com/settings" target="_blank">modal.com/settings</a>。</li>
+<li>进入 <strong>API Tokens</strong> 区域（部分界面在 Settings → API Tokens）。</li>
+<li>点击 <strong>New Token</strong>，填写名称（如 <code>comfy-bridge</code>），创建。</li>
+<li>页面显示一对值：<code>Token ID</code>（<code>ak-...</code>）与 <code>Token Secret</code>（<code>as-...</code>）。</li>
+<li><strong>Secret 只显示一次</strong>，立即复制保存到密码管理器。</li>
+</ol>
+<div class="warn"><p>关闭弹窗后无法再次查看 Secret，只能删除旧 Token 重新创建。不要截图上传到公开渠道。</p></div>
+
+<h3>3.2 方式二：命令行创建</h3>
+<pre><span class="lang">powershell</span><code># 安装 Modal CLI（隔离环境，避免污染系统 Python）
+python -m pipx install modal
+
+# 引导式登录，浏览器完成授权后写入 ~/.modal.toml
+modal setup
+
+# 创建新的 API Token（CI / 服务器 / 手工粘贴用）
+modal token new
+
+# 查看当前生效的 Token 与配置来源
+modal token info</code></pre>
+<p><code>modal token new</code> 会输出一对 <code>ak-</code> / <code>as-</code> 凭证，同时写入 <code>~/.modal.toml</code>。ComfyBridge 只在管理台未填凭证时才回落到该文件；两者都配置时以管理台配置为准。</p>
+<pre><span class="lang">powershell</span><code># 确认 CLI 可用与登录状态
+modal --version
+modal app list</code></pre>
+<p><code>modal app list</code> 能列出应用即表示凭证有效且网络可达。</p>
+
+<h3>3.3 环境变量方式（仅 CI / 无人值守）</h3>
+<p>CI 或服务器场景可以不落盘凭证，改用环境变量：</p>
+<pre><span class="lang">powershell</span><code>$env:MODAL_TOKEN_ID = "ak-..."
+$env:MODAL_TOKEN_SECRET = "as-..."</code></pre>
+<p>认证优先级为：客户端显式参数 &gt; <code>MODAL_TOKEN_ID</code>/<code>MODAL_TOKEN_SECRET</code> &gt; <code>~/.modal.toml</code>。ComfyBridge 在管理台填写凭证后，会把它们以这两个环境变量注入 CLI / SDK 子进程，因此无需再手工设置。</p>
+
+<h2 id="c4">4. 获取代理鉴权 Token</h2>
+<p>ComfyBridge 的 Runner 以 <code>@modal.web_server(..., requires_proxy_auth=True)</code> 部署，端点必须携带代理鉴权凭证才能访问，否则会被 Modal 边缘代理直接 401。</p>
+<ol>
+<li>登录后进入 <a href="https://modal.com/settings/proxy-auth-tokens" target="_blank">modal.com/settings/proxy-auth-tokens</a>。</li>
+<li>点击创建，生成一对 <code>wk-...</code>（Token ID）与 <code>ws-...</code>（Token Secret）。</li>
+<li>同样只在创建时显示一次 Secret，立即保存。</li>
+</ol>
+<p>这两枚凭证与上一节的账户 API Token 属于不同凭证族，不能互相替代：账户 Token 是 <code>ak-/as-</code>，代理 Token 是 <code>wk-/ws-</code>。</p>
+
+<h2 id="c5">5. 填入 ComfyBridge</h2>
+<h3>5.1 管理台（推荐）</h3>
+<p>打开 <code>http://127.0.0.1:8189/bridge/</code>，进入「设置 → Modal」：</p>
+<ul>
+<li><code>Token ID</code>：粘贴 <code>ak-...</code></li>
+<li><code>Token Secret</code>：粘贴 <code>as-...</code></li>
+<li><code>代理鉴权 Token ID</code>：粘贴 <code>wk-...</code></li>
+<li><code>代理鉴权 Token Secret</code>：粘贴 <code>ws-...</code></li>
+<li><code>Environment</code>：留空表示默认环境，或填写目标环境名</li>
+</ul>
+<p>Secret 字段保存后只回显掩码，接口不回传明文；留空提交表示「保持原值不变」，要清除请使用界面提供的清除操作。</p>
+
+<h3>5.2 配置文件</h3>
+<p>编辑 <code>~/.comfybridge/config.toml</code>：</p>
+<pre><span class="lang">toml</span><code>[modal]
+token_id = "ak-..."
+token_secret = "as-..."
+environment = ""
+proxy_token_id = "wk-..."
+proxy_token_secret = "ws-..."
+volume = "comfyui-data"
+runner_enabled = true
+app_name = "comfyui-l40s"
+web_url = "https://&lt;工作区&gt;--comfyui-l40s-comfyui.modal.run"</code></pre>
+<p>保存后重启 <code>comfy-bridge</code>，或在管理台「设置 → Modal」重新加载。该文件位于用户目录，含明文凭证，<strong>不要提交到 Git</strong>。</p>
+
+<h3>5.3 多账号档案</h3>
+<p>需要多个 Modal 账号时，用 <code>[[modal.accounts]]</code> 数组维护档案（1 账号 = 1 份凭据），每项包含 <code>name</code>、<code>token_id</code>、<code>token_secret</code>、<code>environment</code>、<code>proxy_token_id</code>、<code>proxy_token_secret</code>、<code>volume</code>、<code>app_name</code>、<code>web_url</code>、<code>task_timeout</code>。<code>[modal]</code> 本体始终是当前活跃账号的生效视图，在管理台切换账号时会把档案字段整体复制进本体。设计细节见 <code>docs/ComfyBridge-设计-多账号维护.html</code>。</p>
+
+<h2 id="c6">6. 验证</h2>
+<ol>
+<li>确认账户凭证可用：</li>
+</ol>
+<pre><span class="lang">powershell</span><code># 健康检查：确认 modal.online 与原因说明
+Invoke-RestMethod http://127.0.0.1:8189/api/v1/health | ConvertTo-Json -Depth 6</code></pre>
+<ol>
+<li>部署 Runner（安装态可在「设置 → Modal」点击部署，或使用源码）：</li>
+</ol>
+<pre><span class="lang">powershell</span><code>modal deploy modal-runner/runner.py</code></pre>
+<ol>
+<li>把部署输出中的固定端点写入 <code>web_url</code>，形如 <code>https://&lt;工作区&gt;--comfyui-l40s-comfyui.modal.run</code>。</li>
+<li>回到「设置 → Modal」，确认 Runner 通道显示「就绪」。若提示缺少代理鉴权凭证，说明 <code>wk-/ws-</code> 未填或填错族。</li>
+</ol>
+
+<h2 id="c7">7. 安全与轮换</h2>
+<ul>
+<li>Token Secret 只在创建时显示一次，务必存进密码管理器；遗失只能重建。</li>
+<li>凭证只写入用户目录配置文件，ComfyBridge 接口只回显掩码，日志不打印明文。</li>
+<li>怀疑泄露时，在控制台删除该 Token 并新建，然后同步更新 ComfyBridge；轮换是覆盖写回，不做多凭证并存。</li>
+<li>最小权限：为 ComfyBridge 单独建 Token，便于定位与吊销。</li>
+<li>若系统设置了 <code>HTTP_PROXY</code>/<code>HTTPS_PROXY</code>，ComfyBridge 访问 Modal 时会对 Modal 域名设置 <code>NO_PROXY</code>，避免本地代理干扰。</li>
+<li>预算护栏是本地估算，不是 Modal 账户级硬上限，账户侧仍应设置预算告警。</li>
+</ul>
+
+<h2 id="c8">8. 常见问题</h2>
+<table>
+<thead><tr><th>现象</th><th>原因与处理</th></tr></thead>
+<tbody>
+<tr><td><code>Token validation failed</code></td><td>凭证错误或含首尾空白。重新粘贴 <code>ak-/as-</code>，确认没有把 <code>as-</code> 填进 ID 位</td></tr>
+<tr><td>端点请求 401（代理鉴权）</td><td>缺 <code>wk-/ws-</code>，或误用了账户 Token。到 Proxy Auth Tokens 页面重新创建</td></tr>
+<tr><td>提示未配置 Modal 凭证</td><td>管理台未填且 <code>~/.modal.toml</code> 不存在。任选一种方式配置后重启</td></tr>
+<tr><td>CLI 找不到</td><td><code>python -m pipx install modal</code>；整合包运行时自带 SDK，但 <code>deploy</code> 等子进程通道需要 CLI 在 PATH 或运行时同目录</td></tr>
+<tr><td>部署超时或网络失败</td><td>先 <code>modal app list</code> 区分网络与账号问题；受限网络下配置代理后重试</td></tr>
+<tr><td>Secret 忘记保存</td><td>无法找回，删除旧 Token 新建一对</td></tr>
+<tr><td>GPU 无法启动</td><td>账户未绑定支付方式或额度耗尽，到控制台 Billing 处理</td></tr>
+</tbody>
+</table>
+<p>相关文档：<code>docs/ComfyBridge-参考-Modal云平台与SDK.html</code>（平台与 SDK 速查）、<code>docs/ComfyBridge-运维-故障排查.html</code>（故障排查）、<code>docs/ComfyBridge-运维-安装与首次使用.html</code>（安装流程）。</p>
+</main>
+<div class="footer">ComfyBridge · 本地 ComfyUI × Modal 云端 GPU 桥接器</div>
+</body>
+</html>

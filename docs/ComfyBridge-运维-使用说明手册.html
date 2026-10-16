@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyBridge 使用说明手册 · ComfyBridge 文档</title>
+<style>
+  :root {
+    --bg: #f6f7fb; --card: #ffffff; --ink: #1f2430; --ink-soft: #5a6272;
+    --line: #e4e7ef; --accent: #4f5be8; --accent-soft: #eef0fe;
+    --code-bg: #14161f; --code-ink: #e6e9f2;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 70px; }
+  body {
+    margin: 0; font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.75; font-size: 15px;
+  }
+  code, pre { font-family: "JetBrains Mono", Consolas, "Cascadia Code", monospace; }
+  header.hero {
+    background: linear-gradient(135deg, #232a63 0%, #4f5be8 55%, #8a7bff 100%);
+    color: #fff; padding: 34px 24px 26px; text-align: center;
+  }
+  header.hero h1 { margin: 0 0 8px; font-size: 25px; letter-spacing: 1px; }
+  header.hero .meta { font-size: 12.5px; opacity: .82; margin-top: 8px; }
+  nav.toc {
+    position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,.95);
+    backdrop-filter: blur(6px); border-bottom: 1px solid var(--line);
+    padding: 9px 16px; display: flex; flex-wrap: wrap; gap: 5px 12px;
+    justify-content: center; font-size: 13.5px;
+  }
+  nav.toc a { color: var(--ink-soft); text-decoration: none; padding: 3px 8px; border-radius: 6px; }
+  nav.toc a:hover { color: var(--accent); background: var(--accent-soft); }
+  main { max-width: 1040px; margin: 0 auto; padding: 26px 20px 40px; }
+  h2 {
+    font-size: 20px; margin: 40px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--accent); line-height: 1.4;
+  }
+  main > h2:first-child { margin-top: 0; }
+  h3 { font-size: 16.5px; margin: 24px 0 8px; }
+  h4 { font-size: 14.5px; margin: 18px 0 6px; color: #4353d8; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 26px; }
+  li { margin: 4px 0; }
+  blockquote {
+    margin: 12px 0; padding: 10px 16px; background: var(--accent-soft);
+    border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; color: #3a4160;
+  }
+  blockquote p { margin: 4px 0; }
+  pre {
+    position: relative; background: var(--code-bg); color: var(--code-ink);
+    border-radius: 10px; padding: 30px 16px 13px; overflow-x: auto;
+    font-size: 13px; line-height: 1.6; margin: 12px 0;
+  }
+  pre .lang {
+    position: absolute; top: 6px; right: 12px; font-size: 11px; opacity: .55;
+    text-transform: uppercase; letter-spacing: 1px; font-family: system-ui, sans-serif;
+  }
+  code {
+    background: #f0f2fa; color: #33398f; padding: 1.5px 6px;
+    border-radius: 5px; font-size: 13px;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  table {
+    width: 100%; border-collapse: collapse; background: var(--card);
+    font-size: 13.5px; margin: 12px 0;
+  }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  thead th { background: var(--accent-soft); color: #4353d8; font-weight: 600; }
+  tbody tr:nth-child(even) { background: #fafbfe; }
+  td code, th code { background: #f0f2fa; color: #33398f; }
+  hr { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
+  a { color: var(--accent); }
+  .warn {
+    margin: 12px 0; padding: 10px 16px; background: #fff4e8;
+    border-left: 4px solid #e08a2e; border-radius: 0 8px 8px 0; color: #6b4210;
+  }
+  .footer { text-align: center; color: var(--ink-soft); font-size: 12.5px; padding: 18px; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header class="hero">
+  <h1>ComfyBridge 使用说明手册</h1>
+  <div class="meta">ComfyBridge 文档 · 生成于 2026-10-16 · 适用版本 0.1.0</div>
+</header>
+<nav class="toc"><a href="#c1">1. 产品概览</a><a href="#c2">2. 安装与启动</a><a href="#c3">3. 首次配置</a><a href="#c4">4. 管理台导览</a><a href="#c5">5. 出图流程</a><a href="#c6">6. 路由与分流</a><a href="#c7">7. 节点与模型</a><a href="#c8">8. 数据卷</a><a href="#c9">9. 成本与预算</a><a href="#c10">10. 配置项参考</a><a href="#c11">11. API 参考</a><a href="#c12">12. 安全与数据边界</a></nav>
+<main>
+<p>ComfyBridge 是「本地 ComfyUI × Modal 云端 GPU」的桥接器：对 ComfyUI 界面透明，按路由策略把生成请求分流到本地或 Modal 云端执行，并统一管理两端节点、配置、工作流、数据卷与成本。本手册面向使用者，覆盖安装、配置、日常操作与排障入口。</p>
+
+<h2 id="c1">1. 产品概览</h2>
+<h3>1.1 核心能力</h3>
+<table>
+<thead><tr><th>能力</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>请求分流</td><td>拦截 <code>/prompt</code> 等生成请求，按规则转发本地或 Modal，出图地址不变</td></tr>
+<tr><td>透明代理</td><td>浏览器指向桥接端口即可正常使用 ComfyUI，无需改工作流</td></tr>
+<tr><td>节点同步</td><td>对比本地与云端自定义节点差异，支持同步与镜像重建</td></tr>
+<tr><td>工作流 / 设置同步</td><td>两端工作流与配置对齐（不同步模型文件）</td></tr>
+<tr><td>数据卷管理</td><td>模型、节点、输入输出、工作流持久化在 Modal 数据卷</td></tr>
+<tr><td>成本记录</td><td>记录每次请求的耗时与费用估算，支持账单对账</td></tr>
+<tr><td>多账号档案</td><td>1 账号 = 1 份凭据，可在管理台切换</td></tr>
+</tbody>
+</table>
+
+<h3>1.2 端口约定</h3>
+<table>
+<thead><tr><th>用途</th><th>默认地址</th></tr></thead>
+<tbody>
+<tr><td>本地 ComfyUI（数据面）</td><td><code>http://127.0.0.1:8188</code></td></tr>
+<tr><td>桥接器（数据面 + 管理面）</td><td><code>http://127.0.0.1:8189</code></td></tr>
+<tr><td>管理台 GUI</td><td><code>http://127.0.0.1:8189/bridge/</code></td></tr>
+<tr><td>管理 API</td><td><code>http://127.0.0.1:8189/api/v1/</code></td></tr>
+</tbody>
+</table>
+<p>把 ComfyUI 界面地址的 <code>:8188</code> 换成 <code>:8189</code> 即接入桥接器，其余用法不变。</p>
+
+<h2 id="c2">2. 安装与启动</h2>
+<h3>2.1 方式一：整合包（推荐，免安装）</h3>
+<p>整合包内置完整 Python 运行时与全部依赖，解压即用，无需安装 Python、Node.js 或 pip：</p>
+<pre><span class="lang">text</span><code>ComfyBridge-0.1.0/
+├── comfy-bridge.exe      # 入口启动器
+├── runtime/              # 内置 Python 运行时（含依赖、应用、GUI 产物）
+└── 使用说明.txt</code></pre>
+<ol>
+<li>解压到任意目录（建议路径不含空格与中文）。</li>
+<li>双击 <code>comfy-bridge.exe</code> 启动。</li>
+<li>浏览器打开 <code>http://127.0.0.1:8189/bridge/</code>。</li>
+</ol>
+<pre><span class="lang">powershell</span><code># 指定端口与监听地址
+.\comfy-bridge.exe --host 127.0.0.1 --port 8189
+
+# 自检整合包完整性（Python / 应用 / GUI 三项）
+.\comfy-bridge.exe --doctor
+
+# 查看版本
+.\comfy-bridge.exe --version</code></pre>
+<p>整合包<strong>不含 ComfyUI 本体</strong>，数据面仍需你已有的本地 ComfyUI 或 Modal 云端提供。彻底卸载只需删除解压目录；配置与数据保存在用户目录 <code>~/.comfybridge</code>，与整合包目录无关。</p>
+
+<h3>2.2 方式二：wheel + pipx</h3>
+<pre><span class="lang">powershell</span><code>python -m pip install --user pipx
+python -m pipx ensurepath
+pipx install "C:\path\to\comfy_bridge-0.1.0-py3-none-any.whl"
+comfy-bridge --help</code></pre>
+<p>需要 Python 3.11 或更高版本。升级用 <code>pipx install --force &lt;新 wheel&gt;</code>，卸载用 <code>pipx uninstall comfy-bridge</code>。</p>
+
+<h3>2.3 命令行参数</h3>
+<table>
+<thead><tr><th>参数</th><th>说明</th><th>默认</th></tr></thead>
+<tbody>
+<tr><td><code>--host</code></td><td>监听地址；非回环地址必须先配置管理令牌</td><td><code>127.0.0.1</code></td></tr>
+<tr><td><code>--port</code></td><td>监听端口</td><td><code>8189</code></td></tr>
+<tr><td><code>--doctor</code></td><td>整合包自检（仅整合包启动器提供）</td><td>—</td></tr>
+<tr><td><code>--version</code></td><td>显示版本（仅整合包启动器提供）</td><td>—</td></tr>
+</tbody>
+</table>
+<blockquote><p>整合包启动器的 <code>--doctor</code> / <code>--version</code> / <code>--help</code> 仅在作为第一个参数时生效，其余参数原样转发给后端 CLI。可用 <code>CB_BRIDGE_RUNTIME</code> 指定 runtime 目录。</p></blockquote>
+
+<h3>2.4 从源码运行（开发）</h3>
+<pre><span class="lang">powershell</span><code># 后端（首次 uv sync 安装依赖）
+cd backend
+uv run uvicorn app.main:app --reload --port 8189
+
+# 前端（另开终端，首次 pnpm install，需 Node ≥ 18）
+cd frontend
+pnpm dev          # http://127.0.0.1:5173，/api 代理到 8189
+
+# 或一键并行启动
+powershell -File scripts/dev.ps1</code></pre>
+
+<h2 id="c3">3. 首次配置</h2>
+<p>首次启动后，管理台会自动弹出配置向导，按「检测 → Modal 凭证 → 本地 ComfyUI → 云端 Runner → 完成」五步走完即可。</p>
+<h3>3.1 本地 ComfyUI</h3>
+<ol>
+<li>填写 ComfyUI 仓库根目录（含 <code>main.py</code>、<code>nodes.py</code>、<code>comfy/</code>），例如 <code>D:\ComfyUI\ComfyUI</code>；不确定可点「扫描本机」自动发现（扫描排除 C 盘）。</li>
+<li>点「校验」确认目录完整。</li>
+<li>填写输出目录（本地 <code>output</code> 目录），云端结果回传落在此处。</li>
+</ol>
+
+<h3>3.2 Modal 凭证</h3>
+<p>需要<strong>两套独立凭证</strong>：账户 API Token（<code>ak-/as-</code>）与代理鉴权 Token（<code>wk-/ws-</code>）。获取方式详见 <code>docs/ComfyBridge-运维-Modal密钥获取指南.html</code>。</p>
+
+<h3>3.3 部署云端 Runner</h3>
+<pre><span class="lang">powershell</span><code>modal deploy modal-runner/runner.py</code></pre>
+<p>把输出的固定端点填入 <code>web_url</code>，形如 <code>https://&lt;工作区&gt;--comfyui-l40s-comfyui.modal.run</code>。安装态也可在「设置 → Modal」点击部署，使用 wheel 内自带的 Runner 副本。</p>
+
+<h3>3.4 配置文件方式</h3>
+<p>配置保存在 <code>~/.comfybridge/config.toml</code>，可参考 <code>backend/config.example.toml</code>。只识别 <code>[local]</code> / <code>[bridge]</code> / <code>[modal]</code> 三节，未列出的键会被忽略。</p>
+
+<h2 id="c4">4. 管理台导览</h2>
+<p>入口 <code>http://127.0.0.1:8189/bridge/</code>，左侧导航共 11 个页面：</p>
+<table>
+<thead><tr><th>页面</th><th>用途</th></tr></thead>
+<tbody>
+<tr><td>仪表盘</td><td>两端在线状态、Runner 通道状态、云端模型索引概览</td></tr>
+<tr><td>路由</td><td>分流规则管理：内置规则 + 自定义规则链，决定请求走本地还是云端</td></tr>
+<tr><td>节点</td><td>两端自定义节点差异对比、同步、版本对齐、镜像重建与对齐历史</td></tr>
+<tr><td>工作流</td><td>两端工作流列表与同步</td></tr>
+<tr><td>模型</td><td>模型清单与本地 ↔ 云端同步；支持分块上传（断点续传 + MD5 校验）</td></tr>
+<tr><td>数据卷</td><td>Modal 数据卷文件管理：浏览、上传、下载、移动、删除</td></tr>
+<tr><td>媒体库</td><td>生成结果画廊，读取本地输出目录</td></tr>
+<tr><td>成本</td><td>请求费用估算、账单对账、导出</td></tr>
+<tr><td>日志</td><td>请求日志与实时执行输出（SSE）</td></tr>
+<tr><td>状态</td><td>系统状态页：依赖、CLI、运行环境诊断</td></tr>
+<tr><td>设置</td><td>本地 / 启动命令 / 桥接 / Modal / 护栏与预算 / 设置同步</td></tr>
+</tbody>
+</table>
+
+<h3>4.1 设置页各 Tab</h3>
+<table>
+<thead><tr><th>Tab</th><th>主要配置</th></tr></thead>
+<tbody>
+<tr><td>本地</td><td>ComfyUI 根目录、输出目录、模型目录映射、Node.js 环境检测</td></tr>
+<tr><td>启动命令</td><td>本地 / 云端追加启动参数，支持启动、停止、重启本地实例</td></tr>
+<tr><td>桥接</td><td>默认后端、视频后端、大分辨率阈值、云端不可用策略、隐私确认、<code>object_info</code> 合并策略</td></tr>
+<tr><td>Modal</td><td>凭证、Environment、卷名、应用名、<code>web_url</code>、任务超时、账号档案</td></tr>
+<tr><td>护栏与预算</td><td>月度预算、并发上限、超预算动作</td></tr>
+<tr><td>设置同步</td><td>两端设置项对齐，敏感项以掩码显示</td></tr>
+</tbody>
+</table>
+
+<h2 id="c5">5. 出图流程</h2>
+<ol>
+<li>启动本地 ComfyUI，确认 <code>http://127.0.0.1:8188</code> 可访问。</li>
+<li>启动 ComfyBridge，浏览器打开 <code>http://127.0.0.1:8189</code>（数据面，即 ComfyUI 界面）。</li>
+<li>正常搭建或加载工作流，提交生成。</li>
+<li>请求按路由规则分流：命中云端规则的走 Modal，其余留本地。</li>
+<li>在管理台「日志」页查看请求时间线（提交 / 执行 / 回传）与最终后端。</li>
+<li>结果回传到本地输出目录的对应子目录，「媒体库」页可直接浏览。</li>
+</ol>
+<blockquote><p>首次云端执行会经历容器冷启动，通常数十秒到数分钟。首次验证建议用低分辨率、少步数的小工作流，避免不必要的费用。可在「仪表盘」用「预热」按钮提前拉起容器。</p></blockquote>
+<h3>5.1 判定是否真的走了云端</h3>
+<p>在「日志」页打开请求详情，确认终态记录里的 <code>final_backend</code> 为 <code>modal</code>（而不是 <code>local</code>），并且输出回传阶段存在。</p>
+
+<h2 id="c6">6. 路由与分流</h2>
+<p>请求最终走哪一端由规则链决定。内置规则按生成类型与分辨率判断；在「路由」页可维护自定义规则链（按序求值，非空时替换内置那两条）。</p>
+<table>
+<thead><tr><th>配置项</th><th>作用</th><th>取值</th></tr></thead>
+<tbody>
+<tr><td><code>bridge.default_backend</code></td><td>兜底后端</td><td><code>local</code> / <code>modal</code></td></tr>
+<tr><td><code>bridge.video_backend</code></td><td>视频类输出节点请求的后端</td><td><code>local</code> / <code>modal</code></td></tr>
+<tr><td><code>bridge.large_side_pixels</code></td><td>大分辨率上云阈值（图最大边像素），<code>0</code> 关闭</td><td>整数</td></tr>
+<tr><td><code>bridge.on_modal_unavailable</code></td><td>云端不可用时的动作</td><td><code>fallback_local</code> / <code>reject</code></td></tr>
+</tbody>
+</table>
+<p>「路由」页还可按标签、云端独有模型等条件分流。请求提交前会做预检，缺节点或缺模型会按预检策略拦截或自动供给。</p>
+
+<h2 id="c7">7. 节点与模型</h2>
+<h3>7.1 节点</h3>
+<ul>
+<li>「节点」页展示本地与云端自定义节点的差异列表。</li>
+<li>可执行同步（把节点清单与依赖推到云端）或重建镜像。</li>
+<li>重建失败会自动回滚到上一个可用 pin；过程记录在「对齐历史」，状态含 <code>ok</code> / <code>已回滚</code> / <code>超时</code>。</li>
+<li>版本不一致时执行「版本对齐」，可让云端 ComfyUI 版本与本地一致。</li>
+</ul>
+<h3>7.2 模型</h3>
+<ul>
+<li>「模型」页列出两端模型，支持本地 ↔ 云端同步。</li>
+<li>大模型支持分块上传：断点续传 + 整文件 MD5 校验，只有与声明 MD5 一致才通过。</li>
+<li>模型删除有引用保护，会检查工作流引用并支持回收站。</li>
+<li><code>object_info</code> 合并策略（设置 → 桥接）决定本地与云端模型清单如何合并：<code>local-first</code>（默认）/ <code>union</code> / <code>local-only</code>。</li>
+</ul>
+
+<h2 id="c8">8. 数据卷</h2>
+<p>模型、自定义节点、输入输出、工作流全部持久化在 Modal 数据卷（默认 <code>comfyui-data</code>，挂载到容器 <code>/data</code>）。</p>
+<ul>
+<li>「数据卷」页可浏览目录、上传、下载、移动与删除文件。</li>
+<li>批量操作（移动 / 下载）以任务形式执行，进度在任务抽屉查看。</li>
+<li>Modal 卷的清单与元数据有延迟，刚上传或删除后可能需要刷新。</li>
+<li>重要数据先保留远端备份再执行批量删除。</li>
+<li>改动 <code>volume</code> 或 <code>app_name</code> 后需要重新 <code>modal deploy</code>。</li>
+</ul>
+
+<h2 id="c9">9. 成本与预算</h2>
+<ul>
+<li>「成本」页记录每次请求的 GPU 单价、耗时与费用估算，并与 Modal 账单对账。</li>
+<li>「设置 → 护栏与预算」可设月度预算与云端并发上限，超限时按策略回落本地或拒绝。</li>
+<li>预算护栏是<strong>本地估算的软限制</strong>，不是 Modal 账户级硬上限；账户侧仍需配置预算告警。</li>
+<li>若 Modal 单价调整，在设置中更新 GPU 单价以保持估算准确。</li>
+</ul>
+
+<h2 id="c10">10. 配置项参考</h2>
+<p>文件位置 <code>~/.comfybridge/config.toml</code>。以下为常用项，完整字段见 <code>backend/config.example.toml</code>。</p>
+<h3>10.1 [local]</h3>
+<table>
+<thead><tr><th>键</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>comfy_url</code></td><td>本地 ComfyUI 地址，默认 <code>http://127.0.0.1:8188</code></td></tr>
+<tr><td><code>comfy_root</code></td><td>ComfyUI 仓库根（含 <code>main.py</code> 等）</td></tr>
+<tr><td><code>output_dir</code></td><td>输出目录；未配置时按 <code>--output-directory</code> 启动参数、再回退 <code>comfy_root/output</code></td></tr>
+<tr><td><code>models_dirs</code></td><td>分类 → 本地模型目录映射；未配置的分类回退 <code>comfy_root/models/&lt;分类&gt;</code></td></tr>
+<tr><td><code>extra_launch_args</code></td><td>本地 ComfyUI 追加启动参数</td></tr>
+<tr><td><code>launch_command</code></td><td>桥接器接管启动的基础命令 argv；留空自动探测固化</td></tr>
+<tr><td><code>node_path</code></td><td>Node.js 可执行文件路径（开发前端用）</td></tr>
+</tbody>
+</table>
+<h3>10.2 [bridge]</h3>
+<table>
+<thead><tr><th>键</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>listen</code></td><td>桥接器监听地址，默认 <code>127.0.0.1:8189</code></td></tr>
+<tr><td><code>default_backend</code></td><td>路由兜底后端，<code>local</code> / <code>modal</code></td></tr>
+<tr><td><code>video_backend</code></td><td>视频输出请求后端</td></tr>
+<tr><td><code>large_side_pixels</code></td><td>大分辨率上云阈值，<code>0</code> 关闭</td></tr>
+<tr><td><code>on_modal_unavailable</code></td><td><code>fallback_local</code> / <code>reject</code></td></tr>
+<tr><td><code>privacy_confirm</code></td><td>首次分流到 Modal 时返回数据边界说明，需带 <code>X-Bridge-Privacy-Confirmed: 1</code> 重试</td></tr>
+<tr><td><code>preflight</code></td><td>提交前预检策略：<code>off</code> 不校验（默认）/ <code>strict</code> 拦截 / <code>ask</code> 拦截并给出可操作选项 / <code>auto</code> 自动供给缺失模型</td></tr>
+<tr><td><code>object_info_merge</code></td><td><code>local-first</code> / <code>union</code> / <code>local-only</code></td></tr>
+<tr><td><code>rules</code></td><td>自定义路由规则链；空列表 = 使用内置规则</td></tr>
+</tbody>
+</table>
+<h3>10.3 [modal]</h3>
+<table>
+<thead><tr><th>键</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>token_id</code> / <code>token_secret</code></td><td>账户 API Token（<code>ak-</code> / <code>as-</code>）</td></tr>
+<tr><td><code>environment</code></td><td>Modal 环境，空 = 默认</td></tr>
+<tr><td><code>proxy_token_id</code> / <code>proxy_token_secret</code></td><td>代理鉴权 Token（<code>wk-</code> / <code>ws-</code>）</td></tr>
+<tr><td><code>volume</code></td><td>数据卷名，默认 <code>comfyui-data</code></td></tr>
+<tr><td><code>runner_enabled</code></td><td>是否启用 Runner 执行通道</td></tr>
+<tr><td><code>app_name</code></td><td>Runner 应用名，默认 <code>comfyui-l40s</code></td></tr>
+<tr><td><code>web_url</code></td><td>Runner 固定端点，<code>modal deploy</code> 输出</td></tr>
+<tr><td><code>task_timeout</code></td><td>单个云端任务最长等待秒数，默认 3600</td></tr>
+<tr><td><code>extra_launch_args</code></td><td>云端 ComfyUI 追加启动参数</td></tr>
+<tr><td><code>accounts</code></td><td>多账号档案数组（<code>[[modal.accounts]]</code>）</td></tr>
+</tbody>
+</table>
+
+<h2 id="c11">11. API 参考</h2>
+<p>管理 API 统一前缀 <code>/api/v1</code>，除 <code>health</code> 外，配置管理令牌后均需认证。</p>
+<table>
+<thead><tr><th>模块</th><th>前缀</th><th>用途</th></tr></thead>
+<tbody>
+<tr><td>health</td><td><code>/health</code></td><td>两端与 Runner 通道健康状态（唯一免认证端点）</td></tr>
+<tr><td>config</td><td><code>/config</code></td><td>配置读写、ComfyUI 扫描与校验、Node 环境检测</td></tr>
+<tr><td>launch</td><td><code>/launch</code></td><td>两端启动命令、本地实例启停、云端容器清单与停止</td></tr>
+<tr><td>nodes</td><td><code>/nodes</code></td><td>节点差异、同步、版本对齐与历史</td></tr>
+<tr><td>workflows</td><td><code>/workflows</code></td><td>工作流列表与同步</td></tr>
+<tr><td>routing</td><td><code>/routing</code></td><td>路由规则 CRUD</td></tr>
+<tr><td>jobs</td><td><code>/jobs</code></td><td>后台任务（同步、下载、移动等）</td></tr>
+<tr><td>media</td><td><code>/media</code></td><td>媒体库与输出文件</td></tr>
+<tr><td>logs</td><td><code>/logs</code></td><td>请求日志与实时输出</td></tr>
+<tr><td>events</td><td><code>/events</code></td><td>事件流（SSE）</td></tr>
+<tr><td>requests</td><td><code>/requests</code></td><td>请求记录与详情</td></tr>
+<tr><td>cost</td><td><code>/cost</code></td><td>成本统计、账单对账、导出</td></tr>
+<tr><td>modal</td><td><code>/modal</code></td><td>Modal 应用状态、部署与容器操作</td></tr>
+<tr><td>modal-volume</td><td><code>/modal-volume</code></td><td>数据卷文件操作</td></tr>
+<tr><td>uploads</td><td><code>/uploads</code></td><td>分块上传会话</td></tr>
+<tr><td>volume</td><td><code>/volume</code></td><td>卷用量与同步任务</td></tr>
+<tr><td>settings-sync</td><td><code>/settings-sync</code></td><td>两端设置对齐</td></tr>
+</tbody>
+</table>
+<pre><span class="lang">powershell</span><code># 健康检查（示例）
+Invoke-RestMethod http://127.0.0.1:8189/api/v1/health | ConvertTo-Json -Depth 6</code></pre>
+
+<h2 id="c12">12. 安全与数据边界</h2>
+<ul>
+<li>默认只监听 <code>127.0.0.1</code>；非回环监听必须先配置 <code>CB_MANAGEMENT_TOKEN</code> 或 <code>~/.comfybridge/management_token</code>，否则拒绝启动。</li>
+<li>配置令牌后，<code>/api/v1</code>（health 除外）与 <code>/bridge</code> 需认证；跨站 Origin 默认 403，可信域名经 <code>CB_ALLOWED_ORIGINS</code> 白名单；写操作与被拒请求落 <code>audit.log</code>。</li>
+<li>不要把桥接器直接暴露到公网；远程访问请用可信网络或反向代理并保留令牌。</li>
+<li>生成请求上云时，工作流图、输入文件与必要元数据会发送到 Modal；日志与输出默认保存在本机。</li>
+<li><code>~/.comfybridge/config.toml</code> 含明文凭证，不要提交到 Git 或粘贴到公开 issue。</li>
+<li>敏感字段（<code>token_secret</code> / <code>proxy_token_secret</code>）接口只回显掩码，日志不打印明文。</li>
+</ul>
+
+<hr>
+<p><strong>相关文档</strong></p>
+<ul>
+<li><code>docs/ComfyBridge-运维-Modal密钥获取指南.html</code> —— 两套 Modal 密钥的获取与填写</li>
+<li><code>docs/ComfyBridge-运维-安装与首次使用.html</code> —— 安装态首次使用</li>
+<li><code>docs/ComfyBridge-运维-故障排查.html</code> —— 故障现象与处理</li>
+<li><code>docs/ComfyBridge-运维-反向代理与多用户部署.html</code> —— 局域网 / 反代部署</li>
+<li><code>docs/ComfyBridge-参考-ComfyUI启动命令与参数.html</code> —— 启动参数速查</li>
+<li><code>docs/ComfyBridge-设计-多账号维护.html</code> —— 多账号档案设计</li>
+</ul>
+</main>
+<div class="footer">ComfyBridge · 本地 ComfyUI × Modal 云端 GPU 桥接器</div>
+</body>
+</html>

@@ -29,6 +29,7 @@ uv run python scripts/build_rust_package.py --skip-wheel --no-frontend
 ComfyBridge-<版本>/
 ├── comfy-bridge.exe      # 入口启动器
 ├── runtime/              # 裁剪版 CPython + site-packages（含 app、GUI 产物、modal-runner）
+├── docs/                 # 使用说明手册 + Modal 密钥获取指南（HTML，浏览器直接打开）
 └── 使用说明.txt
 ```
 

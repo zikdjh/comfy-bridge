@@ -23,6 +23,12 @@ BACKEND = Path(__file__).resolve().parents[1]
 REPO = BACKEND.parent
 STATIC = BACKEND / "app" / "static"
 VENV_SITE = BACKEND / ".venv" / "Lib" / "site-packages"
+DOCS = REPO / "docs"
+# 随包分发的用户文档（文件名含中文，保持原名便于直接打开）
+BUNDLE_DOCS = (
+    "ComfyBridge-运维-使用说明手册.html",
+    "ComfyBridge-运维-Modal密钥获取指南.html",
+)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_package import build_frontend, copy_runner, run
@@ -172,6 +178,7 @@ def usage_text(version: str) -> str:
 - 本整合包不含 ComfyUI 本体；出图数据面仍由你已有的本地 ComfyUI 或 Modal 云端提供。
 - runtime/ 是内置 Python 运行环境，请勿单独改动；彻底卸载只需删除解压目录。
 - ComfyUI 路径、Modal 凭证等配置存放在用户目录 ~/.comfybridge，与整合包目录无关。
+- docs/ 内为使用说明手册与 Modal 密钥获取指南，可直接用浏览器打开。
 """
 
 
@@ -186,6 +193,17 @@ def smoke_check(python: Path) -> None:
     result = subprocess.run([str(python), "-c", smoke], capture_output=True, text=True, check=False)
     if result.returncode != 0:
         sys.exit(f"整合包自检失败:\n{result.stdout}\n{result.stderr}")
+
+
+def copy_docs(stage: Path) -> None:
+    """把用户文档放进整合包；缺失即失败，避免发布缺文档的包。"""
+    target = stage / "docs"
+    target.mkdir(parents=True, exist_ok=True)
+    missing = [name for name in BUNDLE_DOCS if not (DOCS / name).is_file()]
+    if missing:
+        sys.exit(f"缺少待打包文档: {missing}（位于 {DOCS}）")
+    for name in BUNDLE_DOCS:
+        shutil.copy2(DOCS / name, target / name)
 
 
 def make_zip(bundle: Path, stage: Path, out: Path) -> None:
@@ -255,6 +273,8 @@ def main() -> None:
         shutil.copy2(built, stage / exe_name)
 
         (stage / "使用说明.txt").write_text(usage_text(version), encoding="utf-8-sig")
+
+        copy_docs(stage)
 
         python = runtime / "python.exe" if sys.platform == "win32" else runtime / "bin" / "python3"
         smoke_check(python)
