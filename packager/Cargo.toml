@@ -2,15 +2,18 @@
 name = "comfy-bridge-launcher"
 version = "0.1.0"
 edition = "2021"
-description = "ComfyBridge 自举式单文件启动器：内嵌 wheel，运行时建 venv 并转发 CLI 参数"
+description = "ComfyBridge 桌面启动器：内置后端服务与原生 WebView2 窗口"
 publish = false
 
 [[bin]]
 name = "comfy-bridge"
 path = "src/main.rs"
 
-# 刻意零第三方依赖：cargo 构建离线可完成，exe 不携带 crates.io 供应链
 [dependencies]
+tauri = { version = "2", features = [] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
 
 [profile.release]
 strip = true

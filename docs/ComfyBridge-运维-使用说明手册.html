@@ -118,22 +118,27 @@
 <h3>2.1 方式一：整合包（推荐，免安装）</h3>
 <p>整合包内置完整 Python 运行时与全部依赖，解压即用，无需安装 Python、Node.js 或 pip：</p>
 <pre><span class="lang">text</span><code>ComfyBridge-0.1.0/
-├── comfy-bridge.exe      # 入口启动器
+├── comfy-bridge.exe      # 桌面应用入口
 ├── runtime/              # 内置 Python 运行时（含依赖、应用、GUI 产物）
+├── docs/                 # 使用说明手册与 Modal 密钥获取指南
 └── 使用说明.txt</code></pre>
 <ol>
 <li>解压到任意目录（建议路径不含空格与中文）。</li>
-<li>双击 <code>comfy-bridge.exe</code> 启动。</li>
-<li>浏览器打开 <code>http://127.0.0.1:8189/bridge/</code>。</li>
+<li>双击 <code>comfy-bridge.exe</code>，直接打开 ComfyBridge 桌面窗口。</li>
+<li>在桌面窗口中使用管理台；关闭窗口会停止随应用启动的内置服务。</li>
 </ol>
-<pre><span class="lang">powershell</span><code># 指定端口与监听地址
-.\comfy-bridge.exe --host 127.0.0.1 --port 8189
+<pre><span class="lang">powershell</span><code># 指定本机端口
+.\comfy-bridge.exe --port 8190
 
 # 自检整合包完整性（Python / 应用 / GUI 三项）
 .\comfy-bridge.exe --doctor
 
 # 查看版本
-.\comfy-bridge.exe --version</code></pre>
+.\comfy-bridge.exe --version
+
+# 兼容脚本与排障：命令行模式，不打开桌面窗口
+.\comfy-bridge.exe --console --host 127.0.0.1 --port 8189</code></pre>
+<p>桌面模式仅支持本机 <code>--host</code> / <code>--port</code>；需要监听非回环地址时请使用 <code>--console</code>。桌面窗口使用系统 WebView2，Windows 10/11 通常已自带。</p>
 <p>整合包<strong>不含 ComfyUI 本体</strong>，数据面仍需你已有的本地 ComfyUI 或 Modal 云端提供。彻底卸载只需删除解压目录；配置与数据保存在用户目录 <code>~/.comfybridge</code>，与整合包目录无关。</p>
 
 <h3>2.2 方式二：wheel + pipx</h3>
@@ -149,6 +154,7 @@ comfy-bridge --help</code></pre>
 <tbody>
 <tr><td><code>--host</code></td><td>监听地址；非回环地址必须先配置管理令牌</td><td><code>127.0.0.1</code></td></tr>
 <tr><td><code>--port</code></td><td>监听端口</td><td><code>8189</code></td></tr>
+<tr><td><code>--console</code></td><td>不打开桌面窗口，按原命令行方式启动（浏览器访问管理台）</td><td>—</td></tr>
 <tr><td><code>--doctor</code></td><td>整合包自检（仅整合包启动器提供）</td><td>—</td></tr>
 <tr><td><code>--version</code></td><td>显示版本（仅整合包启动器提供）</td><td>—</td></tr>
 </tbody>
@@ -221,7 +227,7 @@ powershell -File scripts/dev.ps1</code></pre>
 <h2 id="c5">5. 出图流程</h2>
 <ol>
 <li>启动本地 ComfyUI，确认 <code>http://127.0.0.1:8188</code> 可访问。</li>
-<li>启动 ComfyBridge，浏览器打开 <code>http://127.0.0.1:8189</code>（数据面，即 ComfyUI 界面）。</li>
+<li>启动 ComfyBridge 桌面应用；需要打开 ComfyUI 数据面时，在浏览器访问 <code>http://127.0.0.1:8189</code>（即 ComfyUI 界面）。</li>
 <li>正常搭建或加载工作流，提交生成。</li>
 <li>请求按路由规则分流：命中云端规则的走 Modal，其余留本地。</li>
 <li>在管理台「日志」页查看请求时间线（提交 / 执行 / 回传）与最终后端。</li>

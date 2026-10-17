@@ -1,6 +1,6 @@
-"""构建 ComfyBridge 整合包（zip，解压即用）。
+"""构建 ComfyBridge 桌面整合包（zip，解压即用）。
 
-包内组成：exe 启动器 + 裁剪版 CPython 运行时 + 运行依赖（取自 backend/.venv，
+包内组成：原生桌面窗口启动器 + 裁剪版 CPython 运行时 + 运行依赖（取自 backend/.venv，
 与测试环境同版本）+ 应用本体（wheel 内容：app 代码、GUI 产物、modal-runner 副本）
 + 使用说明。整合包不含 ComfyUI 本体；数据面由用户已有的本地 ComfyUI / Modal 云端提供。
 
@@ -167,14 +167,16 @@ def site_ignore(_directory: str, names: list[str]) -> list[str]:
 
 
 def usage_text(version: str) -> str:
-    return f"""ComfyBridge 整合包 {version}（解压即用，不需要安装）
+    return f"""ComfyBridge 桌面版 {version}（解压即用，不需要安装）
 
 1. 解压到任意目录（建议路径不含空格与中文）。
-2. 双击 comfy-bridge.exe 启动；控制台默认 http://127.0.0.1:8189/bridge/。
-3. 常用参数直接跟在 exe 后面：--host 127.0.0.1 --port 8189
+2. 双击 comfy-bridge.exe 打开 ComfyBridge 桌面应用；关闭窗口即停止内置服务。
+3. 默认仅监听 127.0.0.1:8189；可用 --port 指定其他本机端口。
 4. 自检：comfy-bridge.exe --doctor    版本：comfy-bridge.exe --version
+5. 脚本或排障：comfy-bridge.exe --console [CLI 参数…]
 
 说明：
+- 桌面窗口使用系统 WebView2；Windows 10/11 通常已自带，缺失时按系统提示安装。
 - 本整合包不含 ComfyUI 本体；出图数据面仍由你已有的本地 ComfyUI 或 Modal 云端提供。
 - runtime/ 是内置 Python 运行环境，请勿单独改动；彻底卸载只需删除解压目录。
 - ComfyUI 路径、Modal 凭证等配置存放在用户目录 ~/.comfybridge，与整合包目录无关。

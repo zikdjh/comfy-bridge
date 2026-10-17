@@ -24,6 +24,7 @@ backend/pkg_assets/
 
 # Rust 启动器
 packager/target/
+packager/gen/
 
 # 环境与密钥
 .env

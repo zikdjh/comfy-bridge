@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 fn main() {
+    tauri_build::build();
+
     let manifest = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR 必须存在");
     let repo = Path::new(&manifest)
         .parent()
@@ -13,7 +15,8 @@ fn main() {
     let dist = repo.join("backend").join("dist");
 
     let mut best: Option<(PathBuf, SystemTime)> = None;
-    for entry in fs::read_dir(&dist).unwrap_or_else(|e| panic!("读取 {} 失败: {e}", dist.display())) {
+    for entry in fs::read_dir(&dist).unwrap_or_else(|e| panic!("读取 {} 失败: {e}", dist.display()))
+    {
         let entry = entry.expect("读取 dist 条目失败");
         let path = entry.path();
         let name = path.file_name().unwrap().to_string_lossy().into_owned();

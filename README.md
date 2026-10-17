@@ -79,9 +79,11 @@ comfy-bridge --port 8189   # 控制台 http://127.0.0.1:8189/bridge/
 
 - 管理面 GUI 挂在 `/bridge`（SPA 回退）；`/` 与其余路径仍是本地 ComfyUI 数据面透传，**出图地址不变**。
 - 安装包自带 modal-runner 副本：节点同步 / 版本对齐 / 数据卷作业 / `modal deploy` 在安装态均可直接用。
-- Rust 整合包（试验）：`uv run python scripts/build_rust_package.py` 产出
-  `backend/dist/ComfyBridge-<版本>-win64.zip`，内置 Python 运行时与全部依赖，
-  解压即用、不需要安装（不含 ComfyUI 本体），详见 `packager/README.md`。
+- Rust 桌面整合包：`uv run python scripts/build_rust_package.py` 产出
+  `backend/dist/ComfyBridge-<版本>-win64.zip`，内置 Python 运行时与全部依赖。
+  双击 `comfy-bridge.exe` 直接打开 Tauri/WebView2 桌面窗口；关闭窗口会停止内置服务，
+  不需要安装（不含 ComfyUI 本体）。需要浏览器或脚本模式时使用
+  `comfy-bridge.exe --console`，详见 `packager/README.md`。
 - `scripts/build.ps1` 仅做前端嵌入构建（`pnpm build:embed` → `backend/app/static`，开发后端同样挂 /bridge）。
 - modal 依赖：控制面数据（卷读写、应用状态、账单）走 Python SDK 直调；
   `modal deploy`、流式 `modal run`、`container list/stop` 仍走 CLI。
