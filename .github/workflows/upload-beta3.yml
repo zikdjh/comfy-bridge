@@ -10,6 +10,8 @@ jobs:
   upload:
     runs-on: windows-latest
     timeout-minutes: 30
+    env:
+      PYTHONIOENCODING: utf-8
     steps:
       - uses: actions/checkout@v4
         with:
