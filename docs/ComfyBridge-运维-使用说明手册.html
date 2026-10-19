@@ -107,12 +107,12 @@
 <thead><tr><th>用途</th><th>默认地址</th></tr></thead>
 <tbody>
 <tr><td>本地 ComfyUI（数据面）</td><td><code>http://127.0.0.1:8188</code></td></tr>
-<tr><td>桥接器（数据面 + 管理面）</td><td><code>http://127.0.0.1:8189</code></td></tr>
-<tr><td>管理台 GUI</td><td><code>http://127.0.0.1:8189/bridge/</code></td></tr>
-<tr><td>管理 API</td><td><code>http://127.0.0.1:8189/api/v1/</code></td></tr>
+<tr><td>桥接器（数据面 + 管理面）</td><td><code>http://127.0.0.1:18189</code>（默认；桌面占用时自动尝试 18190-18193）</td></tr>
+<tr><td>管理台 GUI</td><td><code>http://127.0.0.1:18189/bridge/</code></td></tr>
+<tr><td>管理 API</td><td><code>http://127.0.0.1:18189/api/v1/</code></td></tr>
 </tbody>
 </table>
-<p>把 ComfyUI 界面地址的 <code>:8188</code> 换成 <code>:8189</code> 即接入桥接器，其余用法不变。</p>
+<p>把 ComfyUI 界面地址的 <code>:8188</code> 换成 <code>:18189</code> 即接入桥接器，其余用法不变。</p>
 
 <h2 id="c2">2. 安装与启动</h2>
 <h3>2.1 方式一：整合包（推荐，免安装）</h3>
@@ -128,7 +128,7 @@
 <li>在桌面窗口中使用管理台；关闭窗口会停止随应用启动的内置服务。</li>
 </ol>
 <pre><span class="lang">powershell</span><code># 指定本机端口
-.\comfy-bridge.exe --port 8190
+.\comfy-bridge.exe --port 18195
 
 # 自检整合包完整性（Python / 应用 / GUI 三项）
 .\comfy-bridge.exe --doctor
@@ -137,7 +137,7 @@
 .\comfy-bridge.exe --version
 
 # 兼容脚本与排障：命令行模式，不打开桌面窗口
-.\comfy-bridge.exe --console --host 127.0.0.1 --port 8189</code></pre>
+.\comfy-bridge.exe --console --host 127.0.0.1 --port 18189</code></pre>
 <p>桌面模式仅支持本机 <code>--host</code> / <code>--port</code>；需要监听非回环地址时请使用 <code>--console</code>。桌面窗口使用系统 WebView2，Windows 10/11 通常已自带。</p>
 <p>整合包<strong>不含 ComfyUI 本体</strong>，数据面仍需你已有的本地 ComfyUI 或 Modal 云端提供。彻底卸载只需删除解压目录；配置与数据保存在用户目录 <code>~/.comfybridge</code>，与整合包目录无关。</p>
 
@@ -153,7 +153,7 @@ comfy-bridge --help</code></pre>
 <thead><tr><th>参数</th><th>说明</th><th>默认</th></tr></thead>
 <tbody>
 <tr><td><code>--host</code></td><td>监听地址；非回环地址必须先配置管理令牌</td><td><code>127.0.0.1</code></td></tr>
-<tr><td><code>--port</code></td><td>监听端口</td><td><code>8189</code></td></tr>
+<tr><td><code>--port</code></td><td>监听端口</td><td><code>18189</code>（显式指定时不自动回退）</td></tr>
 <tr><td><code>--console</code></td><td>不打开桌面窗口，按原命令行方式启动（浏览器访问管理台）</td><td>—</td></tr>
 <tr><td><code>--doctor</code></td><td>整合包自检（仅整合包启动器提供）</td><td>—</td></tr>
 <tr><td><code>--version</code></td><td>显示版本（仅整合包启动器提供）</td><td>—</td></tr>
@@ -164,11 +164,11 @@ comfy-bridge --help</code></pre>
 <h3>2.4 从源码运行（开发）</h3>
 <pre><span class="lang">powershell</span><code># 后端（首次 uv sync 安装依赖）
 cd backend
-uv run uvicorn app.main:app --reload --port 8189
+uv run uvicorn app.main:app --reload --port 18189
 
 # 前端（另开终端，首次 pnpm install，需 Node ≥ 18）
 cd frontend
-pnpm dev          # http://127.0.0.1:5173，/api 代理到 8189
+pnpm dev          # http://127.0.0.1:15173，/api 代理到 18189
 
 # 或一键并行启动
 powershell -File scripts/dev.ps1</code></pre>
@@ -193,7 +193,7 @@ powershell -File scripts/dev.ps1</code></pre>
 <p>配置保存在 <code>~/.comfybridge/config.toml</code>，可参考 <code>backend/config.example.toml</code>。只识别 <code>[local]</code> / <code>[bridge]</code> / <code>[modal]</code> 三节，未列出的键会被忽略。</p>
 
 <h2 id="c4">4. 管理台导览</h2>
-<p>入口 <code>http://127.0.0.1:8189/bridge/</code>，左侧导航共 11 个页面：</p>
+<p>入口 <code>http://127.0.0.1:18189/bridge/</code>，左侧导航共 11 个页面：</p>
 <table>
 <thead><tr><th>页面</th><th>用途</th></tr></thead>
 <tbody>
@@ -219,7 +219,7 @@ powershell -File scripts/dev.ps1</code></pre>
 <tr><td>启动命令</td><td>本地 / 云端追加启动参数，支持启动、停止、重启本地实例</td></tr>
 <tr><td>桥接</td><td>默认后端、视频后端、大分辨率阈值、云端不可用策略、隐私确认、<code>object_info</code> 合并策略</td></tr>
 <tr><td>Modal</td><td>凭证、Environment、卷名、应用名、<code>web_url</code>、任务超时、账号档案</td></tr>
-<tr><td>护栏与预算</td><td>月度预算、并发上限、超预算动作</td></tr>
+<tr><td>护栏与预算</td><td>月度预算、并发上限、超预算动作、系统代理开关（云端出站请求，默认关闭）</td></tr>
 <tr><td>设置同步</td><td>两端设置项对齐，敏感项以掩码显示</td></tr>
 </tbody>
 </table>
@@ -227,7 +227,7 @@ powershell -File scripts/dev.ps1</code></pre>
 <h2 id="c5">5. 出图流程</h2>
 <ol>
 <li>启动本地 ComfyUI，确认 <code>http://127.0.0.1:8188</code> 可访问。</li>
-<li>启动 ComfyBridge 桌面应用；需要打开 ComfyUI 数据面时，在浏览器访问 <code>http://127.0.0.1:8189</code>（即 ComfyUI 界面）。</li>
+<li>启动 ComfyBridge 桌面应用；需要打开 ComfyUI 数据面时，在浏览器访问 <code>http://127.0.0.1:18189</code>（即 ComfyUI 界面）。</li>
 <li>正常搭建或加载工作流，提交生成。</li>
 <li>请求按路由规则分流：命中云端规则的走 Modal，其余留本地。</li>
 <li>在管理台「日志」页查看请求时间线（提交 / 执行 / 回传）与最终后端。</li>
@@ -303,7 +303,7 @@ powershell -File scripts/dev.ps1</code></pre>
 <table>
 <thead><tr><th>键</th><th>说明</th></tr></thead>
 <tbody>
-<tr><td><code>listen</code></td><td>桥接器监听地址，默认 <code>127.0.0.1:8189</code></td></tr>
+<tr><td><code>listen</code></td><td>桥接器监听地址，默认 <code>127.0.0.1:18189</code></td></tr>
 <tr><td><code>default_backend</code></td><td>路由兜底后端，<code>local</code> / <code>modal</code></td></tr>
 <tr><td><code>video_backend</code></td><td>视频输出请求后端</td></tr>
 <tr><td><code>large_side_pixels</code></td><td>大分辨率上云阈值，<code>0</code> 关闭</td></tr>
@@ -356,7 +356,7 @@ powershell -File scripts/dev.ps1</code></pre>
 </tbody>
 </table>
 <pre><span class="lang">powershell</span><code># 健康检查（示例）
-Invoke-RestMethod http://127.0.0.1:8189/api/v1/health | ConvertTo-Json -Depth 6</code></pre>
+Invoke-RestMethod http://127.0.0.1:18189/api/v1/health | ConvertTo-Json -Depth 6</code></pre>
 
 <h2 id="c12">12. 安全与数据边界</h2>
 <ul>

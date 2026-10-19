@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyBridge 全量 Web 测试计划 · 2026-10-18</title>
+<style>
+  :root {
+    --bg: #f3f5f8;
+    --surface: #ffffff;
+    --ink: #1b2430;
+    --muted: #5d6878;
+    --line: #dce2e9;
+    --navy: #17324d;
+    --blue: #176b87;
+    --blue-soft: #e8f4f7;
+    --green: #19734f;
+    --green-soft: #e9f7f0;
+    --amber: #9a5b00;
+    --amber-soft: #fff5df;
+    --red: #a62929;
+    --red-soft: #fff0f0;
+    --violet: #5b4a92;
+    --violet-soft: #f0edfa;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 74px; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 14px/1.72 "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  }
+  header {
+    background: var(--navy);
+    color: #fff;
+    padding: 30px 22px 24px;
+  }
+  header .inner, main, footer .inner {
+    width: min(1680px, calc(100% - 32px));
+    margin: 0 auto;
+  }
+  h1 { margin: 0 0 8px; font-size: 27px; letter-spacing: .3px; }
+  header p { margin: 5px 0; color: #d4e0ea; }
+  header strong { color: #fff; }
+  .meta-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 10px;
+    margin-top: 18px;
+  }
+  .meta-row div {
+    background: rgba(255, 255, 255, .08);
+    border: 1px solid rgba(255, 255, 255, .18);
+    border-radius: 7px;
+    padding: 9px 12px;
+  }
+  .meta-row span { display: block; color: #b8c9d7; font-size: 12px; }
+  .meta-row b { display: block; margin-top: 2px; font-size: 14px; }
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: rgba(255,255,255,.97);
+    border-bottom: 1px solid var(--line);
+    backdrop-filter: blur(8px);
+  }
+  nav .inner {
+    width: min(1680px, calc(100% - 32px));
+    margin: 0 auto;
+    display: flex;
+    gap: 6px 14px;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 8px 0;
+  }
+  nav a { color: var(--muted); text-decoration: none; padding: 3px 7px; border-radius: 5px; }
+  nav a:hover { color: var(--blue); background: var(--blue-soft); }
+  main { padding: 24px 0 42px; }
+  section { margin: 28px 0 36px; }
+  h2 {
+    margin: 0 0 14px;
+    padding-left: 11px;
+    border-left: 4px solid var(--blue);
+    font-size: 20px;
+    line-height: 1.35;
+  }
+  h3 { margin: 22px 0 9px; font-size: 16px; color: var(--navy); }
+  h4 { margin: 16px 0 7px; font-size: 14px; color: var(--blue); }
+  p { margin: 8px 0; }
+  ul, ol { margin: 8px 0; padding-left: 24px; }
+  li { margin: 4px 0; }
+  code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: #edf1f5;
+    color: #23475f;
+    font-family: Consolas, "Cascadia Code", monospace;
+    font-size: 12.5px;
+  }
+  pre {
+    margin: 10px 0;
+    padding: 13px 15px;
+    overflow: auto;
+    border-radius: 7px;
+    background: #18222d;
+    color: #e5edf3;
+    font: 12.5px/1.62 Consolas, "Cascadia Code", monospace;
+  }
+  pre code { padding: 0; background: transparent; color: inherit; }
+  .note, .warning, .success {
+    margin: 12px 0;
+    padding: 11px 14px;
+    border: 1px solid var(--line);
+    border-left-width: 4px;
+    border-radius: 6px;
+    background: var(--surface);
+  }
+  .note { border-left-color: var(--blue); background: var(--blue-soft); }
+  .warning { border-left-color: var(--amber); background: var(--amber-soft); }
+  .success { border-left-color: var(--green); background: var(--green-soft); }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 10px;
+  }
+  .panel {
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--surface);
+  }
+  .panel b { display: block; margin-bottom: 4px; color: var(--navy); }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--surface);
+    position: sticky;
+    top: 49px;
+    z-index: 15;
+    box-shadow: 0 5px 16px rgba(23,50,77,.06);
+  }
+  button, .button {
+    border: 1px solid #b8c5d2;
+    border-radius: 5px;
+    background: #fff;
+    color: var(--ink);
+    padding: 6px 10px;
+    font: inherit;
+    cursor: pointer;
+  }
+  button:hover, .button:hover { border-color: var(--blue); color: var(--blue); }
+  button.primary { border-color: var(--blue); background: var(--blue); color: #fff; }
+  button.danger { border-color: #d8a6a6; color: var(--red); }
+  .save-state { margin-left: auto; color: var(--muted); font-size: 12px; }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
+  .stats b { font-size: 20px; color: var(--navy); }
+  .stat { min-width: 140px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+  .stat span { display: block; color: var(--muted); font-size: 12px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    font-size: 12.5px;
+  }
+  th, td { border: 1px solid var(--line); padding: 7px 8px; vertical-align: top; text-align: left; }
+  thead th {
+    position: sticky;
+    top: 105px;
+    z-index: 8;
+    background: #eaf0f5;
+    color: #24465d;
+    font-weight: 650;
+  }
+  tbody tr:nth-child(even) { background: #fafbfc; }
+  tbody tr.status-pass { background: var(--green-soft); }
+  tbody tr.status-fail { background: var(--red-soft); }
+  tbody tr.status-block { background: var(--amber-soft); }
+  tbody tr.status-skip { background: #f0f1f3; }
+  .table-wrap {
+    overflow-x: auto;
+    margin: 10px 0 18px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+  }
+  .case-id { white-space: nowrap; font: 700 12px Consolas, monospace; color: var(--navy); }
+  .priority { display: inline-block; min-width: 30px; padding: 0 6px; border-radius: 20px; text-align: center; font-size: 11.5px; font-weight: 700; }
+  .p0 { color: var(--red); background: var(--red-soft); }
+  .p1 { color: var(--amber); background: var(--amber-soft); }
+  .p2 { color: var(--green); background: var(--green-soft); }
+  td textarea, td input, td select {
+    width: 100%;
+    border: 1px solid #c9d3dd;
+    border-radius: 4px;
+    background: #fff;
+    color: var(--ink);
+    font: 12.5px/1.45 "Segoe UI", "Microsoft YaHei", sans-serif;
+    padding: 5px 6px;
+  }
+  td textarea { min-height: 54px; resize: vertical; }
+  td select { min-width: 82px; }
+  .result-col { min-width: 280px; }
+  .evidence-col { min-width: 210px; }
+  .status-col { min-width: 100px; }
+  .small { color: var(--muted); font-size: 12px; }
+  .muted { color: var(--muted); }
+  footer { padding: 18px 0 28px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  @media (max-width: 760px) {
+    header { padding: 22px 12px 18px; }
+    h1 { font-size: 22px; }
+    nav .inner, header .inner, main, footer .inner { width: calc(100% - 20px); }
+    .controls { top: 0; }
+    thead th { top: 52px; }
+  }
+  @media print {
+    nav, .controls, button { display: none !important; }
+    body { background: #fff; }
+    header { background: #fff; color: #000; border-bottom: 2px solid #000; }
+    header p, header strong, .meta-row span { color: #222; }
+    .meta-row div { border-color: #bbb; }
+    thead th { position: static; background: #eee; }
+    .table-wrap { overflow: visible; border: none; }
+    table { font-size: 9px; }
+    th, td { padding: 4px; }
+    textarea { border: none !important; resize: none; overflow: visible; }
+    section { break-inside: auto; }
+    tr { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="inner">
+    <h1>ComfyBridge 全量 Web 测试计划</h1>
+    <p><strong>测试对象：</strong>Web 管理台、Web 管理 API、ComfyUI 数据面、WebSocket/SSE 实时链路、Modal 真机出图链路。</p>
+    <p><strong>明确排除：</strong>桌面 exe、Tauri/WebView2、整合包解压与启动器、安装/升级/卸载、发布产物校验。本文件包含待执行计划与实时记录；当前为中断快照，不代表 368 项已经通过。</p>
+    <div class="meta-row">
+      <div><span>基线</span><b><code>main</code> · <code>924a49e</code>（执行时复核）</b></div>
+      <div><span>准备日期</span><b>2026-10-18 · Asia/Shanghai</b></div>
+      <div><span>Web 管理台</span><b><code>http://127.0.0.1:15173</code></b></div>
+      <div><span>Web API / 数据面</span><b><code>http://127.0.0.1:18189</code></b></div>
+      <div><span>本地 ComfyUI 上游</span><b><code>http://127.0.0.1:8188</code></b></div>
+      <div><span>真实出图约束</span><b>仅 Modal，禁止本地推理</b></div>
+    </div>
+  </div>
+</header>
+
+<nav>
+  <div class="inner">
+    <a href="#pause-snapshot">暂停快照</a>
+    <a href="#scope">范围与规则</a>
+    <a href="#environment">环境门禁</a>
+    <a href="#api">管理 API</a>
+    <a href="#data-plane">数据面</a>
+    <a href="#ui">前端点击</a>
+    <a href="#flows">跨页链路</a>
+    <a href="#security">安全与异常</a>
+    <a href="#execution">执行与证据</a>
+    <a href="#cleanup">清理与验收</a>
+  </div>
+</nav>
+
+<main>
+  <section id="pause-snapshot">
+    <h2>0. 2026-10-18 暂停快照</h2>
+    <div class="warning">
+      <strong>当前不是全量验收结果。</strong>
+      本轮按要求于 <code>2026-10-18 23:43:50 +08:00</code> 暂停页面级只读点击测试，该部分未形成完整结果，不计入通过。
+      暂停前已完成的回归测试、修复代码、证据和未完成项均保留。
+    </div>
+    <div class="meta-row">
+      <div><span>范围</span><b>Web-only：不测 exe、整合包、Tauri</b></div>
+      <div><span>快照计数</span><b>368 项：通过 97 · 失败 8 · 未执行 263</b></div>
+      <div><span>取代旧归档</span><b>92 / 13 / 263 已由新生成记录取代</b></div>
+      <div><span>服务</span><b>Vite、主后端、隔离后端、本地 ComfyUI 已停止</b></div>
+      <div><span>Modal 容器</span><b>最后成功记录 0；暂停时复查超时</b></div>
+      <div><span>证据根目录</span><b><code>ego/comfy-bridge-web-20261018</code></b></div>
+    </div>
+
+    <h3>0.1 暂停前已验证</h3>
+    <table>
+      <thead><tr><th>检查项</th><th>结果</th><th>证据或说明</th></tr></thead>
+      <tbody>
+        <tr><td>前端构建</td><td>通过</td><td><code>pnpm build</code>；仅有大 chunk 提示，无构建错误。</td></tr>
+        <tr><td>后端单元测试</td><td>23 passed</td><td>本轮相关后端单元测试全部通过。</td></tr>
+        <tr><td>Playwright 修复回归</td><td>4 / 4 passed</td><td><code>frontend/test-results/web-isolated-final.json</code>。</td></tr>
+        <tr><td>配置向导与账号弹窗</td><td>已修复并回归</td><td>打开后聚焦弹窗内容；Escape 可关闭。</td></tr>
+        <tr><td>设置与日志响应式</td><td>768 / 1024 无页面横向溢出</td><td>模型路径行可换行；日志表在卡片内横向滚动；详情抽屉限宽。</td></tr>
+        <tr><td>运行时 bridge 入口</td><td>已修复并实测</td><td><code>bridge.url=http://127.0.0.1:18189</code>，<code>bridge.listen=127.0.0.1:18189</code>；新增单元测试。</td></tr>
+      </tbody>
+    </table>
+    <p><strong>未计入通过：</strong>页面级只读点击测试在执行中被暂停，不得视为 368 项全量完成。</p>
+
+    <h3>0.2 服务与容器停止状态</h3>
+    <ul>
+      <li>已停止 <code>15173</code> Vite、<code>18189</code> 主后端、<code>18289</code> 与 <code>18389</code> 隔离后端、<code>8188</code> 本地 ComfyUI。</li>
+      <li>已复核 <code>15173</code>、<code>18189</code>、<code>18289</code>、<code>18389</code>、<code>8188</code> 及 <code>18190-18193</code> 无 <code>LISTENING</code>；可能仅有连接残留的 <code>TIME_WAIT</code>。</li>
+      <li>Modal 容器最后一次成功核对为 <code>2026-10-18 23:22 +08:00</code>，当时 <code>count=0</code>。暂停时重新执行 <code>container list --json</code> 超过 30 秒未返回，CLI 已终止；不得把这次超时称为容器为 0。</li>
+      <li>恢复测试前必须重新查询 Modal 容器列表；只有新返回的 <code>count=0</code> 才能作为当前状态。</li>
+    </ul>
+
+    <h3>0.3 仍待处理的 8 项失败</h3>
+    <table>
+      <thead><tr><th>用例</th><th>问题</th><th>恢复测试要点</th></tr></thead>
+      <tbody>
+        <tr><td><code>API-018</code></td><td>成本导出文档已收敛到实际契约 <code>entries/workflow/model</code>。</td><td>验证三种 scope 的 CSV、BOM 与表头；非法 scope 返回 422。</td></tr>
+        <tr><td><code>API-041</code></td><td>不存在的工作流返回 200，以嵌套字段表达失败。</td><td>定义 404/可读错误，并验证前端空态与错误提示。</td></tr>
+        <tr><td><code>API-055</code> / <code>NEG-010</code></td><td>非法 <code>manual_backend</code> 未被拒绝，且请求体额外字段校验不统一。</td><td>严格校验枚举值与请求体；回归预览、提交和上传 init。</td></tr>
+        <tr><td><code>API-066</code></td><td>旧上传会话残留，同名文件 5 个，4 个仅完成 0/2 块。</td><td>修复会话生命周期与去重；重启后确认残留清理不孳生。</td></tr>
+        <tr><td><code>API-072</code></td><td>数据卷 <code>refresh=true</code> 后 <code>computing=true</code> 长期不收敛。</td><td>停止后重启并重新统计，确认有超时、错误与重试状态。</td></tr>
+        <tr><td><code>DP-010</code> / <code>FLOW-004</code></td><td>Modal 产物历史闭环缺失，且 <code>workflow_name=null</code>。</td><td>用一次低成本 Modal 任务确认 history、请求、产物与成本归属均可回查。</td></tr>
+      </tbody>
+    </table>
+
+    <h3>0.4 恢复顺序</h3>
+    <ol>
+      <li>重新查询 Modal 容器并记录当前结果；若不为 0，先确认是否属于本项目并停止。</li>
+      <li>仅启动 Web 前后端、本地 ComfyUI 与 Modal Runner；先复测 23 个后端单元测试和 4 个 Playwright 修复回归。</li>
+      <li>修复并验证上表 8 项失败；未修复项不得在修复后仍保留旧结论。</li>
+      <li>从本快照的 263 个未执行项恢复页面级实际点击与写操作回收测试；每次完成后立即导出 JSON 并更新本文档。</li>
+      <li>真实生图仅通过 Modal 执行，并核对 <code>final_backend=modal</code>、<code>prompt_id</code>、产物与费用回查；严禁本项目在本地生图。</li>
+      <li>完成测试数据清理、关闭 TaskSpace、停止服务后，更新最终统计与发布结论。</li>
+    </ol>
+    <div class="note">
+      本节是静态快照；页面下方的可编辑矩阵仍保留每个用例的实际结果。导入同期生成的 JSON 后，页面动态计数应与本快照一致。
+      可离线查阅同目录的 <a href="./ComfyBridge-进度-全量Web测试暂停快照-20261018.md">全量 Web 测试暂停快照</a>。
+    </div>
+  </section>
+
+  <section id="scope">
+    <h2>1. 测试目标与强制规则</h2>
+    <div class="grid">
+      <div class="panel"><b>功能完整性</b>逐项验证 11 个业务页面、404 页、公共 Shell、弹窗、抽屉、表格、筛选、表单与跨页跳转。</div>
+      <div class="panel"><b>接口正确性</b>覆盖 OpenAPI 中全部 89 个管理操作，并核对响应、持久化、任务副作用和前端联动。</div>
+      <div class="panel"><b>数据面兼容性</b>覆盖 ComfyUI 根页面、提示词提交、队列、节点清单、WS、历史、图片、上传与透明透传。</div>
+      <div class="panel"><b>真机主链路</b>通过 Web 出图界面提交真实任务，确认请求最终在 Modal 执行并回传产物。</div>
+      <div class="panel"><b>异常可恢复</b>覆盖 401/403、断线、超时、空数据、路径越界、任务取消、重试与预算拦截。</div>
+      <div class="panel"><b>可审计</b>每个用例留下实际结果、证据位置和执行状态，失败项能独立复现。</div>
+    </div>
+
+    <div class="warning">
+      <strong>生图硬约束：</strong>所有真实生成请求必须显式设置 <code>x-bridge-backend: modal</code>，并在请求记录中确认
+      <code>final_backend=modal</code>。不执行本地文生图、图生图或视频推理。页面中任何可能落到本地的默认路由，只做“干跑预览”或拒绝路径验证。
+    </div>
+    <ul>
+      <li>只启动 Web 前后端、本地 ComfyUI 与 Modal Runner；不安装、不运行桌面整合包。</li>
+      <li>Web 管理台操作使用 <code>15173</code>；管理 API 直连 <code>18189/api/v1</code>，同时抽样验证 Vite 的 <code>15173/api/v1</code> 代理。</li>
+      <li>桥接数据面和出图界面使用 <code>18189</code>；本地 ComfyUI <code>8188</code> 只作为上游依赖与状态观测点。</li>
+      <li>测试数据统一使用 <code>fulltest-20261018</code> 前缀；写操作必须记录前值、后值并恢复。</li>
+      <li>测试顺序从只读、低风险写入，到高成本 Modal 操作，最后执行破坏性与异常用例。</li>
+      <li>任一 P0 失败立即停止高成本链路；修复并复测后再继续。</li>
+    </ul>
+
+    <h3>1.1 状态定义</h3>
+    <table>
+      <thead><tr><th>状态</th><th>判定</th><th>要求</th></tr></thead>
+      <tbody>
+        <tr><td>未执行</td><td>尚未操作</td><td>初始状态</td></tr>
+        <tr><td>通过</td><td>实际结果与预期一致</td><td>至少填写实际结果；P0 建议附截图或响应文件</td></tr>
+        <tr><td>失败</td><td>功能错误、数据错误、崩溃或不可接受偏差</td><td>必须填写实际结果、证据与缺陷单编号</td></tr>
+        <tr><td>阻塞</td><td>环境、凭证、外部平台或前置缺陷导致无法执行</td><td>必须写明阻塞原因和解除条件</td></tr>
+        <tr><td>跳过</td><td>明确不在本轮范围或经确认暂不执行</td><td>必须写明跳过原因，不能留空</td></tr>
+      </tbody>
+    </table>
+
+    <h3>1.2 本次不覆盖</h3>
+    <ul>
+      <li>Windows 安装程序、单文件 exe 启动器、Tauri 窗口、WebView2 运行时、系统托盘和桌面通知。</li>
+      <li>ZIP 整合包目录结构、内置 Python/Node/Rust 环境、离线资源完整性、启动器端口占用弹窗。</li>
+      <li>GitHub Release 下载、标签、校验和、升级替换、卸载残留。</li>
+      <li>移动端 App、原生浏览器扩展、第三方客户端兼容性。</li>
+    </ul>
+  </section>
+
+  <section id="environment">
+    <h2>2. 环境准备与基线门禁</h2>
+    <div class="note">
+      推荐用两个浏览器配置文件：<strong>正常配置</strong>保存真实凭证和基线，<strong>干净配置</strong>验证首次向导、空缓存和 401。
+      执行前备份 <code>~/.comfybridge/config.toml</code>、路由规则、预算、启动参数和关键工作流；不要把 token secret 写入截图或导出文件。
+    </div>
+    <h3>2.1 启动与端口检查</h3>
+    <pre><code># 后端（项目约定端口 18189；如被占用先定位占用进程，不换端口掩盖冲突）
+cd backend
+uv run uvicorn app.main:app --reload --port 18189
+
+# 前端（固定 15173，strictPort）
+cd frontend
+pnpm dev
+
+# 端口与进程
+Get-NetTCPConnection -LocalPort 15173,18189,8188 -State Listen |
+  Select-Object LocalAddress,LocalPort,OwningProcess
+
+# 基线
+curl.exe -sS http://127.0.0.1:18189/api/v1/health
+curl.exe -sS http://127.0.0.1:15173/api/v1/health
+curl.exe -sS http://127.0.0.1:18189/object_info -o NUL -w "%{http_code}\n"
+</code></pre>
+
+    <h3>2.2 必备用例</h3>
+    <div id="env-cases">
+      <div id="env-cases-1"></div>
+    </div>
+
+    <h3>2.3 测试数据清单</h3>
+    <table>
+      <thead><tr><th>数据</th><th>建议值</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td>Modal 文生图工作流</td><td><code>fulltest-20261018-t2i.json</code>，小尺寸、低步数、1 张输出</td><td>真实云端主链路</td></tr>
+        <tr><td>Modal 图生图工作流</td><td><code>fulltest-20261018-i2i.json</code> + 512×512 PNG</td><td>输入上传与产物回传</td></tr>
+        <tr><td>冲突工作流</td><td>本地与云端同名的两个不同版本</td><td>对比、覆盖、保留双副本</td></tr>
+        <tr><td>分块上传文件</td><td>9 MiB 随机文件，记录 MD5；另备一个空文件</td><td>跨 8 MiB 分块、断点续传、MD5</td></tr>
+        <tr><td>临时节点包</td><td>仅本地存在的目录型节点，含 <code>requirements.txt</code></td><td>同步、预检、移除</td></tr>
+        <tr><td>下载直链</td><td>小于 10 MiB 的公开测试文件，记录预期大小/哈希</td><td>Volume URL 下载</td></tr>
+        <tr><td>临时账号档案</td><td><code>fulltest-account</code>；不激活真实付费账号</td><td>新增、切换拒绝、删除</td></tr>
+        <tr><td>临时卷</td><td><code>fulltest-volume</code>，创建后确认无关联</td><td>创建、目录、删除</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="api">
+    <h2>3. 管理 API 全量矩阵（89 项）</h2>
+    <p>以下用例与当前 OpenAPI 操作一一对应。每个写操作先在页面上观察，再直接请求 API 核对；每次记录 HTTP 状态、关键字段、持久化结果和清理结果。</p>
+    <div id="api-cases">
+      <div id="api-cases-1"></div>
+      <div id="api-cases-2"></div>
+      <div id="api-cases-3"></div>
+      <div id="api-cases-4"></div>
+      <div id="api-cases-5"></div>
+    </div>
+  </section>
+
+  <section id="data-plane">
+    <h2>4. ComfyUI 数据面、WebSocket 与 SSE</h2>
+    <p>数据面不在 OpenAPI 中，但决定出图界面是否可用。真实生成只执行云端用例；其余优先只读或使用无效载荷验证转发行为。</p>
+    <div id="dp-cases">
+      <div id="dp-cases-1"></div>
+      <div id="dp-cases-2"></div>
+    </div>
+  </section>
+
+  <section id="ui">
+    <h2>5. Web 管理台实际点击矩阵</h2>
+    <p>所有用例均在 <code>http://localhost:15173</code> 执行。每个操作必须真实点击、输入或打开弹窗；不要只检查 DOM 是否存在。表格写操作完成后恢复基线。</p>
+    <h3>测试数据安全与网络步骤</h3>
+    <ul>
+      <li>网络异常测试只使用浏览器 DevTools 或临时代理，不修改系统 DNS、全局代理或防火墙。</li>
+      <li>记录恢复前后的 health、当前页面和请求状态；结束后先恢复网络，再刷新页面，最后退出临时网络条件。</li>
+      <li>不因网络测试删除上传会话、配置或历史；需要清理的测试数据按测试数据前缀单独处理。</li>
+    </ul>
+
+    <div id="ui-cases">
+      <div id="ui-cases-1"></div>
+      <div id="ui-cases-2"></div>
+      <div id="ui-cases-3"></div>
+      <div id="ui-cases-4"></div>
+      <div id="ui-cases-5"></div>
+      <div id="ui-cases-6"></div>
+      <div id="ui-cases-7"></div>
+      <div id="ui-cases-8"></div>
+      <div id="ui-cases-9"></div>
+      <div id="ui-cases-10"></div>
+      <div id="ui-cases-11"></div>
+    </div>
+  </section>
+
+  <section id="flows">
+    <h2>6. 跨页面端到端流程</h2>
+    <p>跨页链路用于发现单页用例无法覆盖的缓存、路由、事件流和数据一致性问题。</p>
+    <div id="flow-cases">
+      <div id="flow-cases-1"></div>
+      <div id="flow-cases-2"></div>
+    </div>
+  </section>
+
+  <section id="security">
+    <h2>7. 安全、异常与恢复</h2>
+    <p>执行安全用例前准备临时管理令牌和测试 Origin。禁止使用生产 token 做破坏性验证；测试结束后删除临时令牌并恢复正常监听配置。</p>
+    <div id="security-cases">
+      <div id="security-cases-1"></div>
+      <div id="security-cases-2"></div>
+    </div>
+  </section>
+
+  <section id="execution">
+    <h2>8. 实时执行、证据与缺陷规则</h2>
+    <div class="controls" id="record-controls">
+      <span id="completion"></span>
+      <button class="primary" id="export-json" type="button">导出 JSON</button>
+      <button id="export-csv" type="button">导出 CSV</button>
+      <button id="import-json" type="button">导入 JSON</button>
+      <button id="clear-records" class="danger" type="button">清空本页记录</button>
+      <button id="print-page" type="button">打印 / PDF</button>
+      <input id="import-file" type="file" accept="application/json" hidden>
+      <span class="save-state" id="save-state">记录只保存在当前浏览器</span>
+    </div>
+
+    <h3>8.1 记录规则</h3>
+    <ul>
+      <li>每完成一个模块立即填写实际结果与证据，不要等全部结束再补。</li>
+      <li>失败记录最低包含：环境、复现步骤、预期/实际、HTTP 响应、控制台异常、截图或 HAR。</li>
+      <li>真实生图必须附请求详情、<code>prompt_id</code>、<code>final_backend</code>、Modal 控制台或日志证据以及产物路径。</li>
+      <li>写操作记录“前值 / 操作 / 后值 / 恢复后值”，防止测试数据污染后续轮次。</li>
+      <li>导出 JSON 保留全部字段；CSV 用于表格汇总，不代替原始截图与日志。</li>
+      <li>浏览器本地存储不是长期归档；每个模块结束和完整轮次结束都必须导出 JSON 到 <code>docs/evidence/20261018/</code>。</li>
+    </ul>
+
+    <h3>8.2 证据命名</h3>
+    <pre><code>docs/evidence/20261018/
+  API-004_before.json
+  API-004_after.json
+  UI-043_diff-filter.png
+  DP-012_modal-submit_response.json
+  FLOW-002_request-detail.png
+  FLOW-002_output.webp
+  NEG-004_interrupt_console.txt
+  run_20261018_1430.json
+</code></pre>
+
+    <h3>8.3 缺陷分级</h3>
+    <table>
+      <thead><tr><th>级别</th><th>定义</th><th>示例</th><th>放行</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>主链路不可用、数据泄露、错误计费或不可恢复污染</td><td>云端提交后在本地执行；secret 明文回显；真实文件被误删</td><td>禁止放行</td></tr>
+        <tr><td>P1</td><td>重要功能错误但有明确绕行</td><td>筛选失效、同步冲突处理错误、取消后悬挂</td><td>需明确决策并登记</td></tr>
+        <tr><td>P2</td><td>非关键交互、文案、布局或低频边界问题</td><td>空态文案错误、窄屏按钮拥挤</td><td>可带问题放行</td></tr>
+      </tbody>
+    </table>
+
+    <h3>8.4 单轮验收</h3>
+    <ul>
+      <li>P0 全部通过或跳过项有明确书面批准；P1 通过率不低于 90%；P2 失败项已登记。</li>
+      <li>89 个管理 API 均至少执行一次并记录结果；所有写接口均有副作用与恢复证据。</li>
+      <li>Web 管理台 11 个页面、404、公共 Shell、配置向导、任务抽屉和所有关键表格操作均覆盖。</li>
+      <li>至少完成一次云端文生图、一次云端图生图、一次中断以及一次断线恢复。</li>
+      <li>所有真实生成记录的 <code>final_backend</code> 均为 <code>modal</code>；发现本地推理即判 P0。</li>
+    </ul>
+  </section>
+
+  <section id="cleanup">
+    <h2>9. 测试后清理与归档</h2>
+    <ul>
+      <li>删除全部 <code>fulltest-20261018</code> 前缀文件、目录、工作流、上传会话、同步作业、路由规则和账号档案。</li>
+      <li>清空测试产生的回收站条目；确认没有误删基线模型。</li>
+      <li>恢复 <code>config</code>、<code>launch</code>、<code>routing/rules</code>、<code>cost/budget</code> 与 <code>settings</code> 基线，并逐项 GET 复核。</li>
+      <li>停止测试创建的 Modal 容器；查看容器列表确认无遗留计费进程。</li>
+      <li>关闭测试用管理令牌、Origin 白名单和额外浏览器配置；恢复本地监听地址。</li>
+      <li>保存最终 JSON、CSV、截图、HAR、后端日志和 Modal 关键日志。</li>
+      <li>在 JSON 的 <code>run</code> 字段补充执行人、时间、版本、浏览器、预算消耗和最终结论。</li>
+    </ul>
+  </section>
+</main>
+
+<footer>
+  <div class="inner">
+    ComfyBridge · 全量 Web 测试计划 · 2026-10-18 · 记录自动保存在浏览器 localStorage，请及时导出归档。
+  </div>
+</footer>
+
+<script>
+const STORAGE_KEY = "cb_web_fulltest_plan_20261018_v1";
+const STATUS_OPTIONS = [
+  ["todo", "未执行"],
+  ["pass", "通过"],
+  ["fail", "失败"],
+  ["block", "阻塞"],
+  ["skip", "跳过"]
+];
+
+const groups = [
+  {
+    mount: "env-cases", prefix: "ENV", title: "2.2.1 基线与数据门禁",
+    rows: [
+      ["P1", "测试环境", "记录分支、HEAD、Node/Python/浏览器版本和后端启动时间。", "字段可追溯，实际版本写入运行元数据。"],
+      ["P0", "端口检查", "确认 15173、18189、8188 监听地址与 PID；检查 18190-18193 无被测试进程误占。", "端口与进程一一对应，无未知监听者，无静默换端口。"],
+      ["P0", "Web 可访问", "打开 15173 根页和 18189/api/v1/health。", "页面加载，API 返回 200；Vite 代理与直连均为同一后端实例。"],
+      ["P0", "本地 ComfyUI", "访问 8188/object_info 并观察顶栏本地状态。", "上游在线；桥接器状态与直连一致；不触发推理。"],
+      ["P0", "Modal SDK", "状态页重新自检，核对 SDK、登录、应用和 Runner 通道。", "SDK 可加载、登录有效、应用已部署、代理鉴权就绪。"],
+      ["P0", "Modal 预算", "确认月度预算、单价和最大并发，记录当前已用金额。", "预算护栏值合理；本轮预计高成本操作有可用余量。"],
+      ["P1", "基线备份", "导出配置、规则、预算、启动参数和测试涉及的工作流 hash。", "可恢复；备份不含明文 secret 泄露风险。"],
+      ["P1", "测试数据", "准备文生图/图生图、冲突工作流、9 MiB 文件、输入图、临时节点、直链和临时卷名。", "文件存在、大小/MD5/hash 已记录。"],
+      ["P1", "浏览器工具", "打开 DevTools Network/Console、HAR 捕获和本地证据目录。", "可记录 API、WS、SSE 错误；截图目录已创建。"],
+      ["P2", "干净浏览器", "准备无 localStorage、无管理 Basic 认证缓存的新浏览器配置。", "可独立验证首次向导、401 和缓存恢复。"],
+      ["P1", "时间与费用", "记录 UTC/本地时区、Modal 账单周期和测试开始时间。", "成本与对账数据可按时间窗核对。"],
+      ["P0", "范围确认", "确认不打开 exe/整合包，仅测试 Web 与后端。", "测试成员对排除范围无分歧。"]
+    ]
+  },
+  {
+    mount: "api-cases", prefix: "API", title: "3.1 健康与配置",
+    rows: [
+      ["P0", "无副作用", "GET /api/v1/health", "200；local/modal/bridge 聚合状态可读；secret 脱敏；与状态页一致。"],
+      ["P0", "无副作用", "GET /api/v1/health/modal-cli", "200；SDK/CLI 状态、登录、版本、错误分类可读；失败时不是 500。"],
+      ["P0", "账号列表只读", "GET /api/v1/config/accounts", "200；账号名、token_id、volume、web_url、active 字段正确；secret 不回显。"],
+      ["P1", "先备份账号列表", "PUT /api/v1/config/accounts，创建 fulltest-account；复核 GET。", "200；新增或覆盖规则明确；缺 name 返回 422；测试后删除。"],
+      ["P1", "存在临时账号", "DELETE /api/v1/config/accounts/fulltest-account；再查不存在账号。", "200；GET 中消失；不存在账号返回可读 404。"],
+      ["P1", "存在非当前临时账号", "POST /api/v1/config/accounts/fulltest-account/activate；存在在途任务时先不带 force。", "200 或可读 409；force 语义正确；测试后切回原账号。"],
+      ["P1", "无副作用", "GET /api/v1/config/node-env", "200；Node/Python 路径与版本符合当前机器实际。"],
+      ["P0", "无副作用", "GET /api/v1/config", "200；local/bridge/modal 字段完整；token/secret 字段脱敏。"],
+      ["P1", "先 GET 备份", "PUT /api/v1/config，仅修改一个非敏感字段后 GET，再恢复。", "200；热生效或标记需重启；非法类型 422；恢复后与基线一致。"],
+      ["P1", "准备真实 ComfyUI 根目录", "POST /api/v1/config/validate-comfy，分别传真实目录与不存在目录。", "合法目录返回版本和完整性；非法目录可读失败，不崩溃。"],
+      ["P1", "无扫描进行", "GET /api/v1/config/scan-comfy", "200；idle/running/done/error 状态与扫描弹窗一致。"],
+      ["P1", "磁盘可读", "POST /api/v1/config/scan-comfy，轮询 GET 直到结束。", "扫描启动、结果含路径/版本/venv；重复启动有并发保护。"],
+      ["P2", "扫描运行中", "POST /api/v1/config/scan-comfy/cancel", "200；状态收敛为 cancelled/idle；无残留扫描任务。"],
+      ["P0", "无副作用", "GET /api/v1/cost/summary", "200；预算、已用、剩余、Modal 账单字段可读；与仪表盘一致。"],
+      ["P1", "先备份预算", "PUT /api/v1/cost/budget，修改月度上限、超限动作和单价；复核后恢复。", "200；持久化生效；非法动作/负值被拒。"],
+      ["P0", "存在云端请求", "GET /api/v1/cost/report?by=workflow&days=30&limit=50；再验 by=model。", "200；请求数、GPU 秒、估算成本、占比与日志一致；非法 by 被拒。"],
+      ["P1", "指定账单月份", "GET /api/v1/cost/reconciliation?cycle=2026-10", "200；本地估算、Modal GPU/全资源、daily 可读；失败有分类提示。"],
+      ["P1", "存在成本数据", "GET /api/v1/cost/export?scope=entries&days=30；再验 workflow/model；非法 scope 返回 422。", "下载 CSV；BOM/中文表头正常；内容与报表口径一致。"]
+    ]
+  },
+  {
+    mount: "api-cases", prefix: "API", title: "3.2 启动与节点",
+    rows: [
+      ["P0", "无副作用", "GET /api/v1/launch", "200；本地检测、命令、Modal app 状态、extra_args 完整。"],
+      ["P1", "先备份 launch", "PUT /api/v1/launch，修改一个测试参数并复核，再恢复。", "200；本地参数持久化；云端参数 volume push 结果可读。"],
+      ["P0", "本地服务运行中", "GET /api/v1/launch/local/status?tail=true", "200；pid、端口、owned、uptime、最近日志可读；停止后明确 offline。"],
+      ["P1", "本地当前已停止", "POST /api/v1/launch/local/start，body 可为 takeover。", "完成启动；8188 可访问；重复启动有保护，不产生双进程。"],
+      ["P1", "本地由桥接器管理", "POST /api/v1/launch/local/stop，body 使用安全超时。", "进程停止；status/health 转 offline；外部托管时有明确拒绝或提示。"],
+      ["P1", "本地运行中", "POST /api/v1/launch/local/restart", "重启完成；新 PID 不等于旧 PID；8188 恢复。"],
+      ["P0", "Modal 已部署", "GET /api/v1/launch/modal/containers", "200；容器 ID/状态/启动时间可读；未部署时可读空态。"],
+      ["P1", "确认无在途任务", "POST /api/v1/launch/modal/stop，再查容器列表。", "运行容器停止；在途任务终止可见；无悬挂计费容器。"],
+      ["P0", "本地 ComfyUI 在线", "GET /api/v1/nodes/local", "200；版本、class_type、自定义包、单文件节点与本地页一致。"],
+      ["P0", "Modal 凭证可用", "GET /api/v1/nodes/cloud", "200；云端 manifest/class 清单可读；不可用时错误可读。"],
+      ["P0", "两端在线", "GET /api/v1/nodes/diff?deep=false；再请求 force=true。", "200；本地/云端/counts/缓存时间正确；force 绕过缓存。"],
+      ["P0", "临时节点仅本地", "POST /api/v1/nodes/sync，提交 names=[临时节点]。", "返回 job；进度到完成；云端文件与 manifest 出现；失败项可读。"],
+      ["P1", "临时节点已在云端", "POST /api/v1/nodes/cloud/remove，提交同一节点。", "云端副本与 manifest 条目移除；本地不受影响；差异矩阵更新。"],
+      ["P0", "无副作用", "GET /api/v1/nodes/version", "200；本地版本/commit、云端 pin、drift、最近 job 与历史可读。"],
+      ["P1", "预算门禁内", "POST /api/v1/nodes/version/align，空对象。", "200；对齐作业受理或明确 noop；历史留痕；失败可回滚。"],
+      ["P1", "存在节点依赖", "GET /api/v1/nodes/dependency-precheck?force=true", "200；ok/warn/blocked/unavailable 与冲突列表可读。"],
+      ["P0", "预算门禁内", "POST /api/v1/nodes/image/rebuild，align_version=true。", "200；部署作业受理；状态可轮询；完成后 app deployed、URL 可访问。"],
+      ["P1", "两端在线", "POST /api/v1/nodes/presence/refresh", "200；class_type 在场索引刷新；错误不影响已有缓存。"]
+    ]
+  },
+  {
+    mount: "api-cases", prefix: "API", title: "3.3 工作流、任务、媒体与日志",
+    rows: [
+      ["P0", "工作流目录存在", "GET /api/v1/workflows/local", "200；name/file/hash/size/mtime 与磁盘一致；目录缺失有提示。"],
+      ["P0", "双端可读", "GET /api/v1/workflows/sync", "200；synced/local_new/cloud_new/changed/conflict 状态正确。"],
+      ["P0", "准备冲突与单端文件", "POST /api/v1/workflows/sync，分别执行 push、pull、keep_both。", "返回 job；文件按动作变化；双副本命名正确；失败项可读。"],
+      ["P1", "存在运行记录", "GET /api/v1/workflows/run-stats?days=7&limit=50；再验 30/90。", "200；次数、成功/失败、本地/云端、耗时与成本正确。"],
+      ["P1", "双端存在同名工作流", "GET /api/v1/workflows/compare?name=fulltest-20261018-t2i.json；再查不存在名称。", "200；大小/hash/节点类型/模型引用正确；不存在名称可读失败。"],
+      ["P0", "至少一个任务存在", "GET /api/v1/jobs?limit=50", "200；类型、状态、进度、时间、运行数正确。"],
+      ["P0", "有 job_id", "GET /api/v1/jobs/{job_id}；再查不存在 ID。", "详情字段完整；不存在 ID 返回可读 404。"],
+      ["P1", "存在长任务", "POST /api/v1/jobs/{job_id}/cancel", "200；cancelled；当前条目按语义保留；作业列表更新。"],
+      ["P0", "output 有测试产物", "GET /api/v1/media/local?kind=image&limit=50；再验 video。", "200；路径/大小/mtime/kind 正确；过滤和排序与页面一致。"],
+      ["P0", "有媒体路径", "GET /api/v1/media/local/file?path=实际路径；再试 ../ 越界。", "合法路径返回文件流和正确 MIME；越界返回 4xx 且不泄露文件。"],
+      ["P0", "本地服务运行", "GET /api/v1/logs/local?tail=100", "200；返回最近日志行；tail 边界/非法值有合理处理。"],
+      ["P1", "本地服务运行", "GET /api/v1/logs/local/stream?tail=10，用浏览器或 curl -N 保持连接。", "SSE 有 snapshot/append；断线可恢复；无错误重连风暴。"],
+      ["P1", "Modal 已部署", "GET /api/v1/logs/modal?tail=100", "200；执行器里程碑与云端 stdout 可读；不可部署时明确空态。"],
+      ["P1", "Modal 已部署", "GET /api/v1/logs/modal/stream?tail=10，保持连接并提交任务。", "SSE 收到里程碑；通道状态可读；结束后正常关闭。"],
+      ["P0", "Shell 已打开", "GET /api/v1/events/stream，触发 join/task/cost 事件。", "SSE 连接稳定；job/node/deploy/cost 事件可消费；重连有兜底。"]
+    ]
+  },
+  {
+    mount: "api-cases", prefix: "API", title: "3.4 请求、路由、设置与模型卷",
+    rows: [
+      ["P0", "存在真实 Modal 请求", "GET /api/v1/requests?limit=50&backend=modal&status=done；再组合其他筛选。", "200；筛选正确；返回 prompt_id/final_backend/rule_trace/成本。"],
+      ["P0", "有请求 ID", "GET /api/v1/requests/{req_id}；再查不存在 ID。", "详情完整；404 可读；不泄露敏感图内容。"],
+      ["P1", "有图快照", "GET /api/v1/requests/{req_id}/graph；再查无快照记录。", "200 返回 API 格式图；无快照时可读空态/404。"],
+      ["P0", "本地存在测试工作流", "POST /api/v1/routing/preview，传 workflow_name；再传 prompt 和 manual_backend。", "200；facts/backend/final_backend/trace/fallback 正确；非法 body 被拒。"],
+      ["P0", "无副作用", "GET /api/v1/routing/rules", "200；kinds、suggest、enabled、顺序正确；空自定义规则语义可读。"],
+      ["P0", "先 GET 备份", "PUT /api/v1/routing/rules，新增临时规则、调序/启停，再恢复。", "200；热生效；非法 kind/target/params 被拒；默认规则替换语义正确。"],
+      ["P0", "双端设置可读", "GET /api/v1/settings-sync", "200；键级 diff、敏感掩码、local/cloud path 和可用性正确。"],
+      ["P1", "存在非敏感差异键", "POST /api/v1/settings-sync/apply，先 push 再 pull；再传空 directions。", "200；pushed/pulled/skipped 正确；空操作返回合理 4xx。"],
+      ["P0", "Modal 凭证可用", "GET /api/v1/modal-volume", "200；credentials、SDK、主卷、分类正确。"],
+      ["P0", "分类目录存在", "GET /api/v1/modal-volume/overview?category=checkpoints；再切 loras/vae。", "200；本地/云端/both 行和大小正确；不可读原因可读。"],
+      ["P0", "准备单端测试文件", "POST /api/v1/modal-volume/sync，push 后再 pull。", "返回作业；进度更新；两端 hash/大小一致；失败项可读。"],
+      ["P1", "存在同步作业", "GET /api/v1/modal-volume/jobs", "200；方向/分类/进度/失败数/状态正确。"],
+      ["P1", "存在运行中作业", "POST /api/v1/modal-volume/jobs/{job_id}/cancel", "运行任务转 cancelled；已结束任务取消返回明确错误。"]
+    ]
+  },
+  {
+    mount: "api-cases", prefix: "API", title: "3.5 分块上传、数据卷与预热",
+    rows: [
+      ["P0", "准备 9 MiB 文件与 MD5", "POST /api/v1/uploads/init，传 filename/size/md5/category。", "200；upload_id、chunk_size、total_chunks 正确；缺字段 422。"],
+      ["P1", "存在上传会话", "GET /api/v1/uploads?limit=20", "200；会话状态、进度和目标卷可读。"],
+      ["P0", "有 upload_id", "GET /api/v1/uploads/{upload_id}；再查不存在 ID。", "分块位图/uploaded_chunks/大小正确；404 可读。"],
+      ["P1", "存在未完成会话", "DELETE /api/v1/uploads/{upload_id}，复核 GET。", "200；临时分块清理；会话 404。"],
+      ["P0", "会话已初始化", "PUT /api/v1/uploads/{upload_id}/chunks/{index}，原始 body + x-chunk-md5；再试错误 MD5/越界 index。", "合法块返回 200；错误 MD5 或 index 返回 4xx；可重试。"],
+      ["P0", "所有分块已上传", "POST /api/v1/uploads/{upload_id}/complete。", "整体 MD5 一致后落卷；不一致拒绝并保留可诊断错误。"],
+      ["P0", "Modal 凭证可用", "GET /api/v1/volume/meta", "200；总量、文件数、卷数、水位、计算状态正确。"],
+      ["P0", "无副作用", "GET /api/v1/volume/volumes?refresh=true", "200；卷列表与 usage 正确；refresh 生效。"],
+      ["P1", "准备临时卷名", "POST /api/v1/volume/create，创建 fulltest-volume；再试非法/重复名。", "200；列表出现；非法名/重名被拒。"],
+      ["P1", "临时卷为空且非主卷", "POST /api/v1/volume/volumes/fulltest-volume/delete。", "200；卷删除；非空卷/主卷删除被拒且原因可读。"],
+      ["P0", "存在测试目录", "GET /api/v1/volume/list?path=fulltest-20261018；再试 ../ 越界。", "200；目录/文件/大小/mtime 正确；越界请求被拒。"],
+      ["P0", "存在测试文件", "POST /api/v1/volume/delete，先 dry_run=true 再实际删除；引用文件验证 allow_referenced。", "预检不改数据；删除进回收站；引用保护生效。"],
+      ["P0", "存在回收站记录", "GET /api/v1/volume/trash?volume=主卷", "200；原路径、类型、大小、删除时间正确。"],
+      ["P0", "有已删除测试文件", "POST /api/v1/volume/trash/restore，恢复到原路径。", "200；回收站记录消失；文件 hash 不变；冲突被拒。"],
+      ["P1", "有可清理测试条目", "POST /api/v1/volume/trash/purge。", "200；不可恢复；列表与用量更新。"],
+      ["P1", "目录存在", "POST /api/v1/volume/mkdir，创建合法目录；再试斜杠/反斜杠/点开头。", "合法目录创建成功；非法名称被拒。"],
+      ["P1", "卷可读", "GET /api/v1/volume/dirs?volume=主卷", "200；目录候选完整；错误卷名可读失败。"],
+      ["P1", "存在测试文件/目录", "POST /api/v1/volume/move，移动到合法目标；再试自身/子目录/同名目标。", "合法任务返回 job；非法目标被拒；源文件安全。"],
+      ["P1", "存在移动任务", "GET /api/v1/volume/moves", "200；条目、目标、进度、日志尾部正确。"],
+      ["P1", "移动任务运行中", "POST /api/v1/volume/moves/{job_id}/cancel", "任务取消；可能半复制时返回明确说明。"],
+      ["P0", "准备小文件直链", "POST /api/v1/volume/download，传 url/dest_dir/volume/filename；再试不可达 URL。", "合法任务完成且大小正确；失败任务原因可读。"],
+      ["P1", "存在下载任务", "GET /api/v1/volume/downloads", "200；任务状态、落卷文件、日志尾部正确。"],
+      ["P1", "下载任务运行中", "POST /api/v1/volume/downloads/{job_id}/cancel", "任务转取消或明确不可取消；无悬挂 running。"],
+      ["P0", "预算门禁与凭证就绪", "POST /api/v1/modal/warmup，空对象。", "200；冷启动受理；容器出现；费用提示可读。"],
+      ["P0", "预热前/中/后", "GET /api/v1/modal/warmup/status", "状态机 idle/running/done/error 可读；失败原因可操作。" ]
+    ]
+  },
+  {
+    mount: "dp-cases", prefix: "DP", title: "4.1 页面、节点与队列",
+    rows: [
+      ["P0", "本地 ComfyUI 在线", "GET http://127.0.0.1:18189/。", "ComfyUI 前端完整加载，无白屏/404，隐私/云覆盖脚本按配置注入。"],
+      ["P1", "根页已加载", "刷新并观察静态 JS/CSS/字体请求。", "静态资源无桥接器误拦截；Console 无阻塞错误。"],
+      ["P0", "两端节点清单可用", "GET /object_info。", "200；本地节点与云端模型合并；模型下拉可读；策略与设置一致。"],
+      ["P1", "两端节点清单可用", "GET /api/object_info。", "与 /object_info 语义一致；前端新版接口可用。"],
+      ["P1", "存在已知节点", "GET /object_info/KSampler；再查不存在节点。", "单节点结构正确；不存在节点返回可读错误。"],
+      ["P1", "存在已知节点", "GET /api/object_info/KSampler。", "与无 /api 前缀一致。"],
+      ["P1", "本地队列可用", "GET /queue。", "200；queue_running/queue_pending 结构正确。"],
+      ["P1", "本地队列可用", "GET /api/queue。", "与 /queue 语义一致。"],
+      ["P0", "存在云端 queued/running 请求", "GET /queue 与 /api/queue。", "云端在途任务出现在合成队列；前端队列面板可见。"],
+      ["P1", "无生成任务", "GET /history。", "返回本地历史结构；桥接器不崩溃。"]
+    ]
+  },
+  {
+    mount: "dp-cases", prefix: "DP", title: "4.2 提交、实时与透传",
+    rows: [
+      ["P0", "Modal 通道、预算、确认头就绪", "POST /prompt，body 为 API 格式 prompt，header 携带 x-bridge-backend: modal。", "200 返回 prompt_id；请求记录状态进入 queued/running/done；final_backend=modal。"],
+      ["P0", "同上", "POST /api/prompt，使用第二个 prompt_id 的测试工作流。", "路径行为与 /prompt 一致；只在 Modal 执行。"],
+      ["P0", "privacy_confirm=true、使用新 client", "首次 POST /prompt 不带确认头，收到 409 后带 X-Bridge-Privacy-Confirmed: 1 重试。", "首次不落库/不执行；确认后仅云端执行；范围说明可读。"],
+      ["P1", "本地在线", "POST /prompt 发送 malformed JSON 或缺失 prompt。", "按 ComfyUI 原始错误透传；不创建桥接请求记录。"],
+      ["P0", "云端任务运行中", "观察出图页进度条、预览与节点状态。", "WS 中继收到进度；事件 client_id 正确；UI 不冻结。"],
+      ["P0", "云端任务运行中", "关闭/刷新浏览器 WS 后重连，等待任务完成。", "不丢终态；可恢复 history/view；请求记录收敛。"],
+      ["P0", "云端任务运行中", "POST /interrupt 和 POST /api/interrupt。", "中断转发；请求 cancelled/error；无悬挂 running。"],
+      ["P1", "本地空闲", "POST /interrupt（不触发本地生成）。", "本地接口原样响应；桥接器不报 500。"],
+      ["P1", "有已完成 prompt_id", "GET /history/{prompt_id}；再查不存在 ID。", "历史返回正确；不存在 ID 原样透传。"],
+      ["P1", "有输出文件", "GET /view?filename=...&subfolder=...&type=output。", "返回图片流/MIME 正确；浏览器可预览。"],
+      ["P1", "准备输入图", "POST /upload（multipart），再用返回文件名提交图生图。", "上传成功；云端引用输入并回传输出。"],
+      ["P1", "本地在线", "GET 一个未知静态路径与一个既有 API 路径。", "未知路径透传本地 404；既有 API 响应/headers 正确。"],
+      ["P2", "本地在线", "对透传路径发送 OPTIONS/HEAD。", "方法透传、CORS/headers 合理；不误触发生成。"],
+      ["P1", "有较大媒体", "通过 /view 下载较大文件并观察流式响应。", "不一次性整段卡死；大小/MIME 正确；内存无明显暴涨。"],
+      ["P0", "Modal 输出落盘", "在媒体库打开新产物，并核对 output 文件。", "文件非 0；可预览；请求详情与成本记录存在。"]
+    ]
+  },
+  {
+    mount: "ui-cases", prefix: "UI", title: "5.1 Shell 与全局导航",
+    rows: [
+      ["P0", "Web 根页", "依次点击侧栏 11 项：仪表盘、路由规则、节点管理、工作流、模型卷、数据卷、媒体库、成本报表、日志、系统状态、设置。", "路由与高亮正确；每页完成首屏加载，无白屏/错误边界。"],
+      ["P2", "宽屏", "点击侧栏折叠按钮，再展开。", "折叠/展开稳定；图标、菜单和版本号不重叠。"],
+      ["P1", "各通道状态可见", "悬停本地 ComfyUI 与 Modal Runner 状态胶囊。", "Tooltip 显示版本/延迟或明确失败原因；与 health 一致。"],
+      ["P2", "预算已配置", "悬停顶栏预算角标。", "显示已用/上限、超限动作和 Modal 账单摘要；未启用时显示入口提示。"],
+      ["P1", "任意页", "点击顶栏“任务”，再点遮罩/关闭按钮。", "抽屉打开显示运行数、任务列表；关闭后状态保持。"],
+      ["P1", "存在同步作业", "提交任务后观察角标并再次打开抽屉。", "运行数实时增减；焦点任务可见；完成态更新。"],
+      ["P0", "bridge.url 可读", "点击“前往出图界面”，在 ComfyUI 页面点浏览器返回。", "跳转到 18189 根页；返回管理台正常；不错误跳到本地 8188。"],
+      ["P1", "干净浏览器、Modal 未配置", "等待自动向导，关闭后刷新。", "向导只自动弹一次；本次刷新后不再自动打扰。"],
+      ["P2", "未配置 Modal", "点击横幅“配置向导”，再点“不再提示”。", "向导可打开；提示消失；localStorage 标记保存。"],
+      ["P1", "进入任意深层页", "使用浏览器后退/前进并直接打开深链刷新。", "路由恢复；侧栏高亮正确；无需重新登录/重载异常。"],
+      ["P2", "全局", "观察交互控件是否有可识别图标、焦点、禁用态和 Tooltip。", "关键图标有名称；按钮禁用态明确；无可点击但无反馈的控件。"]
+    ]
+  },
+  {
+    mount: "ui-cases", prefix: "UI", title: "5.2 仪表盘",
+    rows: [
+      ["P0", "首页加载", "检查今日生成、成功率、平均耗时、Modal 通道四张统计卡。", "数值与 requests/cost/health 一致；空数据展示 — 或说明。"],
+      ["P1", "存在趋势数据", "悬停趋势图各日数据点。", "Tooltip 日期与次数正确；切换窗口尺寸不重叠。"],
+      ["P1", "运行环境卡片", "悬停本地/Modal 状态，点击桥接地址复制。", "复制内容等于 bridge.url；剪贴板提示成功；无 secret。"],
+      ["P2", "运行中任务表", "悬停并点击 prompt_id 复制按钮。", "复制完整 prompt_id；点击复制不触发行跳转。"],
+      ["P0", "无在途任务", "点击“预热”后点确认弹窗取消。", "不发送 warmup；无容器变化；取消无报错。"],
+      ["P0", "预算允许", "再次点击“预热”并确认。", "显示加载；完成后 Modal 在线状态/容器数更新；费用提示可见。"],
+      ["P1", "预算未启用", "点击额度卡“设置”，填写预算/动作/单价并保存。", "校验 0 与最小值；保存后角标与卡片刷新；GET summary 一致。"],
+      ["P1", "预算已超限", "点击顶部告警“调整预算”，修改后保存。", "弹窗预填当前值；保存后告警按新值消失/保持。"],
+      ["P2", "存在 Modal 账单", "悬停成本构成标签和统计值。", "GPU/CPU/存储/出站说明可读；金额格式化一致。"],
+      ["P1", "首页", "点击额度卡“成本报表”。", "跳转 /cost，无整页刷新；筛选状态与默认周期正确。"],
+      ["P1", "存在最近请求", "点击“全部日志”。", "跳转 /logs 请求日志 Tab。"],
+      ["P1", "存在最近请求", "点击最近请求任意非按钮区域。", "跳转 /logs；不误点中断按钮；目标请求可再次找到。"],
+      ["P0", "存在运行中任务", "点击“中断”后取消确认。", "不发送 interrupt；任务继续；行不跳转。"],
+      ["P0", "存在运行中任务", "点击“中断”并确认。", "按钮 loading；请求进入 cancelled/error；运行列表移除；无悬挂。"],
+      ["P2", "容器数据可见", "悬停 Modal 容器数面板。", "工具提示显示容器 ID/启动时间或可读空态。"]
+    ]
+  },
+  {
+    mount: "ui-cases", prefix: "UI", title: "5.3 路由规则",
+    rows: [
+      ["P1", "规则页加载", "查看 manual/tag/cloud_model 固定规则表。", "条件和 target 正确；固定规则不可编辑/删除。"],
+      ["P1", "存在内置建议", "在空自定义链时点击“按当前内置设置生成”。", "生成规则包含 video/large-side 建议；不覆盖固定规则。"],
+      ["P1", "空自定义链", "点击“添加规则”。", "新增一行默认 workflow_tag 规则，开关默认启用。"],
+      ["P1", "存在自定义规则", "依次切换类型为 workflow_tag/gen_type/min_pixels/node_missing_cloud/node_missing_local 等。", "参数控件随类型变化；未知类型有提示；切换不残留旧参数。"],
+      ["P1", "存在规则行", "编辑名称、参数和 target 为 local/modal。", "输入立即进入编辑态；target 只允许有效值；错误输入保存时报错。"],
+      ["P2", "存在规则行", "切换启用开关。", "状态变化可保存；禁用规则预览时跳过。"],
+      ["P2", "至少两行", "点击上移/下移；第一行上移和最后一行下移应禁用。", "顺序改变；边界按钮禁用；顺序保存后保持。"],
+      ["P2", "存在规则行", "点击删除图标。", "行移除；保存后 GET rules 不再包含该规则。"],
+      ["P1", "完成临时规则编辑", "点击“保存规则链”，刷新页面。", "保存成功提示；规则持久化；空链恢复内置语义说明。"],
+      ["P1", "本地有工作流", "在干跑区选择工作流并点击“干跑”。", "显示 facts、trace、presence、最终后端；不执行任务。"],
+      ["P1", "准备 API 图", "粘贴合法 JSON 并干跑；再粘贴非法 JSON/数组。", "合法 JSON 覆盖选择的工作流；非法 JSON 给出解析/格式错误，不发请求。"],
+      ["P2", "无工作流且无 JSON", "点击“干跑”。", "显示可读警告，不发 API 请求。"],
+      ["P1", "选择手动后端", "分别选择 local/modal 后干跑。", "manual 值进入请求且预览最终后端符合手动规则；不执行真实本地任务。"],
+      ["P1", "模态回退场景", "制造 Modal 不可用/预算超限，再干跑。", "显示 fallback/reject；trace 中标出回退步骤；文案与设置一致。"],
+      ["P2", "已有预览", "切换工作流/JSON 后重新干跑。", "旧预览被新结果替换；不残留旧 trace；加载态正确。"],
+      ["P1", "保存临时规则", "删除临时规则并恢复原顺序，保存并 GET 复核。", "基线完全恢复；不遗留 fulltest 规则。"]
+    ]
+  },
+  {
+    mount: "ui-cases", prefix: "UI", title: "5.4 节点管理",
+    rows: [
+      ["P0", "本地 ComfyUI 在线", "进入 /nodes 本地清单 Tab，点击“重新扫描”。", "加载态出现；class_type、自定义包、单文件数刷新；无崩溃。"],
+      ["P1", "本地离线", "停止本地 ComfyUI 后刷新本地清单。", "显示离线原因和启动提示；其他页面仍可打开；恢复后重试正常。"],
+      ["P2", "存在 class_type", "输入 KSampler、搜索并清空；切换分页大小。", "结果即时过滤；分页/总数正确；清空恢复全量。"],
+      ["P2", "Manager 数据存在", "悬停 repo、Manager、版本 Tag。", "工具提示解释来源；长文本省略但不遮挡其他列。"],
+      ["P0", "切换差异矩阵", "依次选择全部、仅云端缺失、仅本地缺失、已同步。", "行数与 counts 一致；状态、hash/大小和目标列正确。"],
+      ["P1", "差异矩阵", "切换“按节点包/按 class_type”Segmented。", "视图切换保留筛选语义；class 搜索与分页可用。"],
+      ["P0", "云端可访问", "点击“对比云端 class_type”并先取消，再确认。", "取消不拉取；确认后显示 loading 和缓存时间；失败可读。"],
+      ["P1", "差异矩阵", "点击“重新扫描”。", "绕过缓存取新数据；loading 收敛；counts/缓存时间更新。"],
+      ["P1", "存在云端缺失节点", "查看批量选择框：已同步/仅云端/停用项应禁用。", "只有可安装项可选；计数只统计选中项。"],
+      ["P0", "选择一个缺失节点", "点击行内“安装到云端”。", "提交 job、打开任务抽屉；完成后差异消除；失败项可读。"],
+      ["P1", "选择多个可安装节点", "点击批量“安装到云端（n）”。", "一项作业包含 n 项；进度与成功/失败数正确。"],
+      ["P1", "云端存在测试节点", "点击“从云端移除”并取消，再确认。", "取消无副作用；确认后云端移除、本地保留、矩阵更新。"],
+      ["P1", "同步作业进行中", "打开任务抽屉，点击取消并确认。", "当前条目完成后停止；已完成项保留；状态 cancelled。"],
+      ["P1", "同步成功结束", "在“立即重启容器生效”确认框点取消/稍后。", "不停止容器；对比页说明依赖下次冷启动生效。"],
+      ["P1", "同步成功结束且预算允许", "再次同步并在确认框点“立即重启”。", "停止容器并 warmup；完成后状态在线；无重复容器。"],
+      ["P2", "存在对齐历史", "展开/收起“对齐历史”。", "状态、outcome、版本与时间正确；空历史不显示空壳。"],
+      ["P0", "版本 drift 存在", "点击“对齐云端”，先取消确认，再确认。", "取消不部署；确认先做依赖预检；blocked 时不部署并展示冲突。"],
+      ["P0", "依赖预检通过", "点击“重建镜像”并确认。", "作业受理、状态轮询、成功后 app deployed；失败有回滚/原因。"],
+      ["P2", "差异过大", "查看分页与横向滚动。", "操作列固定可见；窄屏可横向滚动；文本不覆盖按钮。"]
+    ]
+  },
+  {
+    mount: "ui-cases", prefix: "UI", title: "5.5 工作流",
+    rows: [
+      ["P1", "本地工作流目录为空/有文件", "进入“本地清单”，点击“重新扫描”。", "空态引导或文件表正确；hash/size/mtime 与磁盘一致。"],
+      ["P1", "工作流页", "依次点击本地清单、同步矩阵、运行统计 Tab。", "Tab 切换正确；状态保留；无重复请求风暴。"],
+      ["P1", "双端可读", "点击同步矩阵“重新扫描”。", "行状态与 counts 刷新；加载态收敛；云端失败可读。"],
+      ["P2", "存在运行记录", "在运行统计切换 7/30/90 天。", "请求数、成功率、后端分布、耗时、成本随周期刷新。"],
+      ["P1", "存在双端同名文件", "点击“对比”打开双列弹窗。", "hash、大小、时间、节点类型、模型引用正确；无内容截断。"],
+      ["P1", "仅本地/本地已改", "点击单行“推本地版”。", "提交 push job；云端 hash 更新；任务抽屉出现。"],
+      ["P1", "仅云端/云端已改", "点击单行“拉云端版”。", "提交 pull job；本地文件出现/更新；原文件按规则备份或覆盖。"],
+      ["P1", "存在冲突", "点击“保留双副本”。", "生成 conflict 后缀副本；本地/云端原版本均不丢失。"],
+      ["P1", "存在多种待同步行", "点击“一键同步”，先取消确认，再确认。", "取消无请求；确认只同步非冲突建议项；冲突保留并提示。"],
+      ["P1", "同步任务运行中", "从任务抽屉取消。", "已完成项保留；后续停止；矩阵刷新不显示错误状态。"],
+      ["P2", "存在失败同步项", "查看错误 Modal/任务详情。", "逐文件名与错误可读；可修正后重试，不误删成功项。"],
+      ["P1", "冲突对比中", "关闭 Modal，再次打开另一个冲突。", "旧数据不残留；请求 key/名称正确；无串行。"],
+      ["P2", "空同步矩阵", "查看空态说明和按钮禁用逻辑。", "不出现无意义可点击按钮；空态信息可指导下一步。"],
+      ["P1", "完成所有临时同步", "删除/恢复测试冲突文件并重新扫描。", "基线工作流恢复；任务列表保留审计但不影响后续。"]
+    ]
+  },
+  {
+    mount: "ui-cases", prefix: "UI", title: "5.6 模型卷",
+    rows: [
+      ["P0", "Modal 凭证和主卷可用", "进入 /models，查看凭证、SDK、主卷和分类。", "状态与 modal-volume API 一致；不可用时有明确告警。"],
+      ["P1", "存在多分类", "切换 checkpoints/loras/vae 等分类。", "表格、计数、上传缺云端/下载到本地按钮随分类刷新。"],
+      ["P2", "行数超过 10", "切换分页大小并翻页。", "数据不串页；总数正确；筛选状态下分页合理。"],
+      ["P1", "存在仅本地文件", "点击单行“上传”，先取消再确认。", "取消不建作业；确认创建 push job，完成后状态已同步。"],
+      ["P1", "存在仅云端文件", "点击单行“下载”，先取消再确认。", "取消无任务；确认创建 pull job，本地文件大小/hash 正确。"],
+      ["P1", "存在多个仅本地项", "点击“上传缺云端(n)”并确认。", "作业包含全部 n 项；按钮计数随后更新；失败项可读。"],
+      ["P1", "存在多个仅云端项", "点击“下载到本地(n)”并确认。", "作业包含全部 n 项；完成后表格变为已同步。"],
+      ["P1", "同步作业运行中", "在作业表点击“取消”并确认。", "作业终止/请求取消；状态与进度更新；无悬挂。"],
+      ["P0", "分块上传卡片", "选择分类和 9 MiB 文件，点击“上传到云端”。", "计算 MD5、初始化会话、逐块上传并 complete；MD5 一致。"],
+      ["P2", "未选择文件", "观察并点击“上传到云端”。", "按钮禁用；不发请求；文件选择后启用。"],
+      ["P2", "选择空文件", "尝试上传 0 字节文件。", "显示“不能上传空文件”；不初始化会话。"],
+      ["P1", "上传进行中", "点击“暂停”，等待当前块后点击“继续”。", "暂停期间无新块；继续只上传 missing chunks。"],
+      ["P1", "存在失败会话", "点击“重试”。", "同文件/大小校验通过后继续；不从头重传已完成块。"],
+      ["P1", "存在错误/暂停会话", "点击“删除”。", "会话删除；服务端分块清理；刷新后不复活。"],
+      ["P2", "上传完成", "查看校验列和 Tooltip。", "显示 MD5 一致/待确认；目标卷与 remote_path 正确。"],
+      ["P1", "云端卷读取失败", "模拟凭证/SDK 故障刷新。", "显示错误原因；上传按钮不静默失败；恢复后刷新可用。"]
+    ]
+  },
+  {
+    mount: "ui-cases", prefix: "UI", title: "5.7 数据卷",
+    rows: [
+      ["P0", "凭证可用", "进入 /volume，查看总用量/文件数/卷数并点击“重新统计”。", "数据刷新；计算中提示合理；完成后水位和时间更新。"],
+      ["P1", "无临时卷", "点击“新增数据卷”，输入合法名并创建。", "卷出现在表；主卷标记正确；刷新后仍存在。"],
+      ["P2", "新增数据卷模态", "输入非法名、重复名、为空。", "按钮/接口返回可读校验；不创建错误卷。"],
+      ["P1", "存在空非主卷", "点击删除，尝试不输入名称、错误名称、正确名称。", "前两者按钮禁用；正确名后删除；主卷不可删除。"],
+      ["P1", "存在非空卷", "打开删除模态。", "提示文件数/大小且确认按钮禁用；指引先清空卷。"],
+      ["P1", "多卷存在", "切换目录浏览卷下拉。", "路径重置到根目录；选中项清空；主卷标记正确。"],
+      ["P1", "目录中有子目录", "点击目录名逐层进入，再点面包屑返回。", "列表路径正确；面包屑可回退；不串卷。"],
+      ["P2", "目录浏览", "点击刷新。", "加载态出现；空目录/读取错误有可读提示。"],
+      ["P1", "当前目录", "点击“新建文件夹”，先空提交，再输入 /、\\、.开头，最后合法名称。", "前三者被拒/提示；合法目录创建；刷新后出现。"],
+      ["P2", "未选择条目", "观察“移动到”。", "按钮禁用且无计数；勾选后启用并显示数量。"],
+      ["P1", "选择一个目录和文件", "点击“移动到”，查看目标候选。", "候选排除当前目录、自身和子目录；可搜索；空目标表示卷根。"],
+      ["P1", "完成选目标", "点击“开始移动”。", "创建移动任务；原列表刷新；任务卡片进度/目标正确。"],
+      ["P0", "普通测试文件", "点击行“删除”打开预检。", "普通路径显示移入回收站；目录含文件时说明递归拒绝。"],
+      ["P0", "模型文件被工作流/请求引用", "打开删除预检。", "显示引用来源/引用/位置；可选择取消或“仍要软删除”。"],
+      ["P1", "被引用模型", "点击“仍要软删除”。", "文件进回收站；原目录消失；引用警告仍可见。"],
+      ["P1", "空目录", "点击删除并确认。", "目录移入回收站；父目录刷新；恢复可用。"],
+      ["P1", "非空目录", "点击删除。", "后端拒绝递归删除；界面显示原因；无数据丢失。"],
+      ["P1", "回收站有测试条目", "点击刷新。", "条数、原路径、类型、大小、删除时间正确。"],
+      ["P1", "回收站有可恢复条目", "点击“恢复”。", "恢复到原路径；原目录出现；回收站记录消失。"],
+      ["P2", "回收站有临时条目", "点击“清理”并确认。", "永久删除；不可恢复；用量刷新。"],
+      ["P1", "云端直下区", "不填 URL 点击“下载到数据卷”。", "警告请输入链接；不发请求。"],
+      ["P1", "云端直下区", "填写有效 URL/卷/目录/文件名后点击下载。", "任务创建、目标卷正确、完成后文件大小符合；非主卷提示可读。"],
+      ["P2", "下载任务有日志", "点击“日志”打开 Popover。", "最近输出可滚动、可读；长行不撑破页面。"],
+      ["P1", "下载任务运行中", "点击“取消”并确认。", "状态取消/失败明确；无 hanging；文件残留说明可读。"],
+      ["P2", "移动任务有日志", "点击“日志”并关闭。", "输出与目标目录正确；Popover 不阻塞其他操作。"],
+      ["P1", "移动任务运行中", "点击“取消”并确认。", "显示半复制风险说明；任务收敛；源文件安全。"],
+      ["P2", "空目录/空任务", "观察目录浏览、下载、回收站、移动任务空态。", "空态说明准确；无空白表格或无法理解的按钮。"],
+      ["P1", "无 Modal 凭证", "刷新数据卷页。", "显示未配置提示；不崩溃；配置后刷新恢复。"],
+      ["P2", "窄屏", "将窗口缩到约 1024px。", "工具栏换行合理；表格可横向滚动；文字不遮挡按钮。"],
+      ["P1", "清理", "清空临时目录/回收站，删除临时卷并恢复基线。", "所有 fulltest 数据消失；主卷和基线文件保持不变。"]
+    ]
+  },
+  {
+    mount: "ui-cases", prefix: "UI", title: "5.8 媒体库与成本",
+    rows: [
+      ["P1", "存在产物", "点击媒体库刷新。", "总数、图片/视频计数一致；加载态收敛。"],
+      ["P2", "存在图片和视频", "切换全部/图片/视频。", "列表和计数正确；空筛选显示明确空态。"],
+      ["P2", "存在多目录产物", "切换目录下拉。", "只显示所选目录文件；全部目录可恢复。"],
+      ["P2", "存在多文件", "输入关键字并回车；点击清除。", "过滤大小写不敏感；URL 更新合理；清除后恢复。"],
+      ["P1", "存在图片", "点击图片卡片打开详情。", "Modal 显示路径/大小/时间/预览；关闭后网格状态保留。"],
+      ["P1", "图片详情", "点击“在新标签页打开原文件”。", "新标签页返回原图，MIME/尺寸正确；无 404。"],
+      ["P2", "存在视频", "点击视频卡片，播放/暂停/拖动进度。", "视频可播放，控件可用；关闭后不持续播放/占用异常。"],
+      ["P1", "空 output 或筛选无结果", "观察空态和 output 根路径。", "说明准确；不误报错误；刷新可用。"],
+      ["P1", "存在成本数据", "切换“按工作流/按主模型”。", "列名、分组、占比、合计正确；与 report API 一致。"],
+      ["P1", "成本报表", "点击下载下拉，分别选择逐条流水/按工作流/按主模型。", "三次均下载 CSV；文件名/列内容符合选择；不触发整页导航。"],
+      ["P1", "账单对账", "切换月份，选择当前月与上月。", "日期限制不能选未来月；统计、日表和资源构成随周期刷新。"],
+      ["P2", "对账统计", "悬停本地估算、GPU、全资源、Egress、比例。", "工具提示解释口径；不把本地估算写成官方账单。"],
+      ["P2", "账单获取失败", "模拟 Modal 账单不可用。", "显示警告和原因；其他统计仍可读；页面不空白。"],
+      ["P2", "无成本数据", "查看空表和提示。", "显示“暂无云端成本记录”等可读空态。"],
+      ["P2", "成本/媒体窄屏", "宽度 1024/768 检查表格、Modal、视频。", "内容不溢出视口；滚动可用；按钮和文字不重叠。"]
+    ]
+  },
+  {
+    mount: "ui-cases", prefix: "UI", title: "5.9 日志",
+    rows: [
+      ["P0", "进入 /logs", "点击“请求日志”和“实时控制台”Tab。", "两个 Tab 正常加载；切换不丢表单/滚动状态。"],
+      ["P1", "存在不同后端", "切换后端筛选全部/本地/云端。", "列表与 requests?backend 一致；计数随筛选更新。"],
+      ["P1", "存在不同状态", "切换状态筛选 queued/running/done/error/cancelled/blocked/preflight。", "每种状态可读；空结果不崩溃。"],
+      ["P1", "请求列表", "组合 backend=modal + status=done。", "结果同时满足两个条件；与 API 完全相同。"],
+      ["P1", "实时开启", "关闭实时开关，等待 5 秒以上，再开启。", "关闭后停止轮询；开启后刷新；无重复定时器。"],
+      ["P1", "有请求", "点击任意请求行打开详情抽屉。", "显示状态、类型、决策/实际后端、prompt_id、耗时、hash。"],
+      ["P2", "请求详情", "点击 prompt_id 复制，再关闭抽屉。", "复制完整值；Tooltip 提示成功；关闭后列表位置保持。"],
+      ["P1", "请求详情", "点击抽屉“刷新”按钮。", "详情/列表刷新；不丢失当前筛选；无无限 loading。"],
+      ["P1", "请求详情", "展开错误信息（失败请求）。", "错误原文可读、可滚动；无 secret 泄漏。"],
+      ["P1", "实时控制台", "依次切换自适应/左右/上下布局并刷新页面。", "布局即时变化且 localStorage 记忆；宽度不足自动上下。"],
+      ["P1", "本地控制台", "输入过滤关键字并切换全部/警告/错误。", "行数与内容符合过滤；清空关键字恢复。"],
+      ["P2", "本地控制台", "关闭跟随后向上滚动，再滚回底部。", "向上滚动停止吸底；回到底部恢复跟随；不反复抖动。"],
+      ["P1", "本地控制台", "点击暂停，等待新日志，再点击继续。", "暂停期间缓冲继续；继续后一次放出；状态文案正确。"],
+      ["P2", "本地控制台", "点击清屏，再点击导出。", "清屏只清前端缓冲；导出内容与可见过滤结果一致。"],
+      ["P2", "本地控制台", "切换缓冲上限 200/1000/5000。", "超限丢弃最旧行；计数不超过上限；无卡顿。"],
+      ["P1", "本地/Modal 控制台", "观察连接状态、Runner 通道状态和空态。", "在线/连接中/断开标签正确；未部署时说明可操作。"],
+      ["P1", "云端日志", "提交一次 Modal 任务，观察两栏里程碑。", "本地/Modal 时间线更新；终端事件不与云端 stdout 混淆。"],
+      ["P1", "SSE 断线", "在 DevTools 中断网/停止后端 3 秒后恢复。", "控制台显示重连；任务/日志恢复；无重连风暴。"],
+      ["P2", "窄屏", "宽度降到 900px 以下并检查工具栏。", "按钮图标化、工具行不换行过度；文本不溢出。"],
+      ["P2", "长日志", "加载长行/非 UTF-8 内容。", "换行与横向裁切合理；无 XSS；不卡死浏览器。"]
+    ]
+  },
+  {
+    mount: "ui-cases", prefix: "UI", title: "5.10 系统状态与设置",
+    rows: [
+      ["P1", "状态页", "点击“重新自检”。", "SDK、登录、版本、延迟、应用状态刷新；loading 收敛。"],
+      ["P2", "SDK 路径可见", "复制 SDK 路径。", "复制完整路径；Tooltip 可读；无截断导致复制错误。"],
+      ["P2", "存在失败记录", "查看最近失败表和错误分类标签。", "分类、时间、建议动作正确；空表有说明。"],
+      ["P1", "设置页", "依次打开本地/启动命令/桥接/Modal/护栏与预算/设置同步 6 个 Tab。", "所有 Tab 可渲染；表单值与 GET config/launch 一致。"],
+      ["P1", "本地 Tab", "点击“扫描本机”。", "扫描 Modal 打开；可开始、取消、选结果、采用目录；不会自动保存。"],
+      ["P2", "ComfyUI 扫描", "看到进度后点击“取消扫描”，再重新扫描。", "进度停止；状态取消；重新扫描可用；无残留进程。"],
+      ["P1", "本地 Tab", "输入合法/非法根目录并点击“校验”。", "合法返回完整性和 venv；非法给出明确缺失项。"],
+      ["P1", "本地 Tab", "点击 Node.js“检测”。", "检测结果与 node_path/实际 PATH 一致；找不到时有指引。"],
+      ["P2", "本地 Tab", "模型目录映射点击新增、编辑分类/路径、删除。", "行增减正确；空分类/重复分类保存时被拒。"],
+      ["P1", "本地 Tab", "修改一个非敏感字段并保存。", "保存成功/热生效提示；刷新不回跳；GET config 一致。"],
+      ["P1", "启动命令 Tab", "启用若干本地参数、切换互斥组、输入自定义参数、点击撤销。", "互斥项自动关闭；命令预览更新；撤销只恢复本栏。"],
+      ["P1", "启动命令 Tab", "选择 Modal 参数并保存全部。", "配置保存；volume_push 失败有警告；预览命令正确。"],
+      ["P0", "本地当前停止", "点击“启动”，取消确认后再确认。", "取消无进程；确认后 8188 启动；按钮/状态/日志正确。"],
+      ["P0", "本地运行中", "点击“停止”，先取消再确认。", "取消不改状态；确认后停止；状态转未运行；外部托管有提示。"],
+      ["P1", "本地运行中", "点击“重启”并确认。", "进程重启且 PID 变化；页面状态与 8188 一致。"],
+      ["P1", "云端控制条", "点击刷新容器数、预热、停止容器。", "数量刷新；预热后在线；停止确认后容器归零；费用提示可读。"],
+      ["P1", "桥接 Tab", "修改默认后端/视频后端/大分辨率/预校验/隐私开关/object_info 策略并保存。", "字段保存并热生效；非法值被拒；恢复基线。"],
+      ["P1", "Modal Tab", "填写 token id、secret、environment、proxy 凭证并保存。", "secret 不回显；留空不修改已保存 secret；保存后通道刷新。"],
+      ["P1", "Modal Tab", "点击“清除凭证”，先取消再确认。", "取消不改；确认后凭证清除；页面提示未配置；测试后恢复。"],
+      ["P1", "Modal Tab", "保存当前账号档案、激活另一档案、删除档案；制造在途任务验证冲突。", "active 按钮禁用；冲突 409 可确认 force；档案切换正确。"],
+      ["P1", "Modal Tab", "修改数据卷名并保存。", "保存成功；需重建部署提示可见；非法名被拒；恢复主卷。"],
+      ["P1", "护栏与预算 Tab", "修改云端不可用动作、超时、预算、超限动作、单价、并发并保存。", "字段持久化；边界值校验；刷新后一致。"],
+      ["P1", "设置同步 Tab", "设置 push/pull/skip，点击执行同步。", "待同步计数正确；结果 pushed/pulled/skipped 可读；差异刷新。"],
+      ["P2", "设置同步 Tab", "复制 extra_model_paths.yaml 示意。", "剪贴板内容完整；不包含环境专属 secret。"],
+      ["P2", "任意设置 Tab", "刷新页面、切换 Tab 后返回。", "未保存编辑有合理提示/不误导；已保存值立即显示。"],
+      ["P2", "设置页窄屏", "1024/768 检查表单、表格和长命令。", "输入可操作；表格可滚动；命令预览不遮挡按钮。"]
+    ]
+  },
+  {
+    mount: "ui-cases", prefix: "UI", title: "5.11 配置向导、扫描与响应式",
+    rows: [
+      ["P1", "干净浏览器、Modal 未配置", "首次进入任意管理页，等待配置向导自动出现。", "只自动出现一次；localStorage 标记生效；可手动重开。"],
+      ["P1", "配置向导第 1 步", "查看本地、Modal、Runner 检查项和失败操作按钮。", "状态/详情准确；失败项可直达相应操作；无未处理异常。"],
+      ["P1", "配置向导第 2 步", "输入 token id/environment/secret，先保存错误值，再保存正确值。", "失败提示可读；成功进入第 3 步；secret 不以明文回显。"],
+      ["P1", "配置向导第 3 步", "点击扫描本机，采用目录后校验并保存。", "目录回填；校验通过；只保存合法完整路径。"],
+      ["P1", "配置向导第 4 步", "查看 Runner 状态，点击预热。", "通道未就绪时可跳过；预热成功显示容器就绪和费用提示。"],
+      ["P1", "配置向导完成", "点击完成/跳过，刷新页面。", "向导不再自动出现；设置页表单能看到已保存值。"],
+      ["P1", "配置向导中途关闭", "修改表单但未点保存时关闭。", "不产生半保存配置；重开时从服务端基线加载。"],
+      ["P2", "扫描本机 Modal", "点击开始扫描，观察进度、取消、重新扫描、空结果/超时提示。", "进度与驱动盘正确；取消/超时/截断有明确提示。"],
+      ["P2", "扫描结果表", "点击行、单选按钮、采用所选目录。", "单选状态一致；采用后只回填不自动保存；未选时按钮禁用。"],
+      ["P2", "响应式 1920/1366/1024/768", "逐页检查侧栏、顶栏、表格、弹窗、日志和表单。", "无水平遮挡、文字溢出、按钮重叠；窄屏仍可完成主要点击。"],
+      ["P2", "浏览器缩放 125%/150%", "在主要页面检查布局和表格。", "重要按钮仍可见；Tooltip/弹窗不越界；内容可滚动。"],
+      ["P2", "键盘操作", "用 Tab 遍历导航、筛选、表格操作、Modal；用 Enter/Escape 操作。", "焦点顺序合理；Esc 可关闭 Modal；键盘可完成主要流程。"],
+      ["P2", "深链与 404", "直接打开 /nodes、/logs、/settings 和 /no-such-page。", "深链刷新可用；404 Result 页面可读；无白屏。"],
+      ["P2", "刷新与缓存", "在任务进行中刷新页面、切换页面、返回。", "任务/日志/请求状态可从 API 重新恢复；不重复提交。"],
+      ["P2", "空数据态", "清空请求/成本/媒体/任务后逐页检查。", "空态不误导为加载失败；按钮禁用合理；可恢复。"],
+      ["P2", "网络慢速", "DevTools Slow 3G 下打开主要页面。", "loading/骨架不永久卡住；按钮防重复；用户能理解当前状态。"]
+    ]
+  },
+  {
+    mount: "flow-cases", prefix: "FLOW", title: "6.1 首次使用与出图主链路",
+    rows: [
+      ["P0", "干净配置 + 真实凭证", "完成向导：检测 → 保存 Modal → 扫描/校验 ComfyUI → 检查 Runner → 完成。", "配置完整；Web 顶栏通道就绪；没有明文 secret；不启动桌面应用。"],
+      ["P0", "Modal Runner 在线且预算足够", "在 18189 出图页加载小尺寸工作流，通过页面提交显式云端请求。", "收到 prompt_id；进度实时；任务最终 success；请求记录 final_backend=modal。"],
+      ["P0", "任务运行中", "从出图页切到管理台仪表盘观察运行中任务，再切回。", "WebSocket 事件驱动任务表；不重复提交；状态最终同步。"],
+      ["P0", "任务完成", "打开请求日志详情与图快照。", "决策/实际后端均为 modal；rule_trace、cost、graph hash、prompt_id 完整。"],
+      ["P0", "产物已回传", "打开媒体库预览并下载原图。", "图片可打开、大小非 0；输出路径与请求关联；无本地推理产物。"],
+      ["P1", "有产物与成本", "打开成本报表，切换按工作流/主模型并导出。", "新请求计数和估算成本出现；CSV 含该记录；数值不重复计费。"],
+      ["P1", "输入图准备完成", "在出图页上传输入图并提交图生图。", "上传成功；云端执行；请求/媒体/成本链路一致；final_backend=modal。"],
+      ["P0", "云端任务运行中", "管理台中断或出图页中断，观察任务、WS、日志。", "任务取消；queue 清空；日志有中断事件；无远端悬挂。"],
+      ["P1", "任务运行中断线", "刷新出图页并断开网络，恢复后等待完成。", "前端重连；history/view 兜底；管理台记录收敛。"],
+      ["P1", "Modal 未就绪", "将路由目标设为 modal 但暂停/停止 Runner，提交一个测试工作流（拒绝策略）。", "返回明确不可用/拒绝；不落本地执行；请求状态可诊断。"],
+      ["P1", "预算已用尽", "把预算调到低于当前已用，超限动作设为 reject，提交云端任务。", "请求被拦截；不产生云端费用；日志/仪表盘显示预算告警。"],
+      ["P1", "预算超限 fallback_local", "同上但动作设为 fallback_local，仅做预检/干跑验证，不真实本地推理。", "UI 显示将回落本地；本轮不接受真实本地生成；记录验证方式而非执行本地任务。"]
+    ]
+  },
+  {
+    mount: "flow-cases", prefix: "FLOW", title: "6.2 同步、上传与存储闭环",
+    rows: [
+      ["P1", "制造一个同名冲突工作流", "工作流页对比 → 推本地版 → 恢复冲突 → 保留双副本 → 清理。", "对比/覆盖/双副本行为正确；任务抽屉进度和最终文件可核对。"],
+      ["P1", "准备仅本地节点", "节点页同步 → 任务抽屉 → 差异矩阵 → 重启容器确认。", "节点文件、manifest、依赖与冷启动链路一致；本地/云端差异消除。"],
+      ["P0", "准备 9 MiB 文件", "模型卷选文件 → 上传 → 暂停 → 继续 → MD5 完成。", "只补缺块；会话状态正确；最终文件 JSON 大小/哈希一致。"],
+      ["P1", "准备大文件/慢速网络", "上传中途刷新页面，重新选择同一文件继续。", "已完成块保留；重新选择同名同大小文件后可续传；不重复全量上传。"],
+      ["P1", "准备临时目录和文件", "数据卷新建目录 → 上传/直下文件 → 移动 → 删除 → 回收站恢复。", "目录/任务/回收站状态一致；hash 不变；引用保护生效。"],
+      ["P1", "准备临时空卷", "数据卷创建 → 浏览根目录 → 删除空卷 → 列表复核。", "创建/删除成功；非空时按钮禁用；主卷不可误删。"],
+      ["P1", "准备设置差异", "设置同步选择非敏感键 push → 刷新 → pull。", "设置差异表、云端值、本地值和消息一致；敏感值仍掩码。"],
+      ["P1", "准备两个账号档案", "保存当前档案 → 激活另一档案 → 重拉节点/卷 → 切回。", "token、volume、web_url 整体切换；缓存不串账号；活动档案互斥。"],
+      ["P1", "在线与离线切换", "启动/停止本地 ComfyUI，刷新仪表盘/节点/设置。", "在线状态、日志和控制按钮同步；停止时不误报在线；恢复后可重试。"],
+      ["P1", "最终清理", "删除 fulltest 数据并复核所有基线。", "无测试残留；预算/规则/配置/卷恢复；成本记录保留仅作审计。"]
+    ]
+  },
+  {
+    mount: "security-cases", prefix: "NEG", title: "7.1 安全边界",
+    rows: [
+      ["P0", "设置 CB_MANAGEMENT_TOKEN 后重启", "不带 Authorization 请求 /api/v1/config、/config、/requests。", "401；body 可读；health 仍可匿名；secret 不泄漏。"],
+      ["P0", "已设置管理令牌", "携带错误 Bearer/Basic，再携带正确 Bearer。", "错误凭证 401；正确凭证 200；审计记录不含明文 token。"],
+      ["P0", "已设置管理令牌", "从外部 Origin 发送 PUT/POST，再带不允许 Origin。", "403 且无副作用；同源请求和 CB_ALLOWED_ORIGINS 白名单行为正确。"],
+      ["P0", "已设置管理令牌", "用浏览器访问 /bridge/，输入正确/错误 Basic 密码。", "错误 401；正确加载管理台；静态资源不绕过认证。"],
+      ["P0", "任意 API/页面", "检查 GET /config、/health、/requests、状态页 DOM、截图。", "token/secret/proxy secret 仅掩码或 false；不出现明文。"],
+      ["P0", "上传/媒体/卷接口", "提交 filename/path 包含 ../、绝对路径、反斜杠、%2e%2e。", "全部被拒；无越界文件；错误不含本机敏感路径。"],
+      ["P0", "日志/请求详情/工作流对比", "构造含 HTML/script 的日志、文件名和错误文本。", "React/HTML 转义正确；不执行脚本；文本仍可读。"],
+      ["P1", "管理令牌关闭", "匿名访问受保护 API 与 /bridge/。", "恢复本机默认放行；不应把“未设 token”误判为 401。"],
+      ["P1", "API 参数", "向分页/limit/days/cycle/category 传入负数、超大值、非法类型。", "返回 4xx 或安全钳制；不产生超大数据读取/崩溃。"],
+      ["P1", "请求体", "向配置、规则、预算、上传 init 发送缺字段/额外字段/错误类型。", "422 可读；不部分写入；前端保持可用。"]
+    ]
+  },
+  {
+    mount: "security-cases", prefix: "NEG", title: "7.2 外部依赖与恢复",
+    rows: [
+      ["P1", "本地 ComfyUI 停止", "进入仪表盘、节点、工作流、媒体、日志、设置。", "各页显示离线原因；不崩溃；非依赖接口仍可用；恢复后重试成功。"],
+      ["P1", "Modal SDK 缺失/未登录", "打开状态、模型卷、节点云、数据卷、设置。", "错误分类与处理建议明确；不把空对象当成功；恢复后刷新。"],
+      ["P1", "Modal 网络超时", "在请求中模拟 DNS/代理/连接超时。", "显示分类错误和重试建议；只读命令可退避；写命令不静默重放。"],
+      ["P1", "SSE 通道断开", "停止后端 3-5 秒后恢复，观察 Shell 任务、日志控制台、请求实时开关。", "自动重连；页面不冻结；轮询兜底接管；无重复 toast。"],
+      ["P1", "WebSocket 断开", "运行中关闭桥接器/刷新页面，再恢复本地和 Modal。", "出图页重连；任务状态从记录/history 收敛；无悬空执行。"],
+      ["P1", "Modal 容器停止", "在有任务/无任务两种情况停止容器。", "有任务时明确取消或失败；无任务时可再次冷启动；容器列表准确。"],
+      ["P1", "任务超时", "将 task timeout 调低后提交，再恢复。", "任务时间上限生效；状态和错误可读；无永久 running。"],
+      ["P1", "磁盘/卷不可写", "模拟临时目录或 data volume 写失败。", "错误上报、按钮可重试；不误报 done；无半写文件被当成功。"],
+      ["P1", "浏览器刷新", "在 Modal 提交、同步、上传、下载进行中刷新。", "任务可重新发现；不重复提交；断点/状态可继续。"],
+      ["P1", "浏览器存储禁用", "隐私模式禁用 localStorage 打开页面和向导。", "核心功能仍可用；向导不无限弹出；测试记录页面提示导出。"],
+      ["P2", "API 4xx/5xx 显示", "构造 404/409/422/500 与超长 detail。", "消息可读、可关闭、可重试；不暴露栈或 secret；不撑破布局。"],
+      ["P2", "重复点击", "快速双击保存/上传/下载/预热/同步按钮。", "按钮 loading/互斥生效；不重复创建任务或扣费。"]
+    ]
+  }
+];
+
+let storage = {};
+try {
+  storage = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+} catch {
+  storage = {};
+}
+
+const prefixOffsets = {};
+groups.forEach((group) => {
+  group.offset = prefixOffsets[group.prefix] || 0;
+  prefixOffsets[group.prefix] = group.offset + group.rows.length;
+});
+
+const mountOffsets = {};
+groups.forEach((group) => {
+  group.mountIndex = mountOffsets[group.mount] || 0;
+  mountOffsets[group.mount] = group.mountIndex + 1;
+});
+
+function idFor(group, index) {
+  return `${group.prefix}-${String(group.offset + index + 1).padStart(3, "0")}`;
+}
+
+const caseMeta = {};
+groups.forEach((group) => {
+  group.rows.forEach((row, index) => {
+    caseMeta[idFor(group, index)] = {
+      group: group.title,
+      priority: row[0],
+      precondition: row[1],
+      operation: row[2],
+      expected: row[3]
+    };
+  });
+});
+
+let saveTimer = 0;
+const saveState = document.getElementById("save-state");
+
+function esc(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function getRecord(id, field) {
+  return storage[id]?.[field] ?? "";
+}
+
+function priorityClass(p) {
+  return p === "P0" ? "p0" : p === "P1" ? "p1" : "p2";
+}
+
+function renderGroup(group) {
+  const host = document.getElementById(`${group.mount}-${group.mountIndex + 1}`);
+  if (!host) return;
+  const rows = group.rows.map((row, index) => {
+    const id = idFor(group, index);
+    const [priority, pre, operation, expected] = row;
+    const actual = getRecord(id, "actual");
+    const evidence = getRecord(id, "evidence");
+    const status = getRecord(id, "status") || "todo";
+    const options = STATUS_OPTIONS.map(([value, label]) =>
+      `<option value="${value}" ${value === status ? "selected" : ""}>${label}</option>`
+    ).join("");
+    return `<tr data-id="${id}" data-status="${status}">
+      <td class="case-id">${id}</td>
+      <td><span class="priority ${priorityClass(priority)}">${priority}</span></td>
+      <td>${esc(pre)}</td>
+      <td>${esc(operation)}</td>
+      <td>${esc(expected)}</td>
+      <td class="result-col"><textarea data-id="${id}" data-field="actual" placeholder="填写实际结果、错误、请求 ID 等">${esc(actual)}</textarea></td>
+      <td class="evidence-col"><textarea data-id="${id}" data-field="evidence" placeholder="截图/日志/HAR/JSON 文件名或路径">${esc(evidence)}</textarea></td>
+      <td class="status-col"><select data-id="${id}" data-field="status">${options}</select></td>
+    </tr>`;
+  }).join("");
+  const section = document.createElement("section");
+  section.innerHTML = `<h3>${esc(group.title)}</h3>
+    <div class="table-wrap"><table>
+      <thead><tr>
+        <th>编号</th><th>P</th><th>前置条件</th><th>操作 / 请求</th><th>预期</th>
+        <th>实际结果</th><th>证据</th><th>状态</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+  host.appendChild(section);
+}
+
+groups.forEach(renderGroup);
+
+function allRows() {
+  return [...document.querySelectorAll("tr[data-id]")];
+}
+
+function updateCompletion() {
+  const rows = allRows();
+  const counts = { pass: 0, fail: 0, block: 0, skip: 0, todo: 0 };
+  rows.forEach((row) => {
+    const status = row.dataset.status || "todo";
+    counts[status] = (counts[status] || 0) + 1;
+  });
+  const done = counts.pass + counts.fail + counts.block + counts.skip;
+  document.getElementById("completion").textContent =
+    `共 ${rows.length} 项 · 已记录 ${done} · 通过 ${counts.pass} · 失败 ${counts.fail} · 阻塞 ${counts.block} · 跳过 ${counts.skip}`;
+}
+
+function writeLocal(showSaved = false) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(storage));
+    if (showSaved) saveState.textContent = `已保存 ${new Date().toLocaleTimeString()}`;
+  } catch {
+    saveState.textContent = "浏览器存储不可用，请立即导出 JSON";
+  }
+}
+
+function queueSave() {
+  window.clearTimeout(saveTimer);
+  saveTimer = window.setTimeout(() => writeLocal(true), 250);
+}
+
+document.addEventListener("input", (event) => {
+  const el = event.target;
+  if (!el.matches("textarea[data-id], input[data-id], select[data-id]")) return;
+  const id = el.dataset.id;
+  const field = el.dataset.field;
+  storage[id] ||= {};
+  storage[id][field] = el.value;
+  if (field === "status") {
+    const row = el.closest("tr");
+    row.dataset.status = el.value;
+    row.className = `status-${el.value}`;
+    updateCompletion();
+  }
+  queueSave();
+});
+
+document.addEventListener("change", (event) => {
+  if (event.target.matches("select[data-id]")) {
+    event.target.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+});
+
+function collectRecords() {
+  const records = {};
+  allRows().forEach((row) => {
+    const id = row.dataset.id;
+    const status = row.querySelector("select[data-field='status']");
+    const actual = row.querySelector("textarea[data-field='actual']");
+    const evidence = row.querySelector("textarea[data-field='evidence']");
+    records[id] = {
+      ...caseMeta[id],
+      status: status?.value || "todo",
+      actual: actual?.value || "",
+      evidence: evidence?.value || ""
+    };
+  });
+  return records;
+}
+
+function download(filename, content, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById("export-json").addEventListener("click", () => {
+  const data = {
+    schema: "comfybridge-web-test-record/v1",
+    plan: "ComfyBridge-过程-全量Web测试计划-20261018.html",
+    exported_at: new Date().toISOString(),
+    baseline: "main@924a49e",
+    scope: "web-only; excludes packaged desktop application",
+    run: {
+      executor: "",
+      machine: "",
+      browser: "",
+      backend_commit: "",
+      modal_budget_usd: null,
+      notes: ""
+    },
+    records: collectRecords()
+  };
+  download(`comfybridge-web-test-record-${new Date().toISOString().replaceAll(":", "-")}.json`,
+    JSON.stringify(data, null, 2), "application/json;charset=utf-8");
+});
+
+document.getElementById("export-csv").addEventListener("click", () => {
+  const rows = [["ID", "状态", "实际结果", "证据"]];
+  allRows().forEach((row) => {
+    const id = row.dataset.id;
+    const rec = collectRecords()[id];
+    rows.push([id, rec.status, rec.actual, rec.evidence]);
+  });
+  const csv = "\uFEFF" + rows.map((line) =>
+    line.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")
+  ).join("\r\n");
+  download(`comfybridge-web-test-record-${new Date().toISOString().slice(0,10)}.csv`,
+    csv, "text/csv;charset=utf-8");
+});
+
+document.getElementById("import-json").addEventListener("click", () => {
+  document.getElementById("import-file").click();
+});
+
+document.getElementById("import-file").addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    const parsed = JSON.parse(await file.text());
+    if (!parsed.records || typeof parsed.records !== "object") throw new Error("缺少 records");
+    storage = parsed.records;
+    writeLocal(true);
+    allRows().forEach((row) => {
+      const id = row.dataset.id;
+      const rec = storage[id] || {};
+      const actual = row.querySelector("textarea[data-field='actual']");
+      const evidence = row.querySelector("textarea[data-field='evidence']");
+      const status = row.querySelector("select[data-field='status']");
+      if (actual) actual.value = rec.actual || "";
+      if (evidence) evidence.value = rec.evidence || "";
+      if (status) status.value = rec.status || "todo";
+      row.dataset.status = rec.status || "todo";
+      row.className = `status-${rec.status || "todo"}`;
+    });
+    updateCompletion();
+    saveState.textContent = `已导入 ${file.name}`;
+  } catch (error) {
+    alert(`导入失败：${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    event.target.value = "";
+  }
+});
+
+document.getElementById("clear-records").addEventListener("click", () => {
+  if (!confirm("仅清空当前浏览器里的实际结果、证据和状态；不影响项目文件。继续？")) return;
+  storage = {};
+  writeLocal(true);
+  allRows().forEach((row) => {
+    row.querySelectorAll("textarea").forEach((el) => { el.value = ""; });
+    const status = row.querySelector("select");
+    if (status) status.value = "todo";
+    row.dataset.status = "todo";
+    row.className = "status-todo";
+  });
+  updateCompletion();
+});
+
+document.getElementById("print-page").addEventListener("click", () => window.print());
+
+allRows().forEach((row) => { row.className = `status-${row.dataset.status}`; });
+updateCompletion();
+</script>
+</body>
+</html>

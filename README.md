@@ -31,11 +31,11 @@ scripts/       dev.ps1 / build.ps1
 ```powershell
 # 后端（首次：uv sync 安装依赖）
 cd backend
-uv run uvicorn app.main:app --reload --port 8189
+uv run uvicorn app.main:app --reload --port 18189
 
 # 前端（另开终端，首次：pnpm install；需 Node ≥ 18 且 node.exe 在 PATH）
 cd frontend
-pnpm dev          # http://127.0.0.1:5173，/api 代理到 8189
+pnpm dev          # http://127.0.0.1:15173，/api 代理到 18189
 
 # 或一键并行启动
 powershell -File scripts/dev.ps1
@@ -47,8 +47,11 @@ Node 环境排查：管理台「设置 → 本地」的 Node.js 环境卡片可�
 （配置项 `~/.comfybridge/config.toml` 的 `[local].node_path`）。
 
 后端配置：复制 `backend/config.example.toml` 到 `~/.comfybridge/config.toml` 按需修改。
-管理台入口 `http://127.0.0.1:5173`；出图走桥接地址 `http://127.0.0.1:8189`
-（浏览器指向 :8189 即透明使用本地 ComfyUI，生成请求经拦截层按路由规则分流本地/云端）。
+管理台入口 `http://127.0.0.1:15173`；出图走桥接地址 `http://127.0.0.1:18189`
+（浏览器指向 :18189 即透明使用本地 ComfyUI，生成请求经拦截层按路由规则分流本地/云端）。
+端口约定：本地 ComfyUI 保持默认 `8188`；ComfyBridge 生产/桌面端口为 `18189`，
+桌面模式默认端口被占用时自动尝试 `18190-18193`（显式 `--port` 不回退）；开发 Vite 为
+`15173`；离线 E2E 为 `18199`。
 
 ## 部署（Modal 云端 Runner）
 
@@ -74,7 +77,7 @@ uv run python scripts/build_package.py   # 前端嵌入构建 → modal-runner �
 
 ```powershell
 pipx install backend/dist/comfy_bridge-0.1.0-py3-none-any.whl
-comfy-bridge --port 8189   # 控制台 http://127.0.0.1:8189/bridge/
+comfy-bridge --port 18189  # 控制台 http://127.0.0.1:18189/bridge/
 ```
 
 - 管理面 GUI 挂在 `/bridge`（SPA 回退）；`/` 与其余路径仍是本地 ComfyUI 数据面透传，**出图地址不变**。
@@ -136,7 +139,7 @@ pnpm exec playwright test
 ```powershell
 # 方式一：环境变量
 $env:CB_MANAGEMENT_TOKEN = "<随机长令牌>"
-comfy-bridge --host 0.0.0.0 --port 8189
+comfy-bridge --host 0.0.0.0 --port 18189
 
 # 方式二：写入用户配置目录（默认 ~/.comfybridge/management_token）
 Set-Content -Path "$HOME\.comfybridge\management_token" -Value "<随机长令牌>" -NoNewline

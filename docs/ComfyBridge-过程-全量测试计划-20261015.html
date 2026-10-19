@@ -194,7 +194,7 @@
     <tr><td>API-15</td><td><span class="tag p1">P1</span></td><td><code>PUT /cost/budget</code></td><td><code>{"monthly_budget_usd":1.5,"on_budget_exceed":"reject","gpu_hourly_rate_usd":null}</code>，复核后还原</td><td>200；GET 复核持久化；非法 <code>on_budget_exceed</code> 值 422</td></tr>
     <tr><td>API-16</td><td><span class="tag p0">P0</span></td><td><code>GET /cost/report</code></td><td><code>?by=workflow&amp;days=30&amp;limit=50</code>；再试 <code>by=model</code>、<code>days=7/90</code></td><td>200；次数、成功失败、GPU 秒、估算成本字段一致；非法 by 值 422</td></tr>
     <tr><td>API-17</td><td><span class="tag p1">P1</span></td><td><code>GET /cost/reconciliation</code></td><td><code>?cycle=2026-10</code></td><td>200；对账行与 Modal 账单口径一致（取数时间差需留痕说明）</td></tr>
-    <tr><td>API-18</td><td><span class="tag p1">P1</span></td><td><code>GET /cost/export</code></td><td><code>?scope=report&amp;days=30</code> 浏览器直接下载</td><td>200；CSV 含中文表头与流水行；文件可正常打开</td></tr>
+    <tr><td>API-18</td><td><span class="tag p1">P1</span></td><td><code>GET /cost/export</code></td><td><code>?scope=entries&amp;days=30</code> 浏览器直接下载；再验 <code>workflow/model</code></td><td>200；CSV 含中文表头与对应维度行；文件可正常打开；非法 scope 返回 422</td></tr>
   </tbody>
 </table>
 

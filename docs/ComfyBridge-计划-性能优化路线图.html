@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyBridge · 性能优化路线图</title>
+<style>
+  :root {
+    --bg: #f6f7fb;
+    --card: #ffffff;
+    --ink: #1f2430;
+    --ink-soft: #5a6272;
+    --line: #e4e7ef;
+    --accent: #4f5be8;
+    --accent-soft: #eef0fe;
+    --code-bg: #14161f;
+    --code-ink: #e6e9f2;
+    --ok: #1a9e6c;
+    --warn: #b06a10;
+    --bad: #c0392b;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 70px; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    line-height: 1.72;
+    font-size: 15px;
+  }
+  code, pre {
+    font-family: "JetBrains Mono", Consolas, "Cascadia Code", monospace;
+  }
+  header.hero {
+    background: linear-gradient(135deg, #232a63 0%, #4f5be8 55%, #8a7bff 100%);
+    color: #fff;
+    padding: 34px 24px 26px;
+    text-align: center;
+  }
+  header.hero h1 { margin: 0 0 10px; font-size: 25px; letter-spacing: 1px; }
+  header.hero p { margin: 4px 0; opacity: .92; font-size: 14px; }
+  header.hero .meta { font-size: 12.5px; opacity: .8; margin-top: 10px; }
+  nav.toc {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: rgba(255,255,255,.95);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--line);
+    padding: 9px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    justify-content: center;
+    font-size: 13.5px;
+  }
+  nav.toc a { color: var(--ink-soft); text-decoration: none; padding: 3px 8px; border-radius: 6px; }
+  nav.toc a:hover { color: var(--accent); background: var(--accent-soft); }
+  main { max-width: 1040px; margin: 0 auto; padding: 26px 20px 50px; }
+  section { margin-bottom: 44px; }
+  h2 { font-size: 20px; margin: 0 0 14px; padding-left: 12px; border-left: 4px solid var(--accent); }
+  h3 { font-size: 16.5px; margin: 22px 0 8px; }
+  h4 { font-size: 14.5px; margin: 16px 0 6px; color: #4353d8; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 26px; }
+  li { margin: 4px 0; }
+  blockquote {
+    margin: 12px 0;
+    padding: 10px 16px;
+    background: var(--accent-soft);
+    border-left: 4px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    color: #3a4160;
+  }
+  pre {
+    position: relative;
+    background: var(--code-bg);
+    color: var(--code-ink);
+    border-radius: 10px;
+    padding: 13px 16px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  pre .cm { color: #7c86a8; }
+  code { background: #f0f2fa; color: #33398f; padding: 1.5px 6px; border-radius: 5px; font-size: 13px; }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  table { width: 100%; border-collapse: collapse; background: var(--card); font-size: 13.5px; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  thead th { background: var(--accent-soft); color: #4353d8; font-weight: 600; }
+  tbody tr:nth-child(even) { background: #fafbfe; }
+  .badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: #4353d8; white-space: nowrap; }
+  .badge.ok { background: #e5f6ef; color: var(--ok); }
+  .badge.warn { background: #fdf1e2; color: var(--warn); }
+  .badge.bad { background: #fdeaea; color: var(--bad); }
+  .footer { text-align: center; color: var(--ink-soft); font-size: 12.5px; padding: 18px; border-top: 1px solid var(--line); }
+  a { color: var(--accent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .metric { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+  .metric strong { display: block; font-size: 14px; margin-bottom: 4px; }
+  .metric .value { color: var(--ink-soft); font-size: 13.5px; }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>ComfyBridge 性能优化路线图</h1>
+  <p>桌面启动 · 交互响应 · 云端受理 · 资源占用 · 发布门禁</p>
+  <div class="meta">适用版本：v0.1.0-beta.3 及后续 · 编写日期：2026-10-17</div>
+</header>
+
+<nav class="toc">
+  <a href="#s1">1 目标与范围</a>
+  <a href="#s2">2 性能预算</a>
+  <a href="#s3">3 度量体系</a>
+  <a href="#s4">4 优先级路线</a>
+  <a href="#s5">5 桌面启动</a>
+  <a href="#s6">6 交互响应</a>
+  <a href="#s7">7 云端受理链路</a>
+  <a href="#s8">8 资源与稳定性</a>
+  <a href="#s9">9 测试与 CI 门禁</a>
+  <a href="#s10">10 风险与对策</a>
+  <a href="#s11">11 执行顺序</a>
+</nav>
+
+<main>
+
+<section id="s1">
+  <h2>1 目标与范围</h2>
+  <p>本计划把性能优化从“感觉更快”落为可测量、可复现、可验收的工程项。范围覆盖 ComfyBridge 桌面启动、管理台交互、请求受理、云端接力、资源占用与发布门禁，不覆盖 Modal 云端 GPU 的绝对执行时间和 ComfyUI 本体渲染耗时。</p>
+  <div class="grid">
+    <div class="metric"><strong>用户目标</strong><span class="value">双击后快速出窗口，页面操作无卡顿，提交云端不阻塞。</span></div>
+    <div class="metric"><strong>系统目标</strong><span class="value">受理链路 p95 < 500ms，审计不拖慢主路径，空闲资源稳定。</span></div>
+    <div class="metric"><strong>工程目标</strong><span class="value">性能数据可采集、可对比、可进 CI，不允许只靠肉眼判断。</span></div>
+  </div>
+  <h3>1.1 明确不做的优化</h3>
+  <ul>
+    <li>不为了压启动时间移除依赖完整性检查。</li>
+    <li>不在后台默默常驻 Modal 容器，以避免无成本提示的资源占用。</li>
+    <li>不用同步阻塞调用换“更快看起来完成”的假象。</li>
+    <li>不在本地做真实生图性能基准，云端生图一律走 Modal。</li>
+  </ul>
+</section>
+
+<section id="s2">
+  <h2>2 性能预算</h2>
+  <p>以下预算分为“已存在门禁”与“首版预算”。首版预算用于 beta.4 建立基线，允许在真实数据采集后调整一次，但不允许无记录地反复放宽。</p>
+  <table>
+    <thead><tr><th style="width:24%">指标</th><th style="width:22%">预算</th><th style="width:16%">状态</th><th>口径</th></tr></thead>
+    <tbody>
+      <tr><td>桌面冷启动</td><td>双击到窗口可交互 < 3.0s</td><td><span class="badge warn">首版预算</span></td><td>本机冷缓存，含后端 ready 与首屏渲染</td></tr>
+      <tr><td>桌面热启动</td><td>双击到窗口可交互 < 1.5s</td><td><span class="badge warn">首版预算</span></td><td>同一机器连续启动，排除磁盘冷读</td></tr>
+      <tr><td>窗口关闭清理</td><td>进程树与端口释放 < 1.0s</td><td><span class="badge warn">首版预算</span></td><td>关闭窗口后轮询进程与端口</td></tr>
+      <tr><td>管理台页面切换</td><td>路由切换 < 300ms，无长任务阻塞</td><td><span class="badge warn">首版预算</span></td><td>Playwright trace 采集</td></tr>
+      <tr><td>云端提交受理</td><td>p95 < 500ms</td><td><span class="badge ok">已有门禁</span></td><td>现有 P-08 基准</td></tr>
+      <tr><td>审计写入影响</td><td>开/关 p95 差值 < 20ms</td><td><span class="badge ok">已有门禁</span></td><td>现有 P-06 基准</td></tr>
+      <tr><td>空闲 CPU</td><td>管理台停留 5 分钟后 CPU < 3%</td><td><span class="badge warn">首版预算</span></td><td>连续采样</td></tr>
+      <tr><td>空闲内存</td><td>桌面应用整树 RSS < 350MB</td><td><span class="badge warn">首版预算</span></td><td>Python + WebView2 + 启动器合计</td></tr>
+    </tbody>
+  </table>
+  <blockquote><p>预算不是产品承诺，而是回归门禁。若实际机器达不到，需要先区分“机器基线差异”与“代码回归”，再调整预算。</p></blockquote>
+</section>
+
+<section id="s3">
+  <h2>3 度量体系</h2>
+  <h3>3.1 度量面</h3>
+  <table>
+    <thead><tr><th>层级</th><th>指标</th><th>工具</th><th>用途</th></tr></thead>
+    <tbody>
+      <tr><td>桌面启动</td><td>启动阶段耗时、进程树状态、端口 ready、窗口可交互</td><td>PowerShell、WPF/Win32 采样、Playwright</td><td>定位冷启动瓶颈</td></tr>
+      <tr><td>前端交互</td><td>路由切换、首屏加载、长任务、重复请求、内存</td><td>Playwright trace、浏览器 Performance</td><td>识别渲染与请求问题</td></tr>
+      <tr><td>后端受理</td><td>请求耗时、p50/p95、队列长度、线程占用</td><td>FastAPI 中间件、pytest、统计脚本</td><td>识别主链路阻塞</td></tr>
+      <tr><td>持久化</td><td>SQLite 查询耗时、审计写延迟、磁盘 I/O</td><td>pytest、trace、磁盘计数器</td><td>防止日志拖慢业务</td></tr>
+      <tr><td>云端链路</td><td>预热、受理、回传、重试</td><td>既有 live 冒烟</td><td>确认云端等待可见、终态可靠</td></tr>
+      <tr><td>资源占用</td><td>CPU、RSS、句柄、端口、线程</td><td>进程采样脚本</td><td>发现泄漏与失控轮询</td></tr>
+    </tbody>
+  </table>
+  <h3>3.2 采集原则</h3>
+  <ul>
+    <li>同一指标至少跑三次，报告 p50、p95，不使用单次最优值。</li>
+    <li>冷启动与热启动分开统计，不混在一起。</li>
+    <li>开发机、CI、发布机分别建立基线，避免用 CI 绝对值判断本机体验。</li>
+    <li>每次优化前后都保留同一套环境数据，形成对比记录。</li>
+    <li>性能数据只入 `docs/` 或测试报告，不把用户私有工作流带入仓库。</li>
+  </ul>
+</section>
+
+<section id="s4">
+  <h2>4 优先级路线</h2>
+  <table>
+    <thead><tr><th style="width:14%">优先级</th><th style="width:26%">主题</th><th>交付物</th><th>验收</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge bad">P0</span></td><td>建立性能基线</td><td>启动、首屏、受理、空闲资源四套采样脚本</td><td>能输出固定格式报告，进 beta.4 验收</td></tr>
+      <tr><td><span class="badge bad">P0</span></td><td>性能 CI 门禁</td><td>现有 P-06/P-08 进 CI，新增启动与资源检查</td><td>CI 有明确阈值，不是仅打印</td></tr>
+      <tr><td><span class="badge warn">P1</span></td><td>桌面启动优化</td><td>后端预启动、窗口预加载、依赖懒加载</td><td>冷/热启动达到预算</td></tr>
+      <tr><td><span class="badge warn">P1</span></td><td>交互响应优化</td><td>路由级代码分割、虚拟列表、请求去重</td><td>页面切换预算达标</td></tr>
+      <tr><td><span class="badge warn">P1</span></td><td>云端受理优化</td><td>预检缓存、异步审计、连接复用</td><td>受理 p95 稳定 < 500ms</td></tr>
+      <tr><td><span class="badge">P2</span></td><td>资源占用优化</td><td>空闲轮询降频、后台任务限流、进程清理</td><td>空闲 CPU/RSS 达预算</td></tr>
+      <tr><td><span class="badge">P3</span></td><td>长期性能治理</td><td>性能预算文档、回归报警、发布报告</td><td>每次发布附性能对比</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s5">
+  <h2>5 桌面启动</h2>
+  <h3>5.1 现状</h3>
+  <p>桌面启动器已实现 Tauri 窗口、内置 Python 后端、端口探测与进程树清理。当前短板是缺少标准化启动耗时数据，也未区分冷启动、热启动和后台依赖初始化。</p>
+  <h3>5.2 优化项</h3>
+  <ol>
+    <li>埋启动阶段日志：进程启动、runtime 检查、后端 spawn、端口 ready、窗口创建、页面加载完成。</li>
+    <li>并行化初始化：`inspect_bundle()` 与 `desktop_listen()` 可并行，避免串行文件探测。</li>
+    <li>窗口骨架先显示：创建窗口时先展示加载骨架，再等待后端 ready 后恢复页面。</li>
+    <li>后端启动阶段瘦身：拆分必须同步导入与可异步导入模块，降低 `python -m app.cli` 初始 CPU。</li>
+    <li>静态资源预热：Tauri 窗口启动后立刻预取 `/bridge/` 主资源，避免窗口空白等待。</li>
+    <li>失败路径提效：端口占用、runtime 缺失时直接弹窗，不等待超时。</li>
+  </ol>
+  <h3>5.3 验收</h3>
+  <ul>
+    <li>同一机器 3 次冷启动均满足冷启动预算。</li>
+    <li>同一机器 3 次热启动均满足热启动预算。</li>
+    <li>启动失败路径不出现窗口空白或控制台窗口。</li>
+    <li>关闭窗口后端口与进程树释放时间满足预算。</li>
+  </ul>
+</section>
+
+<section id="s6">
+  <h2>6 交互响应</h2>
+  <h3>6.1 现状</h3>
+  <p>管理台已具备完整页面与任务抽屉，但页面数量多、轮询和数据聚合多，缺少统一的长任务与重复请求观测。</p>
+  <h3>6.2 优化项</h3>
+  <ol>
+    <li>建立页面切换基准：记录每个菜单的导航耗时、请求瀑布、主线程长任务。</li>
+    <li>路由级代码分割：按页面拆 chunk，减少首屏 JS 体积。</li>
+    <li>列表虚拟化：日志、媒体库、模型卷等长列表改虚拟滚动。</li>
+    <li>轮询治理：按页面可见性降频，不可见页面停止刷新。</li>
+    <li>请求去重：同一数据在短期内只允许一个在途请求，后续复用结果。</li>
+    <li>表格渲染优化：复杂表格做列级 memo，避免整表重渲。</li>
+    <li>加载态分级：数据未就绪时展示结构化骨架，不阻塞整个页面。</li>
+  </ol>
+  <h3>6.3 验收</h3>
+  <ul>
+    <li>所有主页面切换满足预算。</li>
+    <li>同一页面 5 分钟内不出现 CPU 空转。</li>
+    <li>长列表滚动无明显掉帧，交互期间主线程无连续阻塞任务。</li>
+    <li>Playwright trace 中没有重复且无必要的串行请求。</li>
+  </ul>
+</section>
+
+<section id="s7">
+  <h2>7 云端受理链路</h2>
+  <h3>7.1 现状</h3>
+  <p>已有 `P-08` 云端提交受理基准，目标 p95 < 500ms。当前重点是守住这条门禁，并把“受理”与“云端执行等待”分开统计。</p>
+  <h3>7.2 优化项</h3>
+  <ol>
+    <li>受理链路分段打点：规则匹配、预检、落库、派发、应答。</li>
+    <li>缓存节点与模型在场结果，避免每次请求重新扫描。</li>
+    <li>审计写、请求日志、图快照全异步化，不占主路径。</li>
+    <li>连接池复用：HTTP、WS、Modal 客户端统一连接生命周期。</li>
+    <li>输入文件预上传改为并行分块，只在确实缺失时触发。</li>
+    <li>预检失败降级路径明确，不因网络抖动阻塞提交。</li>
+    <li>云端等待状态可取消，UI 显示等待阶段而不是静默。</li>
+  </ol>
+  <h3>7.3 验收</h3>
+  <ul>
+    <li>受理 p95 保持 < 500ms，p99 不超过 1s。</li>
+    <li>同一输入在缓存有效期内不重复扫描。</li>
+    <li>审计开关对受理 p95 差值 < 20ms。</li>
+    <li>云端请求终态与产物回传路径不受性能优化影响。</li>
+  </ul>
+</section>
+
+<section id="s8">
+  <h2>8 资源与稳定性</h2>
+  <h3>8.1 优化项</h3>
+  <ol>
+    <li>空闲轮询降频：页面不可见、任务无变化时减少网络请求。</li>
+    <li>后台任务限流：同一类任务使用单飞和队列，避免重复执行。</li>
+    <li>日志写入合并：批量提交 SQLite 和审计写，降低 fsync 频率。</li>
+    <li>缓存失效精细化：配置、节点、模型、状态各自独立失效。</li>
+    <li>连接生命周期治理：避免短周期创建与销毁 HTTP/WS 客户端。</li>
+    <li>进程树资源审计：定期检查线程数、句柄数、内存增长。</li>
+  </ol>
+  <h3>8.2 验收</h3>
+  <ul>
+    <li>桌面应用空闲 CPU 与 RSS 达预算。</li>
+    <li>连续运行 30 分钟无句柄泄漏和端口残留。</li>
+    <li>日志量增长不导致受理延迟线性上升。</li>
+    <li>关闭窗口后 Python 进程树全部退出，无孤儿进程。</li>
+  </ul>
+</section>
+
+<section id="s9">
+  <h2>9 测试与 CI 门禁</h2>
+  <h3>9.1 本地命令</h3>
+  <pre><code>cd backend
+uv run pytest tests/perf/test_p06_audit_latency.py tests/perf/test_p08_cloud_submit_latency.py -q
+
+cd ../frontend
+pnpm exec playwright test --trace on
+</code></pre>
+  <h3>9.2 建议新增</h3>
+  <table>
+    <thead><tr><th>测试</th><th>类型</th><th>门禁</th></tr></thead>
+    <tbody>
+      <tr><td>启动阶段耗时</td><td>桌面专项</td><td>冷启动 / 热启动预算</td></tr>
+      <tr><td>首屏可交互</td><td>Playwright</td><td>页面路由预算</td></tr>
+      <tr><td>空闲资源</td><td>进程采样</td><td>CPU / RSS 预算</td></tr>
+      <tr><td>关闭清理</td><td>桌面专项</td><td>进程树与端口释放时间</td></tr>
+      <tr><td>云端受理</td><td>既有 P-08</td><td>p95 < 500ms</td></tr>
+      <tr><td>审计影响</td><td>既有 P-06</td><td>p95 差值 < 20ms</td></tr>
+    </tbody>
+  </table>
+  <h3>9.3 CI 策略</h3>
+  <ul>
+    <li>性能阈值必须进 CI，不能只在文档中说明。</li>
+    <li>CI 的绝对耗时允许与本机不同，但回归比较必须有固定环境。</li>
+    <li>性能测试失败与功能测试失败同等阻塞合并。</li>
+    <li>每次发布前输出一份“性能基线对比表”。</li>
+  </ul>
+</section>
+
+<section id="s10">
+  <h2>10 风险与对策</h2>
+  <table>
+    <thead><tr><th style="width:24%">风险</th><th style="width:14%">等级</th><th>对策</th></tr></thead>
+    <tbody>
+      <tr><td>优化启动时误削弱完整性检查</td><td><span class="badge bad">高</span></td><td>启动阶段仍强制检查 runtime、GUI 和应用包，只优化顺序与并行度</td></tr>
+      <tr><td>页面拆分导致懒加载抖动</td><td><span class="badge warn">中</span></td><td>主页面预加载，非关键页面懒加载</td></tr>
+      <tr><td>异步审计丢日志</td><td><span class="badge bad">高</span></td><td>异步队列必须有失败重试与关闭前 flush</td></tr>
+      <tr><td>缓存导致路由决策过期</td><td><span class="badge bad">高</span></td><td>所有缓存必须有明确 TTL、失效事件与强制刷新入口</td></tr>
+      <tr><td>CI 抖动造成误报</td><td><span class="badge warn">中</span></td><td>采用相对阈值与多轮采样，必要时允许 retry</td></tr>
+      <tr><td>长列表虚拟化破坏语义</td><td><span class="badge warn">中</span></td><td>保留筛选、分页与操作状态测试，先在日志页试点</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s11">
+  <h2>11 执行顺序</h2>
+  <ol>
+    <li>建立启动、首屏、受理、空闲资源四类基线数据。</li>
+    <li>把 P-06、P-08 与新增性能检查接入 CI。</li>
+    <li>优先优化桌面启动与页面切换。</li>
+    <li>再做受理链路分段与异步化。</li>
+    <li>最后做资源占用与长期运行治理。</li>
+    <li>每次发版前输出性能对比报告，并同步更新本文预算与结论。</li>
+  </ol>
+</section>
+
+</main>
+
+<footer class="footer">ComfyBridge 性能优化路线图 · 2026-10-17 · 随 beta.4 及后续版本滚动修订</footer>
+</body>
+</html>
