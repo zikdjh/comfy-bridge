@@ -56,6 +56,20 @@ export function useConfig() {
   });
 }
 
+export interface UpdateCheckResp {
+  available: boolean;
+  current: string | null;
+  latest: string | null;
+  release_url: string;
+  reason: string;
+  checked_at: number | null;
+  cached?: boolean;
+}
+
+export async function checkUpdate(force = false) {
+  return apiGet<UpdateCheckResp>(`/api/v1/config/update-check${force ? "?force=1" : ""}`);
+}
+
 export function useSaveConfig() {
   const qc = useQueryClient();
   return async (body: {

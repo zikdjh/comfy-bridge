@@ -17,7 +17,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ValidationError
 
-from ...core import audit, comfy_scan
+from ...core import audit, comfy_scan, update_check
 from ...core.config import (
     CONFIG_PATH,
     AccountProfile,
@@ -510,6 +510,15 @@ async def validate_comfy_root(body: ValidateComfyBody) -> dict:
     if not Path(raw).is_absolute():
         raise HTTPException(status_code=422, detail=f"请填写绝对路径: {raw!r}")
     return comfy_scan.inspect_root(raw)
+
+
+@router.get("/update-check")
+async def get_update_check(force: bool = False) -> dict:
+    """整合包更新检查：启动时自动调用（24h 节流）；设置页手动检查带 force=1 强制真查。
+
+    未打包运行（无 version.txt）返回 not_packaged，前端据此不展示横幅。
+    """
+    return await update_check.check_update(force=force)
 
 
 @router.get("/scan-comfy")

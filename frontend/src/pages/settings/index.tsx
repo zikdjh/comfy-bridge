@@ -10,6 +10,7 @@ import { ComfyScanModal } from "./ComfyScanModal";
 import { SettingsSyncTab } from "./SettingsSyncTab";
 import { ConfigWizard } from "./ConfigWizard";
 import AccountProfilesCard from "./AccountProfilesCard";
+import { UpdateCheckCard } from "./UpdateCheckCard";
 
 export default function SettingsPage() {
   const { data: config, isLoading } = useConfig();
@@ -632,6 +633,11 @@ export default function SettingsPage() {
             key: "sync",
             label: "设置同步",
             children: <SettingsSyncTab />,
+          },
+          {
+            key: "update",
+            label: "检查更新",
+            children: <UpdateCheckCard />,
           },
         ]}
       />

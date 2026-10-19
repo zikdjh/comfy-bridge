@@ -185,6 +185,18 @@ def usage_text(version: str) -> str:
 """
 
 
+def bundle_version() -> str:
+    """整合包版本号：git describe（如 v0.1.0-beta.4），写包根 version.txt 供更新检查。"""
+    try:
+        out = subprocess.run(
+            ["git", "describe", "--tags", "--exact-match"],
+            cwd=REPO, capture_output=True, text=True, check=True,
+        )
+        return out.stdout.strip() or sys.exit("git describe 返回空版本号")
+    except subprocess.CalledProcessError:
+        sys.exit("当前 HEAD 未打 tag（先 git tag 再打包，version.txt 供启动时更新检查使用）")
+
+
 def smoke_check(python: Path) -> None:
     smoke = (
         "import fastapi, modal, uvicorn, httpx, websockets, pydantic; "
@@ -274,6 +286,9 @@ def main() -> None:
         if not built.is_file():
             sys.exit(f"cargo 产物缺失: {built}")
         shutil.copy2(built, stage / exe_name)
+
+        # 包根版本号（git tag），启动时更新检查与 --doctor 显示用
+        (stage / "version.txt").write_text(bundle_version(), encoding="ascii")
 
         (stage / "使用说明.txt").write_text(usage_text(version), encoding="utf-8-sig")
 

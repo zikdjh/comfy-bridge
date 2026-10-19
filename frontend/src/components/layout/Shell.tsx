@@ -25,6 +25,7 @@ import { JobDrawer } from "../common/JobDrawer";
 import { JOB_DRAWER_EVENT, useJobs, type JobsSnapshot, type SyncJob } from "../../api/jobs";
 import { openBridgeEventStream } from "../../api/events";
 import { useQueryClient } from "@tanstack/react-query";
+import { UpdateBanner } from "./UpdateBanner";
 
 const { Sider, Header, Content } = Layout;
 
@@ -269,6 +270,7 @@ export function Shell() {
           </Space>
         </Header>
         <Content style={{ padding: 16 }}>
+          <UpdateBanner />
           {needSetup && !wizardDismissed && (
             <Alert
               type="warning"
