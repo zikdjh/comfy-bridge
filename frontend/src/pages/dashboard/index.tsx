@@ -5,6 +5,8 @@ import type { ColumnsType } from "antd/es/table";
 import { Link, useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
 import { BackendTag, type Backend } from "../../components/common/BackendTag";
+import { BigValue, StatCard } from "../../components/common/StatCard";
+import { PageHeader } from "../../components/common/PageHeader";
 import type { TrendPoint } from "../../components/common/TrendChart";
 import type { CostPoint } from "../../components/common/CostChart";
 import { useHealth, warmupModal } from "../../api/health";
@@ -12,6 +14,7 @@ import { useModalContainers } from "../../api/launch";
 import { useRequests, type BridgeRequest, type RequestStatus } from "../../api/requests";
 import { useCostSummary, useUpdateBudget, type ModalBilling } from "../../api/cost";
 import { statusMeta } from "../logs/RequestLogPanel";
+import { bridgeTokens as t } from "../../theme";
 
 // 图表懒加载：echarts 体量大且只在数据就绪后渲染，骨架先出、图表随后补上
 const TrendChart = lazy(() => import("../../components/common/TrendChart").then((m) => ({ default: m.TrendChart })));
@@ -240,6 +243,8 @@ export default function DashboardPage() {
 
   return (
     <Space direction="vertical" size={12} style={{ width: "100%" }}>
+      <PageHeader title="仪表盘" sub="今日生成概览、通道状态与成本护栏" />
+
       {budget?.enabled && budget.exceeded && (
         <Alert
           type="warning"
@@ -267,42 +272,33 @@ export default function DashboardPage() {
 
       <Row gutter={[12, 12]}>
         <Col xs={24} sm={12} xl={6}>
-          <Card size="small">
-            <Statistic
-              title={<span><ThunderboltOutlined style={{ color: "#8a90a2" }} /> 今日生成</span>}
-              value={today.length}
-            />
-            <div style={{ color: "#8a90a2", fontSize: 12 }}>
-              本地 {todayLocal} · 云端 {todayModal}
-              {todayVideo > 0 && ` · 视频 ${todayVideo}`}
-            </div>
-          </Card>
+          <StatCard
+            icon={<ThunderboltOutlined />}
+            title="今日生成"
+            value={today.length}
+            footer={
+              <>
+                本地 {todayLocal} · 云端 {todayModal}
+                {todayVideo > 0 && ` · 视频 ${todayVideo}`}
+              </>
+            }
+          />
         </Col>
         <Col xs={24} sm={12} xl={6}>
-          <Card size="small">
-            <Statistic
-              title={<span><CheckCircleOutlined style={{ color: "#8a90a2" }} /> 今日成功率</span>}
-              valueRender={() => (
-                <span style={{ fontSize: 24, fontVariantNumeric: "tabular-nums" }}>{successRate == null ? "—" : `${successRate}%`}</span>
-              )}
-            />
-            <div style={{ color: "#8a90a2", fontSize: 12 }}>
-              {attempts > 0 ? `完成 ${done} · 失败 ${failed} · 中断 ${cancelled}` : "今日暂无完成的生成请求"}
-            </div>
-          </Card>
+          <StatCard
+            icon={<CheckCircleOutlined />}
+            title="今日成功率"
+            value={<BigValue>{successRate == null ? "—" : `${successRate}%`}</BigValue>}
+            footer={attempts > 0 ? `完成 ${done} · 失败 ${failed} · 中断 ${cancelled}` : "今日暂无完成的生成请求"}
+          />
         </Col>
         <Col xs={24} sm={12} xl={6}>
-          <Card size="small">
-            <Statistic
-              title={<span><ClockCircleOutlined style={{ color: "#8a90a2" }} /> 今日平均耗时</span>}
-              valueRender={() => (
-                <span style={{ fontSize: 24, fontVariantNumeric: "tabular-nums" }}>{avgAll == null ? "—" : `${(avgAll / 1000).toFixed(1)}s`}</span>
-              )}
-            />
-            <div style={{ color: "#8a90a2", fontSize: 12 }}>
-              本地 {avgLocal == null ? "—" : fmtSec(avgLocal)} · 云端 {avgModal == null ? "—" : fmtSec(avgModal)}
-            </div>
-          </Card>
+          <StatCard
+            icon={<ClockCircleOutlined />}
+            title="今日平均耗时"
+            value={<BigValue>{avgAll == null ? "—" : `${(avgAll / 1000).toFixed(1)}s`}</BigValue>}
+            footer={<>本地 {avgLocal == null ? "—" : fmtSec(avgLocal)} · 云端 {avgModal == null ? "—" : fmtSec(avgModal)}</>}
+          />
         </Col>
         <Col xs={24} sm={12} xl={6}>
           <Card size="small">
@@ -312,12 +308,12 @@ export default function DashboardPage() {
                 <Tooltip title={modal?.reason ?? "检测中…"}>
                   <Space size={6}>
                     <Badge status={health == null ? "default" : modal?.online ? "success" : "error"} />
-                    <span style={{ fontSize: 24, fontWeight: 600 }}>{health == null ? "…" : modal?.online ? "就绪" : "未就绪"}</span>
+                    <span style={{ fontSize: 24, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{health == null ? "…" : modal?.online ? "就绪" : "未就绪"}</span>
                   </Space>
                 </Tooltip>
               )}
             />
-            <div style={{ color: "#8a90a2", fontSize: 12, marginBottom: 8 }}>
+            <div style={{ color: t.colors.textSecondary, fontSize: 12, marginBottom: t.spacing.md }}>
               {modalStateText}
               {modal?.cloud_index_files != null && ` · 云端模型 ${modal.cloud_index_files} 项`}
               {containersLine}
@@ -349,7 +345,7 @@ export default function DashboardPage() {
                   <Space size={6} wrap>
                     <Tag color="green">{local.version ?? "未知版本"}</Tag>
                     <span>{local.gpu ?? "未知 GPU"}</span>
-                    <span style={{ color: "#8a90a2" }}>{local.latency_ms ?? "?"}ms</span>
+                    <span style={{ color: t.colors.textSecondary }}>{local.latency_ms ?? "?"}ms</span>
                   </Space>
                 ) : (
                   <Tooltip title={local?.error ?? "本地服务未启动"}>
@@ -358,7 +354,7 @@ export default function DashboardPage() {
                 )}
               </Descriptions.Item>
               <Descriptions.Item label="Modal Runner">
-                <Tooltip title={modal?.reason}>
+                <Tooltip title={modal?.reason ?? undefined}>
                   <Tag color={modal?.online ? "geekblue" : "default"}>{modal?.online ? "通道就绪" : "通道未就绪"}</Tag>
                 </Tooltip>
                 {modal?.web_url && (
@@ -373,7 +369,7 @@ export default function DashboardPage() {
                 </Typography.Text>
               </Descriptions.Item>
             </Descriptions>
-            <div style={{ color: "#8a90a2", fontSize: 12, marginTop: 8 }}>
+            <div style={{ color: t.colors.textSecondary, fontSize: 12, marginTop: t.spacing.md }}>
               经桥接 {health?.bridge?.url ?? "—"} 出图的请求都会被拦截路由：云端独占模型走 Modal L40S，其余留在本地。
             </div>
           </Card>
@@ -388,7 +384,7 @@ export default function DashboardPage() {
               <Space size={6}>
                 <span>额度与成本（云端估算，近 14 天）</span>
                 <Tooltip title={cost?.note}>
-                  <InfoCircleOutlined style={{ color: "#8a90a2" }} />
+                  <InfoCircleOutlined style={{ color: t.colors.textSecondary }} />
                 </Tooltip>
               </Space>
             }
@@ -406,7 +402,7 @@ export default function DashboardPage() {
             size="small"
             title={
               <span>
-                <DollarOutlined style={{ color: "#8a90a2", marginRight: 6 }} />
+                <DollarOutlined style={{ color: t.colors.textSecondary, marginRight: 6 }} />
                 本月额度
               </span>
             }
@@ -426,23 +422,23 @@ export default function DashboardPage() {
             <Statistic
               title="本月云端估算花费"
               valueRender={() => (
-                <span style={{ fontSize: 24, fontVariantNumeric: "tabular-nums" }}>
+                <BigValue>
                   ${(cost?.month.est_cost_usd ?? 0).toFixed(4)}
-                  <span style={{ fontSize: 13, color: "#8a90a2", marginLeft: 8 }}>
+                  <span style={{ fontSize: 13, color: t.colors.textSecondary, marginLeft: t.spacing.md }}>
                     今日 ${(cost?.today.est_cost_usd ?? 0).toFixed(4)}
                   </span>
-                </span>
+                </BigValue>
               )}
             />
-            <div style={{ color: "#8a90a2", fontSize: 12, margin: "4px 0 10px" }}>
+            <div style={{ color: t.colors.textSecondary, fontSize: 12, margin: `${t.spacing.xs}px 0 ${t.spacing.md}px` }}>
               本月云端 {(cost?.month.requests ?? 0)} 次 · GPU {(cost?.month.gpu_seconds ?? 0).toFixed(0)}s
               {" · "}{cost?.gpu_type ?? "L40S"} 单价 ${cost?.gpu_hourly_rate_usd?.toFixed(2) ?? "1.95"}/h
             </div>
             {cost?.modal && (cost.modal.ok ? (
-              <div style={{ borderTop: "1px dashed #e4e7ef", margin: "0 0 10px", paddingTop: 8, fontSize: 12 }}>
+              <div style={{ borderTop: `1px dashed ${t.colors.border}`, margin: `0 0 ${t.spacing.md}px`, paddingTop: t.spacing.md, fontSize: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                   <Tooltip title={modalBreakdownTip(cost.modal)}>
-                    <span style={{ color: "#8a90a2", borderBottom: "1px dotted #b9bfcf", cursor: "help" }}>
+                    <span style={{ color: t.colors.textSecondary, borderBottom: `1px dotted ${t.colors.textSecondary}`, cursor: "help" }}>
                       Modal 账单（{cost.modal.period_start} 起，UTC）
                     </span>
                   </Tooltip>
@@ -450,16 +446,16 @@ export default function DashboardPage() {
                     ${(cost.modal.metered_cost_usd ?? 0).toFixed(2)}
                   </b>
                 </div>
-                <div style={{ color: "#8a90a2", marginTop: 2 }}>
+                <div style={{ color: t.colors.textSecondary, marginTop: 2 }}>
                   积分抵扣 ${(cost.modal.credits_applied_usd ?? 0).toFixed(2)}
                   {" · "}实际计费 ${(cost.modal.billed_cost_usd ?? 0).toFixed(2)}
                   {(cost.modal.billed_cost_usd ?? 0) > 0 && (
-                    <span style={{ color: "#cf1322" }}> · 赠金/额度已耗尽</span>
+                    <span style={{ color: t.colors.danger }}> · 赠金/额度已耗尽</span>
                   )}
                 </div>
               </div>
             ) : (
-              <div style={{ color: "#8a90a2", fontSize: 12, margin: "0 0 10px" }}>
+              <div style={{ color: t.colors.textSecondary, fontSize: 12, margin: `0 0 ${t.spacing.md}px` }}>
                 Modal 账单暂不可获取：{cost.modal.error}
               </div>
             ))}
@@ -470,14 +466,14 @@ export default function DashboardPage() {
                   status={budget.exceeded ? "exception" : "normal"}
                   format={() => `$${budget.used_usd.toFixed(2)} / $${budget.monthly_usd.toFixed(2)}`}
                 />
-                <div style={{ color: "#8a90a2", fontSize: 12 }}>
+                <div style={{ color: t.colors.textSecondary, fontSize: 12 }}>
                   {budget.exceeded
                     ? "已超限：新云端请求将回落本地或拒绝（见顶部提示）"
                     : `剩余 $${budget.remaining_usd?.toFixed(2)} · 超限动作：${budget.on_exceed === "reject" ? "拒绝执行" : "回落本地"}`}
                 </div>
               </>
             ) : (
-              <div style={{ color: "#8a90a2", fontSize: 12 }}>
+              <div style={{ color: t.colors.textSecondary, fontSize: 12 }}>
                 未启用预算护栏 —— 点「设置」填写月度上限后，超限请求将自动回落本地或拒绝。
               </div>
             )}

@@ -40,6 +40,7 @@ import { openJobDrawer, useJob } from "../../api/jobs";
 import { warmupModal } from "../../api/health";
 import { EmptyGuide } from "../../components/common/EmptyGuide";
 import dayjs from "dayjs";
+import { bridgeTokens as t } from "../../theme";
 
 /* ---------------- 本地清单（真实数据） ---------------- */
 
@@ -221,11 +222,11 @@ function LocalInventory() {
 
 const statusCell = (ok: boolean, extra?: string) =>
   ok ? (
-    <span style={{ color: "#1a9e6c" }}>
+    <span style={{ color: t.colors.accent }}>
       <CheckCircleOutlined /> 已安装{extra ? <Typography.Text type="secondary"> {extra}</Typography.Text> : null}
     </span>
   ) : (
-    <span style={{ color: "#c0392b" }}>
+    <span style={{ color: t.colors.danger }}>
       <CloseCircleOutlined /> 缺失
     </span>
   );

@@ -1,11 +1,19 @@
 import { Tooltip } from "antd";
+import { bridgeTokens } from "../../theme";
 
 export interface GanttPhase {
   label: string;
   ms: number;
 }
 
-const COLORS = ["#4f5be8", "#7c86e8", "#1a9e6c", "#e8a23f", "#e8635a", "#8a7bff"];
+const COLORS = [
+  bridgeTokens.colors.primary,
+  bridgeTokens.colors.accentSoft,
+  bridgeTokens.colors.accent,
+  bridgeTokens.colors.accentWarm,
+  bridgeTokens.colors.accentRed,
+  bridgeTokens.colors.accentViolet,
+];
 
 function fmt(ms: number) {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
@@ -16,7 +24,7 @@ export function TimelineGantt({ phases }: { phases: GanttPhase[] }) {
   const total = phases.reduce((s, p) => s + p.ms, 0) || 1;
   return (
     <div>
-      <div style={{ display: "flex", height: 22, borderRadius: 6, overflow: "hidden", background: "#f0f2fa" }}>
+      <div style={{ display: "flex", height: 22, borderRadius: 6, overflow: "hidden", background: bridgeTokens.colors.surfaceSoft }}>
         {phases.map((p, i) => (
           <Tooltip key={p.label} title={`${p.label} · ${fmt(p.ms)}`}>
             <div
@@ -29,7 +37,7 @@ export function TimelineGantt({ phases }: { phases: GanttPhase[] }) {
           </Tooltip>
         ))}
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", marginTop: 8, fontSize: 12, color: "#5a6272" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", marginTop: 8, fontSize: 12, color: bridgeTokens.colors.textMuted }}>
         {phases.map((p, i) => (
           <span key={p.label}>
             <span style={{ color: COLORS[i % COLORS.length] }}>■</span> {p.label} {fmt(p.ms)}

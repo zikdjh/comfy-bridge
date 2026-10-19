@@ -26,6 +26,7 @@ import { JOB_DRAWER_EVENT, useJobs, type JobsSnapshot, type SyncJob } from "../.
 import { openBridgeEventStream } from "../../api/events";
 import { useQueryClient } from "@tanstack/react-query";
 import { UpdateBanner } from "./UpdateBanner";
+import { bridgeTokens as t } from "../../theme";
 
 const { Sider, Header, Content } = Layout;
 
@@ -52,7 +53,7 @@ function StatusPill({ title, sub, state, tooltip }: { title: string; sub: string
       <Badge status={badge} />
       <span style={{ fontSize: 13 }}>
         <b>{title}</b>
-        <span style={{ color: "#8a90a2", marginLeft: 6 }}>{sub}</span>
+        <span style={{ color: t.colors.textSecondary, marginLeft: 6 }}>{sub}</span>
       </span>
     </Space>
   );
@@ -193,7 +194,7 @@ export function Shell() {
         collapsed={collapsed}
         onCollapse={setCollapsed}
         width={200}
-        style={{ borderRight: "1px solid #e4e7ef" }}
+        style={{ borderRight: `1px solid ${t.colors.border}` }}
       >
         <div
           style={{
@@ -215,14 +216,14 @@ export function Shell() {
           onClick={({ key }) => navigate(key)}
           style={{ borderInlineEnd: "none" }}
         />
-        <div style={{ position: "absolute", bottom: 12, width: "100%", textAlign: "center", color: "#8a90a2", fontSize: 12 }}>
+        <div style={{ position: "absolute", bottom: 12, width: "100%", textAlign: "center", color: t.colors.textSecondary, fontSize: 12 }}>
           {!collapsed && <span>v0.1.0</span>}
         </div>
       </Sider>
       <Layout>
         <Header
           style={{
-            borderBottom: "1px solid #e4e7ef",
+            borderBottom: `1px solid ${t.colors.border}`,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",

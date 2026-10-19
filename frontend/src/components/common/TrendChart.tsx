@@ -4,6 +4,7 @@ import * as echarts from "echarts/core";
 import { BarChart } from "echarts/charts";
 import { GridComponent, LegendComponent, TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
+import { bridgeTokens } from "../../theme";
 
 echarts.use([BarChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
 
@@ -28,7 +29,7 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
           type: "bar",
           stack: "total",
           barMaxWidth: 26,
-          itemStyle: { color: "#1a9e6c" },
+          itemStyle: { color: bridgeTokens.colors.accent },
           data: data.map((d) => d.local),
         },
         {
@@ -36,7 +37,7 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
           type: "bar",
           stack: "total",
           barMaxWidth: 26,
-          itemStyle: { color: "#4f5be8" },
+          itemStyle: { color: bridgeTokens.colors.primary },
           data: data.map((d) => d.modal),
         },
       ],

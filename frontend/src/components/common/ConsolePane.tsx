@@ -15,6 +15,7 @@ import {
   type LogLevel,
   type LogStreamHandlers,
 } from "../../api/logs";
+import { bridgeTokens } from "../../theme";
 
 /** 缓冲上限可选档位（控制日志总长度；超出丢弃最旧行）。 */
 const CAP_OPTIONS = [200, 500, 1000, 3000, 5000];
@@ -26,12 +27,12 @@ type LevelFilter = "all" | "warning" | "error";
 type BufEntry = LogEntry & { id: number };
 
 const LEVEL_COLOR: Record<LogLevel, string> = {
-  debug: "#7d8799",
-  detail: "#8fa3bf",
-  info: "#c9d1d9",
-  warning: "#e3b341",
-  error: "#f85149",
-  critical: "#ff7b72",
+  debug: bridgeTokens.colors.console.dim,
+  detail: bridgeTokens.colors.console.text,
+  info: bridgeTokens.colors.console.text,
+  warning: bridgeTokens.colors.console.yellow,
+  error: bridgeTokens.colors.console.red,
+  critical: bridgeTokens.colors.console.red,
 };
 
 /** 工具行占位（含下间距），供两栏标题/脚注对齐参考。 */
@@ -42,7 +43,7 @@ const EMPTY_FLOOR = 200;
 
 export const TERMINAL_BOX_STYLE: React.CSSProperties = {
   overflowX: "hidden",
-  background: "#0d1117",
+  background: bridgeTokens.colors.console.background,
   borderRadius: 8,
   padding: "10px 14px",
   fontFamily: "'Cascadia Mono', Consolas, 'Courier New', monospace",
@@ -59,7 +60,7 @@ function levelPasses(level: LogLevel, filter: LevelFilter): boolean {
 function LogLine({ e }: { e: BufEntry }) {
   return (
     <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-      <span style={{ color: "#6e7681", marginRight: 10, userSelect: "none" }}>{formatLogTime(e.t)}</span>
+      <span style={{ color: bridgeTokens.colors.console.dim, marginRight: 10, userSelect: "none" }}>{formatLogTime(e.t)}</span>
       <span style={{ color: LEVEL_COLOR[e.level] ?? LEVEL_COLOR.info }}>{e.m.trimEnd() || " "}</span>
     </div>
   );
@@ -183,7 +184,7 @@ export function ConsolePane({ title, openStream, downloadPrefix, footnote, empty
         </Space>
       }
       extra={
-        <span style={{ fontSize: 12, color: "#5a6272", fontVariantNumeric: "tabular-nums" }}>
+        <span style={{ fontSize: 12, color: bridgeTokens.colors.textMuted, fontVariantNumeric: "tabular-nums" }}>
           {visible.length}/{bufferRef.current.length} 行
         </span>
       }
@@ -195,7 +196,7 @@ export function ConsolePane({ title, openStream, downloadPrefix, footnote, empty
           <Input
             size="small"
             allowClear
-            prefix={<SearchOutlined style={{ color: "#8a90a2" }} />}
+            prefix={<SearchOutlined style={{ color: bridgeTokens.colors.textSecondary }} />}
             placeholder="过滤关键字"
             style={{ width: compact ? 100 : 160 }}
             value={textFilter}
@@ -213,7 +214,7 @@ export function ConsolePane({ title, openStream, downloadPrefix, footnote, empty
           />
           <Tooltip title="开启后新日志自动滚动到底部；向上查看历史会自动暂停跟随">
             <Space size={4}>
-              {!compact && <span style={{ fontSize: 12, color: "#5a6272" }}>跟随</span>}
+              {!compact && <span style={{ fontSize: 12, color: bridgeTokens.colors.textMuted }}>跟随</span>}
               <Switch
                 size="small"
                 checked={stick}
@@ -304,7 +305,7 @@ export function ConsolePane({ title, openStream, downloadPrefix, footnote, empty
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            color: "#6e7681",
+            color: bridgeTokens.colors.console.dim,
           }}
         >
           {emptyHint(online)}

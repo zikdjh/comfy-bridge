@@ -4,6 +4,7 @@ import * as echarts from "echarts/core";
 import { BarChart } from "echarts/charts";
 import { GridComponent, TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
+import { bridgeTokens } from "../../theme";
 
 echarts.use([BarChart, GridComponent, TooltipComponent, CanvasRenderer]);
 
@@ -33,7 +34,7 @@ export function CostChart({ data }: { data: CostPoint[] }) {
           name: "云端估算成本",
           type: "bar",
           barMaxWidth: 26,
-          itemStyle: { color: "#4f5be8" },
+          itemStyle: { color: bridgeTokens.colors.primary },
           data: data.map((d) => d.est_cost_usd),
         },
       ],

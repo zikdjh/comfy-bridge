@@ -15,6 +15,7 @@ import { CheckCircleOutlined, CloseCircleOutlined, FireOutlined } from "@ant-des
 import { useConfig, useSaveConfig, validateComfyRoot } from "../../api/config";
 import { useHealth, warmupModal } from "../../api/health";
 import { ComfyScanModal } from "./ComfyScanModal";
+import { bridgeTokens as t } from "../../theme";
 
 /** 首次配置向导完成标记（localStorage，按浏览器记忆；设置页可随时重跑） */
 export const WIZARD_DONE_KEY = "cb_wizard_done";
@@ -38,9 +39,9 @@ function CheckRow({
   return (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "8px 0", borderBottom: "1px dashed #eceef5" }}>
       {ok ? (
-        <CheckCircleOutlined style={{ color: "#52c41a", fontSize: 16, marginTop: 2 }} />
+        <CheckCircleOutlined style={{ color: t.colors.accent, fontSize: 16, marginTop: 2 }} />
       ) : (
-        <CloseCircleOutlined style={{ color: "#ff4d4f", fontSize: 16, marginTop: 2 }} />
+        <CloseCircleOutlined style={{ color: t.colors.danger, fontSize: 16, marginTop: 2 }} />
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div>

@@ -26,6 +26,7 @@ import {
   useLocalMedia,
   type MediaItem,
 } from "../../api/media";
+import { bridgeTokens as t } from "../../theme";
 
 const TILE_HEIGHT = 160;
 
@@ -40,8 +41,8 @@ function MediaTile({ item, onOpen }: { item: MediaItem; onOpen: (item: MediaItem
           borderRadius: 8,
           overflow: "hidden",
           cursor: "pointer",
-          background: "#14181f",
-          border: "1px solid #e4e7ef",
+          background: t.colors.console.background,
+          border: `1px solid ${t.colors.border}`,
         }}
       >
         {item.kind === "image" ? (
@@ -81,7 +82,7 @@ function MediaTile({ item, onOpen }: { item: MediaItem; onOpen: (item: MediaItem
             bottom: 0,
             padding: "4px 8px",
             background: "linear-gradient(transparent, rgba(0,0,0,0.65))",
-            color: "#fff",
+            color: "#ffffff",
             fontSize: 12,
             whiteSpace: "nowrap",
             overflow: "hidden",

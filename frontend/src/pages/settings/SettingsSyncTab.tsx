@@ -10,6 +10,7 @@ import {
   type SettingsDiffRow,
   type SyncDirection,
 } from "../../api/settingsSync";
+import { bridgeTokens as t } from "../../theme";
 
 type Choice = SyncDirection | "skip";
 
@@ -156,7 +157,7 @@ export function SettingsSyncTab() {
       </Card>
       <Card size="small" title="extra_model_paths.yaml 结构示意（云端数据卷模板）">
         <Typography.Paragraph copyable={{ text: yamlPreview }}>
-          <pre style={{ background: "#f6f7fb", padding: 12, borderRadius: 8, fontSize: 12, margin: 0 }}>
+          <pre style={{ background: t.colors.surfaceWash, padding: 12, borderRadius: 8, fontSize: 12, margin: 0 }}>
             {yamlPreview}
           </pre>
         </Typography.Paragraph>

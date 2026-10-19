@@ -64,6 +64,7 @@ import type {
   VolumeUsageItem,
 } from "../../api/volume";
 import { EmptyGuide } from "../../components/common/EmptyGuide";
+import { bridgeTokens as t } from "../../theme";
 
 /* 常用落卷目录（与 runner.py 的卷目录结构对应） */
 const QUICK_DIRS = [
@@ -239,13 +240,13 @@ function UsageCard() {
         <Statistic title="卷数量" value={data?.volumes.length ?? 0} />
         <div style={{ minWidth: 280 }}>
           <Space size={8} style={{ marginBottom: 4 }}>
-            <span style={{ fontSize: 12, color: "#888" }}>额度水位（{OVER_GB} GB）</span>
+            <span style={{ fontSize: 12, color: t.colors.textMuted }}>额度水位（{OVER_GB} GB）</span>
             <Tag color={tag.color}>{tag.text}</Tag>
           </Space>
           <Progress
             percent={percent}
             showInfo={false}
-            strokeColor={status === "over" ? "#cf1322" : status === "warn" ? "#d4b106" : undefined}
+            strokeColor={status === "over" ? t.colors.danger : status === "warn" ? t.colors.warningDeep : undefined}
             size={["100%", 8]}
           />
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>

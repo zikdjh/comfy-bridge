@@ -26,6 +26,7 @@ import {
   type SyncJobDto,
   type SyncRow,
 } from "../../api/modalVolume";
+import { bridgeTokens as t } from "../../theme";
 
 const statusTag = (status: SyncRow["status"]) =>
   status === "both" ? (
@@ -79,7 +80,7 @@ const jobColumns: ColumnsType<SyncJobDto> = [
           percent={job.total ? Math.round(((job.done + job.failed) / job.total) * 100) : 0}
           size="small"
           style={{ width: 120 }}
-          strokeColor={job.failed ? "#fa8c16" : "#4f5be8"}
+          strokeColor={job.failed ? t.colors.warning : t.colors.primary}
         />
       </Space>
     ),

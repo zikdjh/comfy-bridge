@@ -19,6 +19,7 @@ import { RedoOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { BackendTag, type Backend } from "../../components/common/BackendTag";
 import { useRequests, type BridgeRequest, type GenType, type RequestStatus } from "../../api/requests";
+import { bridgeTokens as t } from "../../theme";
 
 export const statusMeta: Record<RequestStatus, { color: string; text: string }> = {
   queued: { color: "default", text: "排队中" },
@@ -140,7 +141,7 @@ export function RequestLogPanel() {
             ]}
           />
           <Space size={4}>
-            <span style={{ fontSize: 12, color: "#5a6272" }}>实时</span>
+            <span style={{ fontSize: 12, color: t.colors.textMuted }}>实时</span>
             <Switch size="small" checked={realtime} onChange={setRealtime} />
           </Space>
         </Space>

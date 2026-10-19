@@ -17,6 +17,7 @@ import {
 } from "../../api/workflows";
 import { EmptyGuide } from "../../components/common/EmptyGuide";
 import { openJobDrawer, startWorkflowSync, useJob } from "../../api/jobs";
+import { bridgeTokens as t } from "../../theme";
 
 /* ---------------- 本地清单（真实数据） ---------------- */
 
@@ -116,7 +117,7 @@ function SideCard({ title, side, onlyTypes }: { title: string; side: WfCompareSi
           ) : (
             <>
               <div>
-                <span style={{ fontSize: 12, color: "#8a90a2", marginRight: 8 }}>节点 {side.node_count ?? 0} 个：</span>
+                <span style={{ fontSize: 12, color: t.colors.textSecondary, marginRight: 8 }}>节点 {side.node_count ?? 0} 个：</span>
                 {(side.types ?? []).slice(0, 10).map(([t, c]) => (
                   <Tag
                     key={t}
@@ -134,7 +135,7 @@ function SideCard({ title, side, onlyTypes }: { title: string; side: WfCompareSi
               </div>
               {(side.models?.length ?? 0) > 0 && (
                 <div>
-                  <span style={{ fontSize: 12, color: "#8a90a2", marginRight: 8 }}>模型引用：</span>
+                  <span style={{ fontSize: 12, color: t.colors.textSecondary, marginRight: 8 }}>模型引用：</span>
                   {side.models!.slice(0, 8).map((m) => (
                     <Tag key={m} style={{ marginInlineEnd: 4, fontSize: 12 }}>{m}</Tag>
                   ))}
@@ -393,8 +394,8 @@ function RunStats() {
       width: 100,
       render: (_, r) => (
         <Space size={4}>
-          <span style={{ color: "#43a047" }}>{r.done}</span>
-          {r.errored > 0 && <span style={{ color: "#cf1322" }}>/ {r.errored}</span>}
+          <span style={{ color: t.colors.accent }}>{r.done}</span>
+          {r.errored > 0 && <span style={{ color: t.colors.danger }}>/ {r.errored}</span>}
         </Space>
       ),
     },

@@ -10,6 +10,7 @@ import {
 } from "../../api/launch";
 import { warmupModal } from "../../api/health";
 import { LAUNCH_FLAGS, type LaunchFlagDef, type Target } from "./launchFlags";
+import { bridgeTokens as t } from "../../theme";
 
 /** 启用状态：true=无值开关；字符串=取值（required/optional 参数） */
 export type Selection = Record<string, string | true>;
@@ -88,7 +89,7 @@ function showProcError(r: ProcResult) {
     title: r.error || "操作失败",
     width: 620,
     content: r.log_tail?.length ? (
-      <pre style={{ maxHeight: 240, overflow: "auto", background: "#0d1117", color: "#c9d1d9", padding: 10, borderRadius: 8, fontSize: 12, marginTop: 12, whiteSpace: "pre-wrap" }}>
+      <pre style={{ maxHeight: 240, overflow: "auto", background: t.colors.console.background, color: t.colors.console.text, padding: 10, borderRadius: 8, fontSize: 12, marginTop: 12, whiteSpace: "pre-wrap" }}>
         {r.log_tail.join("\n")}
       </pre>
     ) : null,
@@ -122,8 +123,8 @@ function CodeBlock({ text, dark }: { text: string; dark?: boolean }) {
     <div style={{ position: "relative" }}>
       <pre
         style={{
-          background: dark ? "#0d1117" : "#f6f7fb",
-          color: dark ? "#c9d1d9" : undefined,
+          background: dark ? t.colors.console.background : t.colors.surfaceWash,
+          color: dark ? t.colors.console.text : undefined,
           padding: dark ? "10px 40px 10px 12px" : "8px 40px 8px 12px",
           borderRadius: 8,
           fontSize: 12,
@@ -139,7 +140,7 @@ function CodeBlock({ text, dark }: { text: string; dark?: boolean }) {
           size="small"
           type="text"
           aria-label="复制命令"
-          icon={copied ? <CheckOutlined style={{ color: "#52c41a" }} /> : <CopyOutlined />}
+          icon={copied ? <CheckOutlined style={{ color: t.colors.accent }} /> : <CopyOutlined />}
           onClick={onCopy}
           style={{ position: "absolute", top: 3, right: 3 }}
         />
@@ -453,7 +454,7 @@ function TargetPanel({ target, launch, state, onChange, onReset }: TargetPanelPr
       ellipsis: { showTitle: false },
       render: (d: string) => (
         <Tooltip title={d} placement="topLeft">
-          <span style={{ color: "#5a6272" }}>{d}</span>
+          <span style={{ color: t.colors.textMuted }}>{d}</span>
         </Tooltip>
       ),
     },
@@ -612,7 +613,7 @@ export function LaunchArgsPanel() {
         <Button type="primary" loading={saving} disabled={!launch || isLoading} onClick={save}>
           保存全部（本地 + 云端）
         </Button>
-        <span style={{ color: "#8a90a2", fontSize: 12 }}>
+        <span style={{ color: t.colors.textSecondary, fontSize: 12 }}>
           保存到 ~/.comfybridge/config.toml；云端参数同时下发数据卷 {launch?.modal.volume_file ?? "/config/launch_args.json"}
         </span>
       </Space>

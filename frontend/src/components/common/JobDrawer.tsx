@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Button, Drawer, List, Popconfirm, Progress, Space, Spin, Tag, Tooltip, Typography, message } from "antd";
 import { CheckCircleOutlined, CloseCircleOutlined, MinusCircleOutlined, SyncOutlined } from "@ant-design/icons";
 import { cancelJob, useJob, useJobs, type SyncJob } from "../../api/jobs";
+import { bridgeTokens as t } from "../../theme";
 
 const KIND_META: Record<string, { text: string; color: string }> = {
   workflow_sync: { text: "工作流同步", color: "geekblue" },
@@ -75,13 +76,13 @@ function JobCard({ job }: { job: SyncJob }) {
         </Typography.Text>
       )}
       {job.items.length > 0 && (
-        <div style={{ maxHeight: 180, overflow: "auto", margin: "6px 0", padding: "4px 8px", background: "#fafafa", borderRadius: 6 }}>
+        <div style={{ maxHeight: 180, overflow: "auto", margin: "6px 0", padding: "4px 8px", background: t.colors.surfaceFaint, borderRadius: 6 }}>
           {job.items.map((item, idx) => (
             <div key={`${item.name}-${idx}`} style={{ fontSize: 12, lineHeight: "20px" }}>
               {item.ok ? (
-                <CheckCircleOutlined style={{ color: "#1a9e6c", marginRight: 6 }} />
+                <CheckCircleOutlined style={{ color: t.colors.accent, marginRight: 6 }} />
               ) : (
-                <CloseCircleOutlined style={{ color: "#c0392b", marginRight: 6 }} />
+                <CloseCircleOutlined style={{ color: t.colors.danger, marginRight: 6 }} />
               )}
               <Typography.Text code style={{ fontSize: 12 }}>
                 {item.name}
@@ -116,7 +117,7 @@ function JobCard({ job }: { job: SyncJob }) {
               margin: "6px 0 0",
               maxHeight: 96,
               overflow: "auto",
-              background: "#f6f6f6",
+              background: t.colors.surfaceWash,
               padding: "4px 8px",
               borderRadius: 6,
             }}
@@ -165,7 +166,7 @@ export function JobDrawer({ open, onClose, focusId, onFocusHandled }: {
       {focusId && focusLoading && <Spin style={{ display: "block", margin: "32px auto" }} />}
       {focused && (
         <>
-          <List split={false} style={{ background: "#fff" }}>
+          <List split={false} style={{ background: "#ffffff" }}>
             <JobCard job={focused} />
           </List>
           {others.length > 0 && (

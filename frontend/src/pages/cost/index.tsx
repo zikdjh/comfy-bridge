@@ -23,6 +23,7 @@ import {
   type CostReportRow,
   type ReconciliationDailyPoint,
 } from "../../api/cost";
+import { bridgeTokens as t } from "../../theme";
 
 const DAYS = 30;
 
@@ -40,7 +41,7 @@ function ReportCard() {
   const dimLabel = by === "workflow" ? "工作流" : "主模型";
 
   const columns: ColumnsType<CostReportRow> = [
-    { title: "#", width: 48, render: (_, __, i) => <span style={{ color: "#8a90a2" }}>{i + 1}</span> },
+    { title: "#", width: 48, render: (_, __, i) => <span style={{ color: t.colors.textSecondary }}>{i + 1}</span> },
     {
       title: dimLabel,
       dataIndex: "key",
@@ -66,7 +67,7 @@ function ReportCard() {
             showInfo={false}
             style={{ width: 72, marginBottom: 0 }}
           />
-          <span style={{ fontSize: 12, color: "#5b6172" }}>{(v * 100).toFixed(1)}%</span>
+          <span style={{ fontSize: 12, color: t.colors.textMuted }}>{(v * 100).toFixed(1)}%</span>
         </Space>
       ),
     },
@@ -79,7 +80,7 @@ function ReportCard() {
         <Space size={6}>
           <span>成本聚合（云端已入账请求，近 {DAYS} 天）</span>
           <Tooltip title="按 workflow_name / 主模型（checkpoint/扩散模型权重）分组汇总估算成本；仅统计 final_backend=modal 且已入账的请求。">
-            <InfoCircleOutlined style={{ color: "#8a90a2" }} />
+            <InfoCircleOutlined style={{ color: t.colors.textSecondary }} />
           </Tooltip>
         </Space>
       }
@@ -104,7 +105,7 @@ function ReportCard() {
               onClick: ({ key }) => download(costExportUrl(key as "entries" | "workflow" | "model", DAYS)),
             }}
           >
-            <DownloadOutlined style={{ color: "#5b6172" }} />
+            <DownloadOutlined style={{ color: t.colors.textMuted }} />
           </Dropdown>
         </Space>
       }
@@ -119,7 +120,7 @@ function ReportCard() {
         pagination={{ pageSize: 10, hideOnSinglePage: true, showSizeChanger: false }}
       />
       {(report?.rows.length ?? 0) > 0 && (
-        <div style={{ marginTop: 8, color: "#8a90a2", fontSize: 12 }}>
+        <div style={{ marginTop: 8, color: t.colors.textSecondary, fontSize: 12 }}>
           前 {report!.rows.length} 项合计估算 ${report!.total_est_cost_usd.toFixed(4)}（未列出的条目见 CSV 导出）
         </div>
       )}
@@ -131,9 +132,9 @@ function StatBlock({ label, value, sub, tooltip }: { label: string; value: strin
   return (
     <Tooltip title={tooltip}>
       <div>
-        <div style={{ color: "#8a90a2", fontSize: 12 }}>{label}</div>
+        <div style={{ color: t.colors.textSecondary, fontSize: 12 }}>{label}</div>
         <div style={{ fontSize: 20, fontWeight: 600, lineHeight: 1.3 }}>{value}</div>
-        {sub && <div style={{ color: "#8a90a2", fontSize: 12 }}>{sub}</div>}
+        {sub && <div style={{ color: t.colors.textSecondary, fontSize: 12 }}>{sub}</div>}
       </div>
     </Tooltip>
   );
@@ -240,7 +241,7 @@ function ReconCard() {
           </Space>
           {resourceTags.length > 0 && (
             <div style={{ marginBottom: 12 }}>
-              <span style={{ color: "#8a90a2", fontSize: 12, marginRight: 8 }}>资源构成：</span>
+              <span style={{ color: t.colors.textSecondary, fontSize: 12, marginRight: 8 }}>资源构成：</span>
               {resourceTags}
             </div>
           )}
