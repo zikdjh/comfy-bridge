@@ -1,7 +1,16 @@
 """全局健康与 Modal SDK 自检接口。"""
 
+import pytest
+
 from app.api.v1 import health
 from app.modal_volume import client as modal_cli
+
+
+@pytest.fixture(autouse=True)
+def _clear_modal_cli_cache(monkeypatch):
+    """modal-cli 自检有 30s TTL 缓存，测试间必须清空，避免跨用例污染。"""
+    monkeypatch.setattr(health, "_modal_cli_cache", {})
+    yield
 
 
 async def test_modal_cli_health_reports_missing_sdk(monkeypatch):
