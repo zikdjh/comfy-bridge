@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyBridge UI 界面优化计划</title>
+<style>
+  body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; max-width: 980px; margin: 24px auto; padding: 0 16px; color: #1f2430; line-height: 1.7; }
+  h1 { font-size: 22px; border-bottom: 2px solid #4f5be8; padding-bottom: 8px; }
+  h2 { font-size: 17px; margin-top: 28px; color: #34397a; }
+  h3 { font-size: 15px; margin-top: 18px; color: #4a4f9e; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0 18px; font-size: 13px; }
+  th, td { border: 1px solid #d9dcec; padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: #eef0fe; }
+  code { background: #f2f3fb; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  .meta { color: #8a90a2; font-size: 12px; }
+  .tag-p1 { color: #b9770e; font-weight: 600; }
+  .tag-p2 { color: #2e6da4; font-weight: 600; }
+  ul { padding-left: 22px; }
+  li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<h1>ComfyBridge UI 界面优化计划</h1>
+<p class="meta">创建日期：2026-10-19 ｜ 版本：v0.1（筹备稿）｜ 状态：待启动</p>
+<p>本文档在 UI 优化动手前完成现状盘点与方向规划，作为后续分批实施的依据。前期性能优化（代码分割、轮询治理、懒加载）已落地，本计划聚焦<strong>视觉一致性、信息层级、交互体验与移动端适配</strong>。</p>
+
+<h2>一、现状盘点</h2>
+<h3>1.1 技术栈与约束</h3>
+<ul>
+  <li>React 18 + Ant Design 5.19 + TanStack Query 5，构建 Vite 5（路由级代码分割已就绪）。</li>
+  <li>全局主题：<code>theme.ts</code> 的 <code>bridgeTheme</code>，主色 <code>#4f5be8</code>，圆角 8，字号 13，菜单项高 38。</li>
+  <li>设计语言基线：运营管理工具风格 —— 安静、克制、以扫读与反复操作为先，避免营销式视觉。</li>
+  <li>现有 e2e 基线：<code>web-perf-nav.spec.ts</code> 采集 11 页导航 p50/p95（预算 300ms），UI 改动须保证基线不回退。</li>
+</ul>
+
+<h3>1.2 页面与组件规模</h3>
+<table>
+  <tr><th>层级</th><th>位置</th><th>规模 / 说明</th></tr>
+  <tr><td>布局壳</td><td>components/layout/Shell.tsx（292 行）</td><td>Sider + Header + Content；状态药丸（本地/Modal）、预算 Tag、任务抽屉按钮、更新横幅、向导 Alert</td></tr>
+  <tr><td>大页面</td><td>volume（1198 行）、nodes（898 行）、settings（644 行 + LaunchArgsPanel 585 行）</td><td>信息密度最高，是本次优化的重点对象</td></tr>
+  <tr><td>中页面</td><td>dashboard（538 行，10 个 Card）、workflows（441）、routing（400）</td><td>仪表盘卡片最多，存在堆叠层级问题</td></tr>
+  <tr><td>常规页面</td><td>models / cost / media / logs / status</td><td>以表格 + 表单为主，样式模式较统一</td></tr>
+  <tr><td>公共组件</td><td>common/（ConsolePane、JobDrawer、TrendChart 等）</td><td>缺统一设计 token 管理，魔法色值散落于各文件</td></tr>
+</table>
+
+<h3>1.3 已识别的主要问题</h3>
+<table>
+  <tr><th>#</th><th>问题</th><th>证据位置</th><th>优先级</th></tr>
+  <tr><td>1</td><td>硬编码色值与间距：#8a90a2、#e4e7ef、#eef0fe 等直接写在 JSX 里，主题不可统一调整，暗色模式无法接入</td><td>Shell.tsx、theme.ts、各页面 Card/Table 样式</td><td class="tag-p1">P1</td></tr>
+  <tr><td>2</td><td>页面级 Card 堆叠：整页区块包 Card，出现「卡片套卡片」；15 个页面文件共 44 处 Card 使用，仪表盘单页 10 个</td><td>dashboard/index.tsx、各页面</td><td class="tag-p1">P1</td></tr>
+  <tr><td>3</td><td>组件重复建设：Statistic、趋势迷你图、状态 Tag 等同类片段多页重复实现</td><td>dashboard、status、cost、nodes</td><td class="tag-p2">P2</td></tr>
+  <tr><td>4</td><td>长任务操作缺统一反馈模式（加载/成功/失败分散在各页手写 message）</td><td>volume、models、workflows</td><td class="tag-p2">P2</td></tr>
+  <tr><td>5</td><td>移动端体验未验证：固定 Sider 在窄屏不可用，表格横向滚动未统一处理</td><td>Shell.tsx、全部表格页</td><td class="tag-p2">P2</td></tr>
+  <tr><td>6</td><td>大页面可拆分性：volume/nodes/settings 超 600 行，渲染与逻辑耦合，后续维护成本高</td><td>volume/index.tsx 等</td><td class="tag-p2">P2</td></tr>
+</table>
+
+<h2>二、优化方向</h2>
+<h3>2.1 建立设计 token 层（方向 A）</h3>
+<p>把颜色、间距、字号收敛到 <code>theme.ts</code> 与一组 CSS 变量 / AntD token，消灭 JSX 内魔法值：</p>
+<ul>
+  <li>语义色板：primary / success / warning / danger / text-primary / text-secondary / border / surface。</li>
+  <li>间距阶梯：4 / 8 / 12 / 16 / 24，替换散落的具体像素。</li>
+  <li>为后续暗色模式预留 token 切换能力（本次只做 token 化，不强制做暗色）。</li>
+</ul>
+
+<h3>2.2 版面与信息层级收敛（方向 B）</h3>
+<ul>
+  <li>页面级容器改为无框布局（band + 受限内宽），Card 仅保留给真正的重复条目与弹层内容。</li>
+  <li>仪表盘重构：统计区 / 图表区 / 实时请求区按「分区带」组织，去掉层层嵌套的 Card。</li>
+  <li>页面标题行统一：标题 + 副标题/操作区，形成可扫读的页首。</li>
+</ul>
+
+<h3>2.3 组件归并与交互统一（方向 C）</h3>
+<ul>
+  <li>提炼 <code>PageHeader</code>、<code>StatCard</code>、<code>StatusTag</code> 等公共组件，替换多页重复片段。</li>
+  <li>长任务操作封装统一反馈（按钮 loading、结果 message、失败重试入口一致）。</li>
+  <li>表格体验统一：列宽策略、空状态引导（EmptyGuide 已有雏形）、横向滚动兜底。</li>
+</ul>
+
+<h3>2.4 移动端与响应式（方向 D）</h3>
+<ul>
+  <li>Sider 在窄屏（&lt;768px）自动收起为抽屉，Header 元素换行收纳。</li>
+  <li>表格统一 <code>scroll={{ x: true }}</code> 策略，关键页验证窄屏可用。</li>
+</ul>
+
+<h2>三、建议批次与验收</h2>
+<table>
+  <tr><th>批次</th><th>内容</th><th>验收方式</th></tr>
+  <tr><td>第 1 批</td><td>方向 A（token 化）+ 方向 B 的仪表盘重构</td><td>tsc 通过；web-perf-nav 基线不回退；桌面/窄屏截图对比</td></tr>
+  <tr><td>第 2 批</td><td>方向 B 其余页面 + 方向 C（公共组件归并）</td><td>全量 e2e 点击用例通过；逐页目检</td></tr>
+  <tr><td>第 3 批</td><td>方向 D（响应式）+ 方向 C 收尾（反馈模式统一）</td><td>窄屏冒烟用例 + 现有测试套件回归</td></tr>
+</table>
+<p>每批独立提交，提交信息使用中文 conventional commits；改动遵循「运营管理工具」气质，不引入装饰性视觉。</p>
+
+<h2>四、动手前待确认</h2>
+<ul>
+  <li>暗色模式是否进入本次范围（默认不进，仅预留 token）。</li>
+  <li>移动端支持目标：仅保证可用，还是做专门的信息重排。</li>
+  <li>仪表盘三个分区（统计 / 趋势 / 实时请求）的默认展开顺序与主次权重。</li>
+</ul>
+
+</body>
+</html>
