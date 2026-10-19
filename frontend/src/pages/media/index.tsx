@@ -27,6 +27,7 @@ import {
   type MediaItem,
 } from "../../api/media";
 import { bridgeTokens as t } from "../../theme";
+import { PageHeader } from "../../components/common/PageHeader";
 
 const TILE_HEIGHT = 160;
 
@@ -133,24 +134,17 @@ export default function MediaPage() {
   }, [data]);
 
   return (
-    <Card
-      title={
-        <Space size={8}>
-          <FileImageOutlined />
-          <span>媒体库</span>
-        </Space>
-      }
-      extra={
-        <Space size={8}>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            共 {data?.total ?? 0} 个文件（图片 {counts.image} / 视频 {counts.video}）
-          </Typography.Text>
+    <>
+      <PageHeader
+        title="媒体库"
+        sub={`共 ${data?.total ?? 0} 个文件（图片 ${counts.image} / 视频 ${counts.video}）`}
+        extra={
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={isFetching} size="small">
             刷新
           </Button>
-        </Space>
-      }
-    >
+        }
+      />
+      <div style={{ marginTop: 12 }}>
       <Space size={12} wrap style={{ marginBottom: 16 }}>
         <Segmented
           value={kind}
@@ -252,6 +246,7 @@ export default function MediaPage() {
           </Typography.Link>
         </div>
       </Modal>
-    </Card>
+      </div>
+    </>
   );
 }

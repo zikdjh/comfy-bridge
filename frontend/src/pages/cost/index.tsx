@@ -16,6 +16,7 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import { DownloadOutlined, InfoCircleOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
+import { Tooltip as AntTooltip } from "antd";
 import {
   costExportUrl,
   useCostReconciliation,
@@ -24,6 +25,8 @@ import {
   type ReconciliationDailyPoint,
 } from "../../api/cost";
 import { bridgeTokens as t } from "../../theme";
+import { PageHeader } from "../../components/common/PageHeader";
+import { StatBlock } from "../../components/common/StatCard";
 
 const DAYS = 30;
 
@@ -128,18 +131,6 @@ function ReportCard() {
   );
 }
 
-function StatBlock({ label, value, sub, tooltip }: { label: string; value: string; sub?: string; tooltip?: string }) {
-  return (
-    <Tooltip title={tooltip}>
-      <div>
-        <div style={{ color: t.colors.textSecondary, fontSize: 12 }}>{label}</div>
-        <div style={{ fontSize: 20, fontWeight: 600, lineHeight: 1.3 }}>{value}</div>
-        {sub && <div style={{ color: t.colors.textSecondary, fontSize: 12 }}>{sub}</div>}
-      </div>
-    </Tooltip>
-  );
-}
-
 function ReconCard() {
   const [cycle, setCycle] = useState(() => dayjs().format("YYYY-MM"));
   const { data: recon, isLoading } = useCostReconciliation(cycle);
@@ -207,37 +198,41 @@ function ReconCard() {
       {recon && (
         <>
           <Space size={40} wrap style={{ marginBottom: 12 }}>
-            <StatBlock
-              label="本地估算"
-              value={usd(recon.local.est_cost_usd)}
-              sub={`${recon.local.requests} 次 · ${recon.local.gpu_seconds.toFixed(0)} GPU 秒`}
-              tooltip="GPU 单价 × 请求墙钟秒数（含冷启动等待），按次直加的保守估算"
-            />
-            <StatBlock
-              label="Modal GPU 计量"
-              value={usd(recon.modal.gpu_usd)}
-              sub="与估算同口径（仅 GPU 资源行）"
-              tooltip={`Modal 账单明细中 GPU 资源（${recon.cycle} 月）的真实计量`}
-            />
+            <AntTooltip title="GPU 单价 × 请求墙钟秒数（含冷启动等待），按次直加的保守估算">
+              <StatBlock
+                label="本地估算"
+                value={usd(recon.local.est_cost_usd)}
+                sub={`${recon.local.requests} 次 · ${recon.local.gpu_seconds.toFixed(0)} GPU 秒`}
+              />
+            </AntTooltip>
+            <AntTooltip title={`Modal 账单明细中 GPU 资源（${recon.cycle} 月）的真实计量`}>
+              <StatBlock
+                label="Modal GPU 计量"
+                value={usd(recon.modal.gpu_usd)}
+                sub="与估算同口径（仅 GPU 资源行）"
+              />
+            </AntTooltip>
             <StatBlock
               label="Modal 全资源"
               value={usd(recon.modal.total_usd)}
               sub="含 CPU/内存/卷等全部计量"
             />
             {egressUsd > 0 && (
-              <StatBlock
-                label="网络出站（Egress）"
-                value={usd(egressUsd)}
-                sub="结果回传等出站流量计量"
-                tooltip="Modal 账单 Network Egress 资源行合计；每月有免费额度（Starter 1 TiB），超出部分 $0.04/GiB"
-              />
+              <AntTooltip title="Modal 账单 Network Egress 资源行合计；每月有免费额度（Starter 1 TiB），超出部分 $0.04/GiB">
+                <StatBlock
+                  label="网络出站（Egress）"
+                  value={usd(egressUsd)}
+                  sub="结果回传等出站流量计量"
+                />
+              </AntTooltip>
             )}
-            <StatBlock
-              label="GPU ÷ 估算"
-              value={recon.ratio_gpu_vs_est == null ? "—" : recon.ratio_gpu_vs_est.toFixed(2)}
-              sub="持续偏离 1 → 校准单价"
-              tooltip="Modal GPU 计量 ÷ 本地估算。估算含冷启动等待、保活窗口不计入，短期偏离正常；持续偏高/偏低说明 gpu_hourly_rate_usd 设置需要校准"
-            />
+            <AntTooltip title="Modal GPU 计量 ÷ 本地估算。估算含冷启动等待、保活窗口不计入，短期偏离正常；持续偏高/偏低说明 gpu_hourly_rate_usd 设置需要校准">
+              <StatBlock
+                label="GPU ÷ 估算"
+                value={recon.ratio_gpu_vs_est == null ? "—" : recon.ratio_gpu_vs_est.toFixed(2)}
+                sub="持续偏离 1 → 校准单价"
+              />
+            </AntTooltip>
           </Space>
           {resourceTags.length > 0 && (
             <div style={{ marginBottom: 12 }}>
@@ -265,6 +260,7 @@ function ReconCard() {
 export default function CostPage() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <PageHeader title="成本报表" sub="按工作流/主模型聚合云端成本，与 Modal 官方明细对账" />
       <ReportCard />
       <ReconCard />
     </div>

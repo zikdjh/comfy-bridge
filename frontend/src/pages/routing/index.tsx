@@ -10,6 +10,7 @@ import { EmptyGuide } from "../../components/common/EmptyGuide";
 import { apiSend } from "../../api/client";
 import { useLocalWorkflows } from "../../api/workflows";
 import { useRoutingRules, useSaveRoutingRules, type RuleRow, type RuleKindInfo } from "../../api/routing";
+import { PageHeader } from "../../components/common/PageHeader";
 
 // 固定规则（不参与 CRUD，决策链两端的安全与兜底步骤）
 interface BuiltinRule {
@@ -165,6 +166,13 @@ export default function RoutingPage() {
   const finalBackend = preview?.final_backend ?? "";
   const rejected = preview != null && !finalBackend;
 
+  const pageHeader = (
+    <PageHeader
+      title="路由规则"
+      sub="请求按规则链自上而下求值，首条命中决定执行后端；支持干跑预览逐条求值过程"
+    />
+  );
+
   const paramCell = (idx: number, row: RuleRow) => {
     const info = kinds[row.kind];
     if (!info) return <Tag color="warning">未知类型</Tag>;
@@ -299,9 +307,11 @@ export default function RoutingPage() {
   ];
 
   return (
-    <Row gutter={[12, 12]}>
-      <Col span={16}>
-        <Card size="small" title="路由规则链（自上而下求值，首条命中生效）">
+    <>
+      {pageHeader}
+      <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
+        <Col xs={24} lg={16}>
+          <Card size="small" title="路由规则链（自上而下求值，首条命中生效）">
           <Space direction="vertical" size={10} style={{ width: "100%" }}>
             <Table<BuiltinRule> columns={fixedColumns} dataSource={fixedRules} pagination={false} size="small" />
             <Divider plain style={{ margin: "2px 0", fontSize: 12 }}>
@@ -337,10 +347,10 @@ export default function RoutingPage() {
               回退步骤会以「fallback」出现在干跑链路里。
             </Typography.Text>
           </Space>
-        </Card>
-      </Col>
-      <Col span={8}>
-        <Card size="small" title="干跑预览器">
+          </Card>
+        </Col>
+        <Col xs={24} lg={8}>
+          <Card size="small" title="干跑预览器">
           <Space direction="vertical" size={10} style={{ width: "100%" }}>
             <Select
               style={{ width: "100%" }}
@@ -413,8 +423,9 @@ export default function RoutingPage() {
               调用 POST /api/v1/routing/preview（不执行，仅返回分类事实与决策链路）
             </Typography.Text>
           </Space>
-        </Card>
-      </Col>
-    </Row>
+          </Card>
+        </Col>
+      </Row>
+    </>
   );
 }

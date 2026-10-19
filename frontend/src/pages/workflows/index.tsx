@@ -18,6 +18,7 @@ import {
 import { EmptyGuide } from "../../components/common/EmptyGuide";
 import { openJobDrawer, startWorkflowSync, useJob } from "../../api/jobs";
 import { bridgeTokens as t } from "../../theme";
+import { PageHeader } from "../../components/common/PageHeader";
 
 /* ---------------- 本地清单（真实数据） ---------------- */
 
@@ -455,7 +456,9 @@ function RunStats() {
 
 export default function WorkflowsPage() {
   return (
-    <Card size="small">
+    <>
+      <PageHeader title="工作流" sub="本地清单、两端同步状态与运行统计" />
+      <Card size="small" style={{ marginTop: 12 }}>
       <Tabs
         defaultActiveKey="local"
         items={[
@@ -464,6 +467,7 @@ export default function WorkflowsPage() {
           { key: "stats", label: "运行统计", children: <RunStats /> },
         ]}
       />
-    </Card>
+      </Card>
+    </>
   );
 }
