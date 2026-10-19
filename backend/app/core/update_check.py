@@ -2,8 +2,9 @@
 
 - 当前版本读取包根 version.txt（打包脚本写入 git describe，如 v0.1.0-beta.4）；
   文件缺失（源码运行）视为无法检查，不报错。
-- 检查请求 trust_env 跟随 bridge.use_system_proxy：默认直连，开启后 httpx
-  读取 HTTP_PROXY/HTTPS_PROXY 等环境变量（NO_PROXY 仍生效）。
+- 检查请求始终信任系统代理环境变量（trust_env=True）：系统里开了代理（存在
+  HTTP_PROXY/HTTPS_PROXY 等）就走，没开就自然直连。与桥接器云端出站的
+  use_system_proxy 开关无关——本模块不触碰本地回环，无代理污染风险。
 - 24h 节流缓存落 <配置目录>/update_check.json；force=True（设置页手动检查）跳过节流。
 - 任何失败静默降级，不抛异常、不阻塞调用方（启动路径友好）。
 """
@@ -19,7 +20,7 @@ from pathlib import Path
 
 import httpx
 
-from .config import config_dir, get_settings
+from .config import config_dir
 
 logger = logging.getLogger(__name__)
 
@@ -118,9 +119,8 @@ async def check_update(*, force: bool = False) -> dict:
         if cached.get("checked_at") and (now - cached["checked_at"]) < _CACHE_TTL:
             return {**cached, "cached": True}
 
-    trust_env = get_settings().bridge.use_system_proxy
     try:
-        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT, trust_env=trust_env) as cli:
+        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT, trust_env=True) as cli:
             resp = await cli.get(GITHUB_LATEST, headers={"Accept": "application/vnd.github+json"})
         if resp.status_code != 200:
             raise RuntimeError(f"GitHub API HTTP {resp.status_code}")

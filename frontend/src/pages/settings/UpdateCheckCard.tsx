@@ -8,7 +8,7 @@ function describeReason(reason: string): string | null {
     case "not_packaged":
       return "当前以源码方式运行（未找到 version.txt），无更新检查。";
     case "check_failed":
-      return "检查失败：无法访问 GitHub。若你在使用网络代理，请先在「护栏与预算」开启系统代理后重试。";
+      return "检查失败：无法访问 GitHub。若你的网络需要代理才能访问 GitHub，请在系统环境变量设置 HTTP_PROXY/HTTPS_PROXY 后重启应用再试。";
     default:
       return null;
   }
