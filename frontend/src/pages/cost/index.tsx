@@ -24,9 +24,9 @@ import {
   type CostReportRow,
   type ReconciliationDailyPoint,
 } from "../../api/cost";
-import { bridgeTokens as t } from "../../theme";
 import { PageHeader } from "../../components/common/PageHeader";
 import { StatBlock } from "../../components/common/StatCard";
+import { useDarkMode } from "../../hooks/useDarkMode";
 
 /** 表格横向滚动兜底：窄屏下列宽超出自动出横向滚动条 */
 const TABLE_SCROLL_X = { x: true } as const;
@@ -42,6 +42,7 @@ function download(url: string) {
 }
 
 function ReportCard() {
+  const { tokens: t } = useDarkMode();
   const [by, setBy] = useState<"workflow" | "model">("workflow");
   const { data: report, isLoading } = useCostReport(by, DAYS);
   const dimLabel = by === "workflow" ? "工作流" : "主模型";
@@ -136,6 +137,7 @@ function ReportCard() {
 }
 
 function ReconCard() {
+  const { tokens: t } = useDarkMode();
   const [cycle, setCycle] = useState(() => dayjs().format("YYYY-MM"));
   const { data: recon, isLoading } = useCostReconciliation(cycle);
 

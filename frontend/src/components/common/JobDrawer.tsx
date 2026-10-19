@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Button, Drawer, List, Popconfirm, Progress, Space, Spin, Tag, Tooltip, Typography, message } from "antd";
 import { CheckCircleOutlined, CloseCircleOutlined, MinusCircleOutlined, SyncOutlined } from "@ant-design/icons";
 import { cancelJob, useJob, useJobs, type SyncJob } from "../../api/jobs";
-import { bridgeTokens as t } from "../../theme";
+import { useDarkMode } from "../../hooks/useDarkMode";
 
 const KIND_META: Record<string, { text: string; color: string }> = {
   workflow_sync: { text: "工作流同步", color: "geekblue" },
@@ -22,6 +22,7 @@ function jobTime(ms: number) {
 }
 
 function JobCard({ job }: { job: SyncJob }) {
+  const { tokens: t } = useDarkMode();
   const [cancelling, setCancelling] = useState(false);
   const state = STATE_META[job.state] ?? STATE_META.cancelled;
   const kind = KIND_META[job.kind] ?? { text: job.kind, color: "default" };
@@ -137,6 +138,7 @@ export function JobDrawer({ open, onClose, focusId, onFocusHandled }: {
   focusId: string | null;
   onFocusHandled?: () => void;
 }) {
+  const { tokens: t } = useDarkMode();
   const { data } = useJobs();
   const [selected, setSelected] = useState<string | null>(null);
   const currentId = focusId ?? selected;
@@ -166,7 +168,7 @@ export function JobDrawer({ open, onClose, focusId, onFocusHandled }: {
       {focusId && focusLoading && <Spin style={{ display: "block", margin: "32px auto" }} />}
       {focused && (
         <>
-          <List split={false} style={{ background: "#ffffff" }}>
+          <List split={false} style={{ background: t.colors.surface }}>
             <JobCard job={focused} />
           </List>
           {others.length > 0 && (

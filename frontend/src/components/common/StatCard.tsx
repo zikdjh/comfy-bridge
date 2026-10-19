@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Card, Statistic } from "antd";
-import { bridgeTokens as t } from "../../theme";
+import { useDarkMode } from "../../hooks/useDarkMode";
 
 /** 数字大号展示（Statistic 的 valueRender 专用），等宽数字防止跳动 */
 export function BigValue({ children }: { children: ReactNode }) {
@@ -14,6 +14,7 @@ export function StatBlock(props: {
   sub?: ReactNode;
   tooltip?: string;
 }) {
+  const { tokens: t } = useDarkMode();
   return (
     <div>
       <div style={{ color: t.colors.textSecondary, fontSize: 12 }}>{props.label}</div>
@@ -36,6 +37,7 @@ export function StatCard(props: {
   footer?: ReactNode;
   extra?: ReactNode;
 }) {
+  const { tokens: t } = useDarkMode();
   const title = props.icon ? (
     <span>
       <span style={{ color: t.colors.textSecondary, marginRight: 6 }}>{props.icon}</span>

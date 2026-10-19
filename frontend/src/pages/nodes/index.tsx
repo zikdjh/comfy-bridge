@@ -40,7 +40,7 @@ import { openJobDrawer, useJob } from "../../api/jobs";
 import { warmupModal } from "../../api/health";
 import { EmptyGuide } from "../../components/common/EmptyGuide";
 import dayjs from "dayjs";
-import { bridgeTokens as t } from "../../theme";
+import { useDarkMode, type BridgeTokens } from "../../hooks/useDarkMode";
 
 /** 表格横向滚动兜底：窄屏下列宽超出自动出横向滚动条 */
 const TABLE_SCROLL_X = { x: true } as const;
@@ -62,6 +62,7 @@ function dependencyPrecheckError(result: DependencyPrecheck): string {
 }
 
 function ClassTypeTable({ classTypes }: { classTypes: string[] }) {
+  const { tokens: t } = useDarkMode();
   const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(20);
@@ -112,6 +113,7 @@ function ClassTypeTable({ classTypes }: { classTypes: string[] }) {
 }
 
 function LocalInventory() {
+  const { tokens: t } = useDarkMode();
   const { data, isLoading, refetch, isFetching } = useLocalNodes();
 
   if (isLoading) return <Spin style={{ display: "block", margin: "48px auto" }} />;
@@ -223,7 +225,7 @@ function LocalInventory() {
 
 /* ---------------- 差异矩阵（本地 ↔ 云端数据卷真实对比） ---------------- */
 
-const statusCell = (ok: boolean, extra?: string) =>
+const statusCell = (t: BridgeTokens, ok: boolean, extra?: string) =>
   ok ? (
     <span style={{ color: t.colors.accent }}>
       <CheckCircleOutlined /> 已安装{extra ? <Typography.Text type="secondary"> {extra}</Typography.Text> : null}
@@ -237,6 +239,7 @@ const statusCell = (ok: boolean, extra?: string) =>
 type DiffFilter = "all" | "only_local" | "only_cloud" | "synced";
 
 function DiffMatrix() {
+  const { tokens: t } = useDarkMode();
   const queryClient = useQueryClient();
   const [view, setView] = useState<string>("pkg");
   const [deep, setDeep] = useState(false);
@@ -444,12 +447,12 @@ function DiffMatrix() {
       width: 130,
       render: (v: boolean) => (v ? <Tag color="blue">requirements.txt</Tag> : <Tag>无</Tag>),
     },
-    { title: "本地", dataIndex: "local", width: 100, render: (v: boolean) => statusCell(v) },
+    { title: "本地", dataIndex: "local", width: 100, render: (v: boolean) => statusCell(t, v) },
     {
       title: "云端",
       dataIndex: "cloud",
       width: 140,
-      render: (v: boolean, r) => statusCell(v, v ? (r.cloud_size ?? undefined) : undefined),
+      render: (v: boolean, r) => statusCell(t, v, v ? (r.cloud_size ?? undefined) : undefined),
     },
     {
       title: "一致性",
@@ -745,8 +748,8 @@ function DiffMatrix() {
                       dataIndex: "name",
                       render: (v: string) => <Typography.Text code>{v}</Typography.Text>,
                     },
-                    { title: "本地", dataIndex: "local", width: 110, render: (v: boolean) => statusCell(v) },
-                    { title: "云端", dataIndex: "cloud", width: 110, render: (v: boolean) => statusCell(v) },
+                    { title: "本地", dataIndex: "local", width: 110, render: (v: boolean) => statusCell(t, v) },
+                    { title: "云端", dataIndex: "cloud", width: 110, render: (v: boolean) => statusCell(t, v) },
                   ]}
                 />
               </>
@@ -761,6 +764,7 @@ function DiffMatrix() {
 /* ---------------- ComfyUI 版本对齐（本地为权威 → 云端镜像 pin） ---------------- */
 
 function VersionBanner() {
+  const { tokens: t } = useDarkMode();
   const { data } = useNodeVersion();
   const queryClient = useQueryClient();
   const [aligning, setAligning] = useState(false);
@@ -870,6 +874,7 @@ const ALIGN_OUTCOME: Record<string, { color: string; label: string }> = {
 };
 
 function VersionHistory() {
+  const { tokens: t } = useDarkMode();
   const { data } = useNodeVersion();
   const history = data?.history ?? [];
   if (!history.length) return null;

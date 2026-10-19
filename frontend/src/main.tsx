@@ -7,7 +7,8 @@ import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
 import { RouterProvider } from "react-router-dom";
 import { router } from "./router";
-import { bridgeTheme } from "./theme";
+import { bridgeTheme, bridgeThemeDark } from "./theme";
+import { DarkModeProvider, useDarkMode } from "./hooks/useDarkMode";
 
 dayjs.locale("zh-cn");
 
@@ -18,12 +19,21 @@ const queryClient = new QueryClient({
   },
 });
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <ConfigProvider locale={zhCN} theme={bridgeTheme}>
+function App() {
+  const { isDark } = useDarkMode();
+  return (
+    <ConfigProvider locale={zhCN} theme={isDark ? bridgeThemeDark : bridgeTheme}>
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
       </QueryClientProvider>
     </ConfigProvider>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <DarkModeProvider>
+      <App />
+    </DarkModeProvider>
   </React.StrictMode>,
 );

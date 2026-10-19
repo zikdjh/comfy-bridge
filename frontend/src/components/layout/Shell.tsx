@@ -28,8 +28,8 @@ import { JOB_DRAWER_EVENT, useJobs, type JobsSnapshot, type SyncJob } from "../.
 import { openBridgeEventStream } from "../../api/events";
 import { useQueryClient } from "@tanstack/react-query";
 import { UpdateBanner } from "./UpdateBanner";
-import { bridgeTokens as t } from "../../theme";
 import { useIsNarrow } from "../../hooks/useMediaQuery";
+import { useDarkMode } from "../../hooks/useDarkMode";
 
 const { Sider, Header, Content } = Layout;
 
@@ -50,6 +50,7 @@ const NAV_ITEMS: MenuProps["items"] = [
 type PillState = "online" | "offline" | "pending";
 
 function StatusPill({ title, sub, state, tooltip, compact }: { title: string; sub: string; state: PillState; tooltip?: string; compact?: boolean }) {
+  const { tokens: t } = useDarkMode();
   const badge = state === "online" ? "success" : state === "offline" ? "error" : "default";
   const inner = (
     <Space size={6}>
@@ -64,6 +65,7 @@ function StatusPill({ title, sub, state, tooltip, compact }: { title: string; su
 }
 
 export function Shell() {
+  const { tokens: t, isDark } = useDarkMode();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -207,6 +209,7 @@ export function Shell() {
       >
         <AntMenu
           mode="inline"
+          theme={isDark ? "dark" : "light"}
           selectedKeys={[location.pathname]}
           items={NAV_ITEMS}
           onClick={({ key }) => {
@@ -222,7 +225,7 @@ export function Shell() {
 
       {!isNarrow && (
         <Sider
-          theme="light"
+          theme={isDark ? "dark" : "light"}
           collapsible
           collapsed={collapsed}
           onCollapse={setCollapsed}

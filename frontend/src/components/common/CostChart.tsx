@@ -4,7 +4,7 @@ import * as echarts from "echarts/core";
 import { BarChart } from "echarts/charts";
 import { GridComponent, TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
-import { bridgeTokens } from "../../theme";
+import { useDarkMode } from "../../hooks/useDarkMode";
 
 echarts.use([BarChart, GridComponent, TooltipComponent, CanvasRenderer]);
 
@@ -16,6 +16,7 @@ export interface CostPoint {
 
 /** 云端估算成本逐日柱状（M4-1）；单序列蓝色柱，悬浮显示金额与请求数。 */
 export function CostChart({ data }: { data: CostPoint[] }) {
+  const { tokens } = useDarkMode();
   const option = useMemo(
     () => ({
       tooltip: {
@@ -34,12 +35,12 @@ export function CostChart({ data }: { data: CostPoint[] }) {
           name: "云端估算成本",
           type: "bar",
           barMaxWidth: 26,
-          itemStyle: { color: bridgeTokens.colors.primary },
+          itemStyle: { color: tokens.colors.primary },
           data: data.map((d) => d.est_cost_usd),
         },
       ],
     }),
-    [data],
+    [data, tokens],
   );
 
   return <ReactECharts option={option} style={{ height: 220 }} notMerge lazyUpdate />;

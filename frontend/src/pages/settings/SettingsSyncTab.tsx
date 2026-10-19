@@ -10,7 +10,7 @@ import {
   type SettingsDiffRow,
   type SyncDirection,
 } from "../../api/settingsSync";
-import { bridgeTokens as t } from "../../theme";
+import { useDarkMode } from "../../hooks/useDarkMode";
 
 type Choice = SyncDirection | "skip";
 
@@ -34,6 +34,7 @@ comfyui:
   controlnet: models/controlnet/`;
 
 export function SettingsSyncTab() {
+  const { tokens: t } = useDarkMode();
   const qc = useQueryClient();
   const { data, isLoading, refetch, isFetching } = useSettingsSyncDiff();
   const [directions, setDirections] = useState<Record<string, Choice>>({});

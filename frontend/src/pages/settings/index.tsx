@@ -11,8 +11,10 @@ import { SettingsSyncTab } from "./SettingsSyncTab";
 import { ConfigWizard } from "./ConfigWizard";
 import AccountProfilesCard from "./AccountProfilesCard";
 import { UpdateCheckCard } from "./UpdateCheckCard";
+import { useDarkMode } from "../../hooks/useDarkMode";
 
 export default function SettingsPage() {
+  const { isDark, setMode } = useDarkMode();
   const { data: config, isLoading } = useConfig();
   const saveConfig = useSaveConfig();
   const [localForm] = Form.useForm();
@@ -330,6 +332,14 @@ export default function SettingsPage() {
                       <Typography.Text type="danger">{nodeEnv.error}</Typography.Text>
                     )}
                   </Space>
+                </Form.Item>
+                <Form.Item label="界面主题" extra="亮色 / 暗色，按浏览器记忆；跟随系统仅在未手动切换时生效">
+                  <Switch
+                    checked={isDark}
+                    checkedChildren="暗色"
+                    unCheckedChildren="亮色"
+                    onChange={(v) => setMode(v ? "dark" : "light")}
+                  />
                 </Form.Item>
                 <Form.Item label="本地模型目录映射（分类 → 路径）">
                   <Form.List name="modelsDirs">

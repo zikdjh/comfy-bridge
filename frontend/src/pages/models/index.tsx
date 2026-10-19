@@ -26,7 +26,7 @@ import {
   type SyncJobDto,
   type SyncRow,
 } from "../../api/modalVolume";
-import { bridgeTokens as t } from "../../theme";
+import { useDarkMode } from "../../hooks/useDarkMode";
 
 /** 表格横向滚动兜底：窄屏下列宽超出自动出横向滚动条 */
 const TABLE_SCROLL_X = { x: true } as const;
@@ -74,19 +74,7 @@ const jobColumns: ColumnsType<SyncJobDto> = [
     title: "进度",
     key: "progress",
     width: 200,
-    render: (_, job) => (
-      <Space size={8}>
-        <span style={{ fontSize: 12 }}>
-          {job.done + job.failed}/{job.total}
-        </span>
-        <Progress
-          percent={job.total ? Math.round(((job.done + job.failed) / job.total) * 100) : 0}
-          size="small"
-          style={{ width: 120 }}
-          strokeColor={job.failed ? t.colors.warning : t.colors.primary}
-        />
-      </Space>
-    ),
+    render: (_, job) => <JobProgress job={job} />,
   },
   { title: "状态", dataIndex: "status", width: 90, render: (_, job) => jobStatusTag(job) },
   {
@@ -97,6 +85,23 @@ const jobColumns: ColumnsType<SyncJobDto> = [
       job.status === "running" ? <CancelButton jobId={job.id} /> : null,
   },
 ];
+
+function JobProgress({ job }: { job: SyncJobDto }) {
+  const { tokens: t } = useDarkMode();
+  return (
+    <Space size={8}>
+      <span style={{ fontSize: 12 }}>
+        {job.done + job.failed}/{job.total}
+      </span>
+      <Progress
+        percent={job.total ? Math.round(((job.done + job.failed) / job.total) * 100) : 0}
+        size="small"
+        style={{ width: 120 }}
+        strokeColor={job.failed ? t.colors.warning : t.colors.primary}
+      />
+    </Space>
+  );
+}
 
 function CancelButton({ jobId }: { jobId: string }) {
   const cancelJob = useCancelJob();
@@ -110,6 +115,7 @@ function CancelButton({ jobId }: { jobId: string }) {
 }
 
 function JobTable({ jobs }: { jobs: SyncJobDto[] }) {
+  const { tokens: t } = useDarkMode();
   if (jobs.length === 0) {
     return <Typography.Text type="secondary">暂无同步作业</Typography.Text>;
   }
@@ -129,6 +135,7 @@ function JobTable({ jobs }: { jobs: SyncJobDto[] }) {
 }
 
 export default function ModelsPage() {
+  const { tokens: t } = useDarkMode();
   const meta = useVolumeMeta();
   const [category, setCategory] = useState("checkpoints");
   const overview = useVolumeOverview(category);

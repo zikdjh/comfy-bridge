@@ -10,7 +10,7 @@ import {
 } from "../../api/launch";
 import { warmupModal } from "../../api/health";
 import { LAUNCH_FLAGS, type LaunchFlagDef, type Target } from "./launchFlags";
-import { bridgeTokens as t } from "../../theme";
+import { useDarkMode, type BridgeTokens } from "../../hooks/useDarkMode";
 
 /** 启用状态：true=无值开关；字符串=取值（required/optional 参数） */
 export type Selection = Record<string, string | true>;
@@ -84,7 +84,7 @@ function fmtDuration(ms?: number | null): string {
   return `${Math.floor(m / 60)}h${m % 60}m`;
 }
 
-function showProcError(r: ProcResult) {
+function showProcError(r: ProcResult, t: BridgeTokens) {
   Modal.error({
     title: r.error || "操作失败",
     width: 620,
@@ -98,6 +98,7 @@ function showProcError(r: ProcResult) {
 
 /** 命令展示块：复制图标内嵌块右上角（GitHub 风格），不再游离在代码块外 */
 function CodeBlock({ text, dark }: { text: string; dark?: boolean }) {
+  const { tokens: t } = useDarkMode();
   const [copied, setCopied] = useState(false);
   const onCopy = async () => {
     try {
@@ -151,6 +152,7 @@ function CodeBlock({ text, dark }: { text: string; dark?: boolean }) {
 
 /** 本地进程控制条：桥接器直接启动 / 停止 / 重启本地 ComfyUI */
 function LocalControl() {
+  const { tokens: t } = useDarkMode();
   const { data: st, refetch } = useLocalProcState();
   const qc = useQueryClient();
   const [busy, setBusy] = useState<"start" | "stop" | "restart" | null>(null);
@@ -163,7 +165,7 @@ function LocalControl() {
 
   const report = (label: string, r: ProcResult) => {
     if (r.ok) message.success(label + (r.seconds != null ? `（${r.seconds}s）` : ""));
-    else showProcError(r);
+    else showProcError(r, t);
   };
 
   const doStart = async () => {
@@ -185,7 +187,7 @@ function LocalControl() {
             refresh();
           },
         });
-      } else showProcError(r);
+      } else showProcError(r, t);
     } catch (err) {
       message.error(`启动失败：${err instanceof Error ? err.message : err}`);
     } finally {
@@ -199,7 +201,7 @@ function LocalControl() {
     try {
       const r = await stopLocalProc(force);
       if (r.ok) message.success(r.stopped ? `本地 ComfyUI 已停止（PID ${r.pid}）` : r.detail || "本地 ComfyUI 未在运行");
-      else showProcError(r);
+      else showProcError(r, t);
     } catch (err) {
       message.error(`停止失败：${err instanceof Error ? err.message : err}`);
     } finally {
@@ -224,7 +226,7 @@ function LocalControl() {
     try {
       const r = await restartLocalProc(takeover);
       if (r.ok) report("本地 ComfyUI 已重启就绪", r);
-      else showProcError(r);
+      else showProcError(r, t);
     } catch (err) {
       message.error(`重启失败：${err instanceof Error ? err.message : err}`);
     } finally {
@@ -293,6 +295,7 @@ function LocalControl() {
 
 /** 云端容器控制条：运行中容器数（M4-2 面板）/ 预热启动 / 停止容器 */
 function ModalControl() {
+  const { tokens: t } = useDarkMode();
   const [busy, setBusy] = useState<"warmup" | "stop" | null>(null);
   const { data: containers, refetch: refetchContainers, isFetching: containersFetching } = useModalContainers();
 
@@ -365,6 +368,7 @@ function ModalControl() {
 }
 
 function TargetPanel({ target, launch, state, onChange, onReset }: TargetPanelProps) {
+  const { tokens: t } = useDarkMode();
   const { sel, custom } = state;
 
   const setOne = (name: string, value: string | true | undefined) => {
@@ -528,6 +532,7 @@ function TargetPanel({ target, launch, state, onChange, onReset }: TargetPanelPr
 }
 
 export function LaunchArgsPanel() {
+  const { tokens: t } = useDarkMode();
   const { data: launch, isLoading, refetch } = useLaunch();
   const [saving, setSaving] = useState(false);
   const [localState, setLocalState] = useState<PanelState>({ sel: {}, custom: "" });

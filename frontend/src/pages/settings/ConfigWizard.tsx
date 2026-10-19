@@ -15,7 +15,7 @@ import { CheckCircleOutlined, CloseCircleOutlined, FireOutlined } from "@ant-des
 import { useConfig, useSaveConfig, validateComfyRoot } from "../../api/config";
 import { useHealth, warmupModal } from "../../api/health";
 import { ComfyScanModal } from "./ComfyScanModal";
-import { bridgeTokens as t } from "../../theme";
+import { useDarkMode } from "../../hooks/useDarkMode";
 
 /** 首次配置向导完成标记（localStorage，按浏览器记忆；设置页可随时重跑） */
 export const WIZARD_DONE_KEY = "cb_wizard_done";
@@ -36,8 +36,9 @@ function CheckRow({
   detail: string;
   action?: { label: string; onClick: () => void };
 }) {
+  const { tokens: t } = useDarkMode();
   return (
-    <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "8px 0", borderBottom: "1px dashed #eceef5" }}>
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "8px 0", borderBottom: `1px dashed ${t.colors.border}` }}>
       {ok ? (
         <CheckCircleOutlined style={{ color: t.colors.accent, fontSize: 16, marginTop: 2 }} />
       ) : (

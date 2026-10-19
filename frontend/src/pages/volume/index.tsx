@@ -64,7 +64,7 @@ import type {
   VolumeUsageItem,
 } from "../../api/volume";
 import { EmptyGuide } from "../../components/common/EmptyGuide";
-import { bridgeTokens as t } from "../../theme";
+import { useDarkMode } from "../../hooks/useDarkMode";
 
 /** 表格横向滚动兜底：窄屏下列宽超出自动出横向滚动条 */
 const TABLE_SCROLL = { x: true } as const;
@@ -117,6 +117,7 @@ const STATUS_TAG: Record<string, { color: string; text: string }> = {
 };
 
 function UsageCard() {
+  const { tokens: t } = useDarkMode();
   const queryClient = useQueryClient();
   const { data: meta } = useVolumeMeta();
   const { data, isFetching } = useVolumeUsage();
@@ -357,6 +358,7 @@ function DownloadCard({
   volumeNames: string[];
   defaultVolume: string;
 }) {
+  const { tokens: t } = useDarkMode();
   const queryClient = useQueryClient();
   const [url, setUrl] = useState("");
   const [volume, setVolume] = useState(defaultVolume);
@@ -477,6 +479,7 @@ function VolumeBrowser({
   setPath: (p: string) => void;
   volumeNames: string[];
 }) {
+  const { tokens: t } = useDarkMode();
   const { data: meta } = useVolumeMeta();
   const { data, isLoading, refetch, isFetching } = useVolumeList(path, volume);
   const queryClient = useQueryClient();
@@ -861,6 +864,7 @@ function VolumeBrowser({
 /* ---------------- 下载任务 ---------------- */
 
 function DownloadJobsCard() {
+  const { tokens: t } = useDarkMode();
   const queryClient = useQueryClient();
   const { data: meta } = useVolumeMeta();
   const { data } = useDownloadJobs();
@@ -974,6 +978,7 @@ function DownloadJobsCard() {
 /* ---------------- 回收站 ---------------- */
 
 function TrashCard({ volume }: { volume: string }) {
+  const { tokens: t } = useDarkMode();
   const queryClient = useQueryClient();
   const { data, isLoading, refetch, isFetching } = useTrash(volume);
   const [busyPath, setBusyPath] = useState<string | null>(null);
@@ -1104,6 +1109,7 @@ function TrashCard({ volume }: { volume: string }) {
 /* ---------------- 移动任务 ---------------- */
 
 function MoveJobsCard() {
+  const { tokens: t } = useDarkMode();
   const queryClient = useQueryClient();
   const { data: meta } = useVolumeMeta();
   const { data } = useMoveJobs();

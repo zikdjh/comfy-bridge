@@ -14,7 +14,7 @@ import { useModalContainers } from "../../api/launch";
 import { useRequests, type BridgeRequest, type RequestStatus } from "../../api/requests";
 import { useCostSummary, useUpdateBudget, type ModalBilling } from "../../api/cost";
 import { statusMeta } from "../logs/RequestLogPanel";
-import { bridgeTokens as t } from "../../theme";
+import { useDarkMode } from "../../hooks/useDarkMode";
 
 /** 表格横向滚动兜底：窄屏下列宽超出自动出横向滚动条 */
 const TABLE_SCROLL_X = { x: true } as const;
@@ -40,6 +40,7 @@ function modalBreakdownTip(m: ModalBilling): string {
 }
 
 export default function DashboardPage() {
+  const { tokens: t } = useDarkMode();
   const navigate = useNavigate();
   const { data: health, refetch: refetchHealth } = useHealth();
   // 拉满后端单页上限 500 条，前端表格内分页浏览

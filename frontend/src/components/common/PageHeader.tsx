@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 import { Space } from "antd";
-import { bridgeTokens as t } from "../../theme";
+import { useDarkMode } from "../../hooks/useDarkMode";
 
 /**
  * 页面页首：标题 + 可选副标题 + 右侧操作区。
  * 各页面统一用这一行开场，保证扫读节奏一致。
  */
 export function PageHeader(props: { title: string; sub?: ReactNode; extra?: ReactNode }) {
+  const { tokens: t } = useDarkMode();
   return (
     <div
       style={{

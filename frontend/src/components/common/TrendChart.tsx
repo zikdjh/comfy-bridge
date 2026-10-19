@@ -4,7 +4,7 @@ import * as echarts from "echarts/core";
 import { BarChart } from "echarts/charts";
 import { GridComponent, LegendComponent, TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
-import { bridgeTokens } from "../../theme";
+import { useDarkMode } from "../../hooks/useDarkMode";
 
 echarts.use([BarChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
 
@@ -16,6 +16,7 @@ export interface TrendPoint {
 
 /** 生成量趋势（按执行后端双色堆叠柱状），数据来自请求记录聚合。 */
 export function TrendChart({ data }: { data: TrendPoint[] }) {
+  const { tokens } = useDarkMode();
   const option = useMemo(
     () => ({
       tooltip: { trigger: "axis" },
@@ -29,7 +30,7 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
           type: "bar",
           stack: "total",
           barMaxWidth: 26,
-          itemStyle: { color: bridgeTokens.colors.accent },
+          itemStyle: { color: tokens.colors.accent },
           data: data.map((d) => d.local),
         },
         {
@@ -37,12 +38,12 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
           type: "bar",
           stack: "total",
           barMaxWidth: 26,
-          itemStyle: { color: bridgeTokens.colors.primary },
+          itemStyle: { color: tokens.colors.primary },
           data: data.map((d) => d.modal),
         },
       ],
     }),
-    [data],
+    [data, tokens],
   );
 
   return <ReactECharts option={option} style={{ height: 240 }} notMerge lazyUpdate />;

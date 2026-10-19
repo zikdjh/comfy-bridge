@@ -17,8 +17,8 @@ import {
 } from "../../api/workflows";
 import { EmptyGuide } from "../../components/common/EmptyGuide";
 import { openJobDrawer, startWorkflowSync, useJob } from "../../api/jobs";
-import { bridgeTokens as t } from "../../theme";
 import { PageHeader } from "../../components/common/PageHeader";
+import { useDarkMode } from "../../hooks/useDarkMode";
 
 /** 表格横向滚动兜底：窄屏下列宽超出自动出横向滚动条 */
 const TABLE_SCROLL_X = { x: true } as const;
@@ -99,6 +99,7 @@ const shortHash = (h: string | null) => (h ? h.slice(0, 8) : "—");
 /* ---------------- 冲突双列对比（M2 收尾）：本地版 vs 云端版元数据 + 内容摘要 ---------------- */
 
 function SideCard({ title, side, onlyTypes }: { title: string; side: WfCompareSide; onlyTypes: Set<string> }) {
+  const { tokens: t } = useDarkMode();
   return (
     <Card
       size="small"
@@ -157,6 +158,7 @@ function SideCard({ title, side, onlyTypes }: { title: string; side: WfCompareSi
 }
 
 function CompareModal({ name, onClose }: { name: string | null; onClose: () => void }) {
+  const { tokens: t } = useDarkMode();
   const { data, isLoading } = useQuery({
     queryKey: ["workflows", "compare", name],
     queryFn: ({ signal }) => fetchWorkflowCompare(name!, signal),
@@ -381,6 +383,7 @@ function fmtSec2(ms: number): string {
 }
 
 function RunStats() {
+  const { tokens: t } = useDarkMode();
   const [days, setDays] = useState(30);
   const { data, isLoading } = useWorkflowRunStats(days);
   const rows = data?.rows ?? [];

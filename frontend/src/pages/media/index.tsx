@@ -26,12 +26,13 @@ import {
   useLocalMedia,
   type MediaItem,
 } from "../../api/media";
-import { bridgeTokens as t } from "../../theme";
 import { PageHeader } from "../../components/common/PageHeader";
+import { useDarkMode } from "../../hooks/useDarkMode";
 
 const TILE_HEIGHT = 160;
 
 function MediaTile({ item, onOpen }: { item: MediaItem; onOpen: (item: MediaItem) => void }) {
+  const { tokens: t } = useDarkMode();
   const name = item.path.split("/").pop() ?? item.path;
   return (
     <Tooltip title={item.path}>

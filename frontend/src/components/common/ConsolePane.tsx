@@ -15,7 +15,7 @@ import {
   type LogLevel,
   type LogStreamHandlers,
 } from "../../api/logs";
-import { bridgeTokens } from "../../theme";
+import { useDarkMode, type BridgeTokens } from "../../hooks/useDarkMode";
 
 /** 缓冲上限可选档位（控制日志总长度；超出丢弃最旧行）。 */
 const CAP_OPTIONS = [200, 500, 1000, 3000, 5000];
@@ -26,30 +26,23 @@ type LevelFilter = "all" | "warning" | "error";
 /** 缓冲条目：id 单调递增，供虚拟列表做稳定 key（裁剪后仍可锚定位置）。 */
 type BufEntry = LogEntry & { id: number };
 
-const LEVEL_COLOR: Record<LogLevel, string> = {
-  debug: bridgeTokens.colors.console.dim,
-  detail: bridgeTokens.colors.console.text,
-  info: bridgeTokens.colors.console.text,
-  warning: bridgeTokens.colors.console.yellow,
-  error: bridgeTokens.colors.console.red,
-  critical: bridgeTokens.colors.console.red,
-};
-
 /** 工具行占位（含下间距），供两栏标题/脚注对齐参考。 */
 export const TOOLBAR_MIN_HEIGHT = 32;
 /** 终端区的绝对下限：页面整体高度不足时靠外层 minHeight 撑开滚动，这里只防极端压缩 */
 const TERMINAL_FLOOR = 240;
 const EMPTY_FLOOR = 200;
 
-export const TERMINAL_BOX_STYLE: React.CSSProperties = {
+function makeTerminalBoxStyle(t: BridgeTokens): React.CSSProperties {
+  return {
   overflowX: "hidden",
-  background: bridgeTokens.colors.console.background,
+  background: t.colors.console.background,
   borderRadius: 8,
   padding: "10px 14px",
   fontFamily: "'Cascadia Mono', Consolas, 'Courier New', monospace",
   fontSize: 12,
   lineHeight: 1.6,
-};
+  };
+}
 
 function levelPasses(level: LogLevel, filter: LevelFilter): boolean {
   if (filter === "all") return true;
@@ -58,9 +51,18 @@ function levelPasses(level: LogLevel, filter: LevelFilter): boolean {
 }
 
 function LogLine({ e }: { e: BufEntry }) {
+  const { tokens } = useDarkMode();
+  const LEVEL_COLOR: Record<LogLevel, string> = {
+    debug: tokens.colors.console.dim,
+    detail: tokens.colors.console.text,
+    info: tokens.colors.console.text,
+    warning: tokens.colors.console.yellow,
+    error: tokens.colors.console.red,
+    critical: tokens.colors.console.red,
+  };
   return (
     <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-      <span style={{ color: bridgeTokens.colors.console.dim, marginRight: 10, userSelect: "none" }}>{formatLogTime(e.t)}</span>
+      <span style={{ color: tokens.colors.console.dim, marginRight: 10, userSelect: "none" }}>{formatLogTime(e.t)}</span>
       <span style={{ color: LEVEL_COLOR[e.level] ?? LEVEL_COLOR.info }}>{e.m.trimEnd() || " "}</span>
     </div>
   );
@@ -85,6 +87,8 @@ export interface ConsolePaneProps {
 /** 实时控制台通用终端面板：SSE 快照+增量、虚拟滚动、过滤/暂停/跟随/导出。
  *  本地 ComfyUI 与 Modal Runner 两栏共用，行为保持一致。 */
 export function ConsolePane({ title, openStream, downloadPrefix, footnote, emptyHint, headerExtra }: ConsolePaneProps) {
+  const { tokens } = useDarkMode();
+  const TERMINAL_BOX_STYLE = makeTerminalBoxStyle(tokens);
   const [version, bump] = useReducer((x: number) => x + 1, 0);
   const [status, setStatus] = useState<Status>("connecting");
   const [statusError, setStatusError] = useState<string>();
@@ -184,7 +188,7 @@ export function ConsolePane({ title, openStream, downloadPrefix, footnote, empty
         </Space>
       }
       extra={
-        <span style={{ fontSize: 12, color: bridgeTokens.colors.textMuted, fontVariantNumeric: "tabular-nums" }}>
+        <span style={{ fontSize: 12, color: tokens.colors.textMuted, fontVariantNumeric: "tabular-nums" }}>
           {visible.length}/{bufferRef.current.length} 行
         </span>
       }
@@ -196,7 +200,7 @@ export function ConsolePane({ title, openStream, downloadPrefix, footnote, empty
           <Input
             size="small"
             allowClear
-            prefix={<SearchOutlined style={{ color: bridgeTokens.colors.textSecondary }} />}
+            prefix={<SearchOutlined style={{ color: tokens.colors.textSecondary }} />}
             placeholder="过滤关键字"
             style={{ width: compact ? 100 : 160 }}
             value={textFilter}
@@ -214,7 +218,7 @@ export function ConsolePane({ title, openStream, downloadPrefix, footnote, empty
           />
           <Tooltip title="开启后新日志自动滚动到底部；向上查看历史会自动暂停跟随">
             <Space size={4}>
-              {!compact && <span style={{ fontSize: 12, color: bridgeTokens.colors.textMuted }}>跟随</span>}
+              {!compact && <span style={{ fontSize: 12, color: tokens.colors.textMuted }}>跟随</span>}
               <Switch
                 size="small"
                 checked={stick}
@@ -305,7 +309,7 @@ export function ConsolePane({ title, openStream, downloadPrefix, footnote, empty
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            color: bridgeTokens.colors.console.dim,
+            color: tokens.colors.console.dim,
           }}
         >
           {emptyHint(online)}

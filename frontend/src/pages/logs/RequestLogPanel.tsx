@@ -19,7 +19,7 @@ import { RedoOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { BackendTag, type Backend } from "../../components/common/BackendTag";
 import { useRequests, type BridgeRequest, type GenType, type RequestStatus } from "../../api/requests";
-import { bridgeTokens as t } from "../../theme";
+import { useDarkMode } from "../../hooks/useDarkMode";
 
 export const statusMeta: Record<RequestStatus, { color: string; text: string }> = {
   queued: { color: "default", text: "排队中" },
@@ -98,6 +98,7 @@ const columns: ColumnsType<BridgeRequest> = [
 
 /** 请求日志：桥接器拦截 POST /prompt 后落库的每次请求（GET /api/v1/requests）。 */
 export function RequestLogPanel() {
+  const { tokens: t } = useDarkMode();
   const [backendFilter, setBackendFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [realtime, setRealtime] = useState(true);

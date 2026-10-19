@@ -3,7 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <title>ComfyBridge 控制台</title>
+    <script>
+      // 首屏主题预置：在 React 挂载前应用已保存的主题，避免暗色下白屏闪一下
+      (() => {
+        try {
+          const saved = localStorage.getItem("cb_theme_mode");
+          const mode =
+            saved === "light" || saved === "dark"
+              ? saved
+              : window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light";
+          document.documentElement.setAttribute("data-theme", mode);
+          document.documentElement.style.colorScheme = mode;
+          document.documentElement.style.background = mode === "dark" ? "#0d1117" : "#f5f5f5";
+        } catch {
+          /* 隐私模式下 localStorage 可能不可用，忽略即可 */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
