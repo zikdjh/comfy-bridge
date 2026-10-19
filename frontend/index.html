@@ -6,21 +6,29 @@
     <meta name="color-scheme" content="light dark" />
     <title>ComfyBridge 控制台</title>
     <script>
-      // 首屏主题预置：在 React 挂载前应用已保存的主题，避免暗色下白屏闪一下
+      // 首屏主题预置：在 React 挂载前应用已保存的主题，避免暗色下白屏闪一下。
+      // 保存值可为 light / dark / system；未保存或为 system 时按系统偏好解析。
       (() => {
         try {
           const saved = localStorage.getItem("cb_theme_mode");
-          const mode =
-            saved === "light" || saved === "dark"
-              ? saved
+          const mode = saved === "light" || saved === "dark" || saved === "system" ? saved : "system";
+          const resolved =
+            mode !== "system"
+              ? mode
               : window.matchMedia("(prefers-color-scheme: dark)").matches
                 ? "dark"
                 : "light";
-          document.documentElement.setAttribute("data-theme", mode);
-          document.documentElement.style.colorScheme = mode;
-          document.documentElement.style.background = mode === "dark" ? "#0d1117" : "#f5f5f5";
+          document.documentElement.setAttribute("data-theme", resolved);
+          document.documentElement.setAttribute("data-theme-mode", mode);
+          document.documentElement.style.colorScheme = resolved;
+          document.documentElement.style.background = resolved === "dark" ? "#0d1117" : "#f5f5f5";
         } catch {
-          /* 隐私模式下 localStorage 可能不可用，忽略即可 */
+          // 隐私模式下 localStorage 可能不可用，退回系统偏好，避免首屏主题错位
+          const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+          document.documentElement.setAttribute("data-theme-mode", "system");
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+          document.documentElement.style.background = dark ? "#0d1117" : "#f5f5f5";
         }
       })();
     </script>

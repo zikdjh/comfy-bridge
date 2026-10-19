@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Card, Form, Input, InputNumber, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Typography } from "antd";
+import { Alert, Button, Card, Form, Input, InputNumber, Popconfirm, Segmented, Select, Space, Switch, Table, Tabs, Tag, Typography } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { message } from "antd";
@@ -12,9 +12,10 @@ import { ConfigWizard } from "./ConfigWizard";
 import AccountProfilesCard from "./AccountProfilesCard";
 import { UpdateCheckCard } from "./UpdateCheckCard";
 import { useDarkMode } from "../../hooks/useDarkMode";
+import type { ThemeMode } from "../../hooks/useDarkMode";
 
 export default function SettingsPage() {
-  const { isDark, setMode } = useDarkMode();
+  const { mode, setMode } = useDarkMode();
   const { data: config, isLoading } = useConfig();
   const saveConfig = useSaveConfig();
   const [localForm] = Form.useForm();
@@ -333,12 +334,15 @@ export default function SettingsPage() {
                     )}
                   </Space>
                 </Form.Item>
-                <Form.Item label="界面主题" extra="亮色 / 暗色，按浏览器记忆；跟随系统仅在未手动切换时生效">
-                  <Switch
-                    checked={isDark}
-                    checkedChildren="暗色"
-                    unCheckedChildren="亮色"
-                    onChange={(v) => setMode(v ? "dark" : "light")}
+                <Form.Item label="界面主题" extra="「跟随系统」实时响应操作系统的深浅色切换；手动选择后固定不变">
+                  <Segmented
+                    value={mode}
+                    onChange={(v) => setMode(v as ThemeMode)}
+                    options={[
+                      { label: "跟随系统", value: "system" },
+                      { label: "亮色", value: "light" },
+                      { label: "暗色", value: "dark" },
+                    ]}
                   />
                 </Form.Item>
                 <Form.Item label="本地模型目录映射（分类 → 路径）">
