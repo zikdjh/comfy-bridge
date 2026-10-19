@@ -5,6 +5,20 @@ import { fileURLToPath } from "node:url";
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        // 三方库独立分包：业务代码改动不影响 vendor 缓存，首屏只拉必要 vendor
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("echarts") || id.includes("zrender")) return "vendor-echarts";
+          if (id.includes("antd") || id.includes("@ant-design") || id.includes("rc-")) return "vendor-antd";
+          if (id.includes("react") || id.includes("scheduler")) return "vendor-react";
+          return "vendor-misc";
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(path.dirname(fileURLToPath(import.meta.url)), "src"),

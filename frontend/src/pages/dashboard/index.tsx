@@ -1,17 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Alert, Badge, Button, Card, Col, Descriptions, Form, InputNumber, Modal, Popconfirm, Progress, Row, Select, Space, Statistic, Table, Tag, Tooltip, Typography, message } from "antd";
 import { CheckCircleOutlined, ClockCircleOutlined, DollarOutlined, FireOutlined, InfoCircleOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { Link, useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
 import { BackendTag, type Backend } from "../../components/common/BackendTag";
-import { TrendChart, type TrendPoint } from "../../components/common/TrendChart";
-import { CostChart, type CostPoint } from "../../components/common/CostChart";
+import type { TrendPoint } from "../../components/common/TrendChart";
+import type { CostPoint } from "../../components/common/CostChart";
 import { useHealth, warmupModal } from "../../api/health";
 import { useModalContainers } from "../../api/launch";
 import { useRequests, type BridgeRequest, type RequestStatus } from "../../api/requests";
 import { useCostSummary, useUpdateBudget, type ModalBilling } from "../../api/cost";
 import { statusMeta } from "../logs/RequestLogPanel";
+
+// 图表懒加载：echarts 体量大且只在数据就绪后渲染，骨架先出、图表随后补上
+const TrendChart = lazy(() => import("../../components/common/TrendChart").then((m) => ({ default: m.TrendChart })));
+const CostChart = lazy(() => import("../../components/common/CostChart").then((m) => ({ default: m.CostChart })));
 
 function backendOf(r: BridgeRequest): Backend {
   return (r.final_backend || r.backend) as Backend;
@@ -334,7 +338,7 @@ export default function DashboardPage() {
       <Row gutter={[12, 12]}>
         <Col xs={24} xl={16}>
           <Card size="small" title="生成趋势（近 14 天）">
-            <TrendChart data={trend} />
+            <Suspense fallback={null}><TrendChart data={trend} /></Suspense>
           </Card>
         </Col>
         <Col xs={24} xl={8}>
@@ -394,7 +398,7 @@ export default function DashboardPage() {
               </Link>
             }
           >
-            <CostChart data={costTrend} />
+            <Suspense fallback={null}><CostChart data={costTrend} /></Suspense>
           </Card>
         </Col>
         <Col xs={24} xl={8}>
