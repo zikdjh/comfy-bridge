@@ -42,3 +42,4 @@ frontend/test-results/
 frontend/test-results-queue/
 frontend/playwright-report/
 frontend/e2e/.tmp-config/
+*.log
