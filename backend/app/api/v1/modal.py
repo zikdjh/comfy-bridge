@@ -7,6 +7,7 @@ import time
 import httpx
 from fastapi import APIRouter
 
+from ...core.config import get_settings
 from ...runner import client as runner_client
 
 router = APIRouter(prefix="/modal", tags=["modal"])
@@ -23,7 +24,8 @@ async def warmup() -> dict:
         return {"ok": False, "error": "未配置 modal.web_url（先 modal deploy modal-runner/runner.py 并写入 config.toml）"}
     start = time.monotonic()
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(_WARMUP_TIMEOUT, connect=30)) as client:
+        trust_env = get_settings().bridge.use_system_proxy
+        async with httpx.AsyncClient(timeout=httpx.Timeout(_WARMUP_TIMEOUT, connect=30), trust_env=trust_env) as client:
             resp = await client.get(f"{url.rstrip('/')}/system_stats", headers=runner_client.proxy_headers())
         resp.raise_for_status()
     except httpx.HTTPStatusError as exc:

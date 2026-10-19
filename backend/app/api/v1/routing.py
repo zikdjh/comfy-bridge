@@ -20,13 +20,6 @@ from .config import update_bridge_section
 router = APIRouter(prefix="/routing", tags=["routing"])
 
 
-class RoutingPreviewBody(BaseModel):
-    # 二选一：传 {"prompt": <API 格式图>} 或直接把图 dict 作为顶层（键为节点 id）
-    prompt: dict | None = None
-    workflow_name: str | None = None
-    manual_backend: str | None = None
-
-
 class RoutingRulesBody(BaseModel):
     rules: list[dict]
 
@@ -38,10 +31,22 @@ async def routing_preview(body: dict) -> dict:
     预算护栏现状随决策一并求值：超限时 trace 会出现 budget_guardrail 步骤，
     与真实提交路径一致。
     """
+    # 兼容两种历史请求形态：{"prompt": <图>} 或直接把图 dict 作为顶层。
+    # 这里不能用严格 Pydantic 模型，否则顶层节点 id 会被当成未知字段。
     raw_prompt = body.get("prompt")
     prompt = raw_prompt if isinstance(raw_prompt, dict) else body
     workflow_name = body.get("workflow_name")
-    manual_backend = body.get("manual_backend") or body.get("x-bridge-backend")
+    manual_backend = body.get("manual_backend")
+    if manual_backend is None:
+        manual_backend = body.get("x-bridge-backend")
+    # 节点图允许顶层任意 key；只对显式路由字段做枚举校验。
+    if manual_backend is not None and (
+        not isinstance(manual_backend, str) or manual_backend not in {"local", "modal"}
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="manual_backend 只能是 local 或 modal",
+        )
     facts = classify_graph(prompt)
     node_presence.kick_refresh_if_stale()  # node_missing_* 规则的数据源保鲜（后台，不阻塞干跑）
     presence = node_presence.snapshot()
@@ -91,4 +96,4 @@ async def write_rules(body: RoutingRulesBody) -> dict:
         cleaned = validate_rules(body.rules)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    return update_bridge_section({"rules": cleaned})
+    return await update_bridge_section({"rules": cleaned})

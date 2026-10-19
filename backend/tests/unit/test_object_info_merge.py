@@ -191,7 +191,7 @@ async def test_handle_object_info_single_node_does_not_add_cloud_only(monkeypatc
     ]
 
 
-def test_save_config_invalidates_object_info_cache(monkeypatch, tmp_path) -> None:
+async def test_save_config_invalidates_object_info_cache(monkeypatch, tmp_path) -> None:
     object_info._cache["/object_info"] = (b"old", ("stamp",), b"old", 0.0)
     monkeypatch.setattr(config_api, "CONFIG_PATH", tmp_path / "config.toml")
     class FakeSettings:
@@ -209,7 +209,7 @@ def test_save_config_invalidates_object_info_cache(monkeypatch, tmp_path) -> Non
     config_api.CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     # 直接调用更新函数，验证成功写盘路径也会清空合并缓存
-    config_api.update_bridge_section({"object_info_merge": "union"})
+    await config_api.update_bridge_section({"object_info_merge": "union"})
     assert object_info._cache == {}
 
 

@@ -13,7 +13,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import csv
 import io
 from datetime import UTC, datetime
@@ -49,7 +48,7 @@ async def put_budget(body: BudgetBody) -> dict:
         raise HTTPException(status_code=422, detail="月度预算不能为负（0 = 关闭护栏）")
     if "gpu_hourly_rate_usd" in updates and updates["gpu_hourly_rate_usd"] <= 0:
         raise HTTPException(status_code=422, detail="GPU 单价必须大于 0")
-    await asyncio.to_thread(update_bridge_section, updates)
+    await update_bridge_section(updates)
     return await cost_svc.afull_summary()
 
 

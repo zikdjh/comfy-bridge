@@ -335,12 +335,16 @@ def cli_env(extra: dict[str, str] | None = None) -> dict[str, str]:
         **auth_env(),
         **(extra or {}),
     }
-    # Modal 云端通信不走本机代理：CLI 的 aiohttp 通道拾取 HTTP(S)_PROXY 后
+    # Modal 云端通信默认不走本机代理：CLI 的 aiohttp 通道拾取 HTTP(S)_PROXY 后
     # 需要 aiohttp-socks 额外包，且代理链路不稳定会拖垮所有 CLI 调用。
     # Modal API 端点（api.modal.com 等）由 Modal 自己的边缘网络保证可达性。
-    for key in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "ALL_PROXY", "all_proxy"):
-        env.pop(key, None)
-    env["NO_PROXY"] = "*"
+    # bridge.use_system_proxy=True 时保留系统代理变量，交还给 CLI 自行处理。
+    if not get_settings().bridge.use_system_proxy:
+        for key in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "ALL_PROXY", "all_proxy"):
+            env.pop(key, None)
+        env["NO_PROXY"] = "*"
+    else:
+        env.pop("NO_PROXY", None)
     return env
 
 
@@ -421,7 +425,7 @@ async def _with_retry(op: str, fn):
 # 各错误类别的重试退避序列（秒）：限流窗口为秒级，退避逐次拉长；
 # 其余可重试错误（网络抖动等）保持原有的单次快速重试。
 _RETRY_DELAYS: dict[str, tuple[float, ...]] = {
-    "rate_limited": (1.0, 4.0, 10.0),
+    "rate_limited": (1.0, 2.0),
 }
 _DEFAULT_RETRY_DELAYS: tuple[float, ...] = (0.5,)
 

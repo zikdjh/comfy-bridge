@@ -22,6 +22,7 @@ export interface BridgeConfigDto {
   preflight: string;
   privacy_confirm: boolean;
   object_info_merge: string;
+  use_system_proxy: boolean;
 }
 
 /** Modal 认证与执行参数：secret 只回显脱敏值，明文仅保存时提交一次 */

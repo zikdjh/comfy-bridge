@@ -94,11 +94,12 @@ def proxy_headers() -> dict[str, str]:
 
 def _client() -> httpx.AsyncClient:
     # 鉴权头默认注入全部云端请求；connect 15s（Modal 边缘快连）；read 覆盖冷启动 600s + 余量
-    # trust_env=False：不拾取系统 HTTP(S)_PROXY，云端直连走 Modal 边缘网络。
+    # trust_env 默认 False（不拾取系统 HTTP(S)_PROXY）；use_system_proxy=True 时交还
+    # 给 httpx 读环境变量，供用户自建代理链路。
     return httpx.AsyncClient(
         timeout=httpx.Timeout(660.0, connect=15.0),
         headers=proxy_headers(),
-        trust_env=False,
+        trust_env=get_settings().bridge.use_system_proxy,
     )
 
 

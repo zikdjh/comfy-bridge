@@ -30,6 +30,7 @@ from ...logs.store import count_active_modal
 from ...modal_volume import client as modal_cli
 from ...nodes_mgr import diff_cache
 from ...proxy import object_info as object_info_merge
+from ...proxy import passthrough
 from ...runner import client as runner_client
 from ...volume_mgr import usage as volume_usage
 
@@ -77,7 +78,16 @@ def _view() -> dict:
 # ---------------------------------------------------------------- 账号档案（多账号维护）
 
 def _accounts_active_name(modal: ModalConfig) -> str | None:
-    """活跃档案判定：token_id 与 [modal] 生效视图一致的档案（token_id 唯一保证无歧义）。"""
+    """活跃档案判定：优先使用显式标记，兼容旧配置再按 token_id 推断。
+
+    “保存当前为档案”允许同凭据生成新名称；仅按 token_id 判断会让所有
+    同凭据档案都被视为激活，无法切换或删除。
+    """
+    if modal.active_account:
+        return next(
+            (p.name for p in modal.accounts if p.name == modal.active_account),
+            None,
+        )
     if not modal.token_id:
         return None
     return next((p.name for p in modal.accounts if p.token_id == modal.token_id), None)
@@ -193,8 +203,16 @@ async def upsert_account(body: AccountUpsertBody) -> dict:
         task_timeout=body.task_timeout,
         extra_launch_args=list(body.extra_launch_args),
     )
+    accounts = [*(p for p in modal.accounts if p.name != name), profile]
+    if modal.active_account and any(p.name == modal.active_account for p in accounts if p.name != name):
+        active_account = modal.active_account
+    elif token_id == modal.token_id and not modal.active_account:
+        active_account = name
+    else:
+        active_account = modal.active_account
     new_modal = modal.model_copy(update={
-        "accounts": [*(p for p in modal.accounts if p.name != name), profile],
+        "accounts": accounts,
+        "active_account": active_account,
     })
     _persist_settings(settings.local, settings.bridge, new_modal)
     audit.record({"event": "account_profile_save", "name": name})
@@ -211,6 +229,7 @@ async def delete_account(name: str) -> dict:
         raise HTTPException(status_code=409, detail="不能删除当前激活的账号档案（请先激活其它账号）")
     new_modal = modal.model_copy(update={
         "accounts": [p for p in modal.accounts if p.name != name],
+        "active_account": "" if modal.active_account == name else modal.active_account,
     })
     _persist_settings(settings.local, settings.bridge, new_modal)
     audit.record({"event": "account_profile_delete", "name": name})
@@ -234,6 +253,7 @@ async def activate_account(name: str, body: AccountActivateBody | None = None) -
             detail=f"存在 {active_tasks} 个在途云端任务，切换账号会导致结果无法采集；确认切换请携带 force=true",
         )
     new_modal = modal.model_copy(update={
+        "active_account": profile.name,
         "token_id": profile.token_id,
         "token_secret": profile.token_secret,
         "environment": profile.environment,
@@ -444,10 +464,13 @@ async def write_config(body: ConfigBody) -> dict:
     )
     get_settings.cache_clear()
     object_info_merge.invalidate_merge_cache()
+    # 常驻透传客户端在 trust_env 变更后需重建（本轮配置含 use_system_proxy 时）；
+    # close 是幂等的，其他配置写入路径多关一次无副作用。
+    await passthrough.close_upstream_client()
     return _view()
 
 
-def update_bridge_section(updates: dict) -> dict:
+async def update_bridge_section(updates: dict) -> dict:
     """bridge 节增量更新并写回 config.toml（cost API 预算护栏设置复用同一落盘路径）。
 
     返回合并后的配置视图；校验失败抛 422。进程内热生效（cache_clear）。
@@ -469,6 +492,7 @@ def update_bridge_section(updates: dict) -> dict:
     )
     get_settings.cache_clear()
     object_info_merge.invalidate_merge_cache()
+    await passthrough.close_upstream_client()
     return _view()
 
 

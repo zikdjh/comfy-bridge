@@ -332,7 +332,7 @@ async def test_sdk_write_op_does_not_retry(monkeypatch):
 
 
 async def test_sdk_rate_limited_retries_with_backoff_then_recovers(monkeypatch):
-    """限流：前两次 rate limit、第三次成功 → 共 3 次调用，退避按 1s/4s 序列。"""
+    """限流：前两次 rate limit、第三次成功 → 共 3 次调用，退避按 1s/2s 序列。"""
     calls = {"n": 0, "delays": []}
 
     async def fake_op():
@@ -349,11 +349,11 @@ async def test_sdk_rate_limited_retries_with_backoff_then_recovers(monkeypatch):
     monkeypatch.setattr(modal_cli.asyncio, "sleep", fake_sleep)
     assert await modal_cli._with_retry("list_dir", fake_op) == "ok"
     assert calls["n"] == 3
-    assert calls["delays"] == [1.0, 4.0]
+    assert calls["delays"] == [1.0, 2.0]
 
 
 async def test_sdk_rate_limited_exhausts_backoff_and_raises(monkeypatch):
-    """限流持续：1s/4s/10s 三次重试后仍失败 → 抛出最后一次错误（共 4 次调用）。"""
+    """限流持续：1s/2s 两次重试后仍失败 → 抛出最后一次错误（共 3 次调用）。"""
     calls = {"n": 0}
 
     async def fake_op():
@@ -363,7 +363,7 @@ async def test_sdk_rate_limited_exhausts_backoff_and_raises(monkeypatch):
     monkeypatch.setattr(modal_cli.asyncio, "sleep", lambda _: _noop())
     with pytest.raises(ModalCliError):
         await modal_cli._with_retry("list_dir", fake_op)
-    assert calls["n"] == 4
+    assert calls["n"] == 3
 
 
 async def _noop():
@@ -557,6 +557,33 @@ def test_cli_env_layers_credentials_below_extra(monkeypatch):
     env = modal_cli.cli_env({"MODAL_TOKEN_ID": "override"})
     assert env["MODAL_TOKEN_ID"] == "override"
     assert modal_cli.cli_env()["MODAL_TOKEN_ID"] == "ak-test"
+
+
+def test_cli_env_strips_proxy_by_default(monkeypatch):
+    """默认关闭系统代理：CLI 子进程剥掉 HTTP(S)_PROXY 并强制 NO_PROXY=*。"""
+    from app.core.config import AppConfig, BridgeConfig
+
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:9")
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:9")
+    settings = AppConfig(bridge=BridgeConfig(use_system_proxy=False))
+    monkeypatch.setattr(modal_cli, "get_settings", lambda: settings)
+    env = modal_cli.cli_env()
+    assert "HTTP_PROXY" not in env
+    assert "HTTPS_PROXY" not in env
+    assert env["NO_PROXY"] == "*"
+
+
+def test_cli_env_keeps_proxy_when_use_system_proxy(monkeypatch):
+    """use_system_proxy=True：保留系统代理变量供 CLI 自行处理。"""
+    from app.core.config import AppConfig, BridgeConfig
+
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:9")
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:9")
+    settings = AppConfig(bridge=BridgeConfig(use_system_proxy=True))
+    monkeypatch.setattr(modal_cli, "get_settings", lambda: settings)
+    env = modal_cli.cli_env()
+    assert env["HTTP_PROXY"] == "http://127.0.0.1:9"
+    assert env["HTTPS_PROXY"] == "http://127.0.0.1:9"
 
 
 def test_popen_builds_cli_env(monkeypatch):
