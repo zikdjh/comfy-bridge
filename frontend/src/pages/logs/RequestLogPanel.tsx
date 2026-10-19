@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  Alert,
   Button,
   Card,
   Collapse,
@@ -101,15 +102,16 @@ export function RequestLogPanel() {
   const [realtime, setRealtime] = useState(true);
   const [detail, setDetail] = useState<BridgeRequest | null>(null);
 
-  const { data, isLoading, isFetching, refetch } = useRequests(backendFilter, statusFilter, realtime);
+  const { data, isLoading, isFetching, refetch, error } = useRequests(backendFilter, statusFilter, realtime);
   const items = data?.items ?? [];
+  const loadError = error instanceof Error ? error.message : error ? String(error) : null;
 
   return (
     <Card
       size="small"
       title={`请求日志（拦截层共 ${items.length} 条）`}
       extra={
-        <Space>
+        <Space wrap style={{ justifyContent: "flex-end", maxWidth: "100%" }}>
           <Select
             size="small"
             style={{ width: 110 }}
@@ -144,7 +146,18 @@ export function RequestLogPanel() {
         </Space>
       }
     >
+      {loadError && (
+        <Alert
+          type="error"
+          showIcon
+          message="请求日志读取失败"
+          description={loadError}
+          action={<Button size="small" onClick={() => void refetch()}>重试</Button>}
+          style={{ marginBottom: 12 }}
+        />
+      )}
       <Table<BridgeRequest>
+        scroll={{ x: 820 }}
         columns={columns}
         dataSource={items}
         rowKey="id"
@@ -157,7 +170,7 @@ export function RequestLogPanel() {
 
       <Drawer
         title={detail ? `请求详情 #${detail.id}` : ""}
-        width="60%"
+        width="min(60%, 720px)"
         open={!!detail}
         onClose={() => setDetail(null)}
         extra={

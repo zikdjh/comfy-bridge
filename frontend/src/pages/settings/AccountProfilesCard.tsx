@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button, Card, Input, Modal, Popconfirm, Space, Table, Tag, Typography, message } from "antd";
+import type { InputRef } from "antd";
 import { PlusOutlined, SwapOutlined, DeleteOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { ApiError } from "../../api/client";
@@ -37,6 +38,7 @@ export default function AccountProfilesCard() {
   const activateAccount = useActivateAccount();
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
+  const nameInputRef = useRef<InputRef>(null);
 
   const doActivate = async (name: string, force: boolean) => {
     try {
@@ -163,11 +165,17 @@ export default function AccountProfilesCard() {
         onCancel={() => { setSaveOpen(false); setSaveName(""); }}
         okText="保存"
         cancelText="取消"
+        keyboard
+        focusTriggerAfterClose
+        afterOpenChange={(visible) => {
+          if (visible) nameInputRef.current?.focus();
+        }}
       >
         <Typography.Paragraph type="secondary">
           密钥沿用当前已保存的凭据，不在表单中重复输入；同名档案将被覆盖更新。
         </Typography.Paragraph>
         <Input
+          ref={nameInputRef}
           placeholder="档案名称，如 personal / team"
           value={saveName}
           onChange={(e) => setSaveName(e.target.value)}

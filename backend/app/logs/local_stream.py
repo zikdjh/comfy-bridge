@@ -79,7 +79,11 @@ async def _log_events_impl(request, tail: int = 300, client_ids: list[str] | Non
         client_ids.append(client_id)  # 供外层 finally 断开时取消订阅
     tail = max(1, min(tail, 500))
 
-    async with httpx.AsyncClient(base_url=base, timeout=_CONNECT_TIMEOUT) as client:
+    async with httpx.AsyncClient(
+        base_url=base,
+        timeout=_CONNECT_TIMEOUT,
+        trust_env=False,
+    ) as client:
         while True:
             # 每轮先取快照：首次连接给历史缓冲，断线重连后也靠它补齐缺口
             try:
@@ -138,5 +142,9 @@ async def local_log_events(request, tail: int = 300) -> AsyncIterator[str]:
         for cid in client_ids:
             with contextlib.suppress(Exception):  # ComfyUI 已下线等场景，清理失败不抛
                 base = get_settings().local.comfy_url.rstrip("/")
-                async with httpx.AsyncClient(base_url=base, timeout=_CONNECT_TIMEOUT) as client:
+                async with httpx.AsyncClient(
+                    base_url=base,
+                    timeout=_CONNECT_TIMEOUT,
+                    trust_env=False,
+                ) as client:
                     await _subscribe(client, cid, False)

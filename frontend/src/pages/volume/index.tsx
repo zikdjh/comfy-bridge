@@ -249,7 +249,14 @@ function UsageCard() {
             size={["100%", 8]}
           />
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {data?.computing ? (
+            {data?.error ? (
+              <Alert
+                type="warning"
+                showIcon
+                message="数据卷用量暂未更新"
+                description={data.error}
+              />
+            ) : data?.computing ? (
               <Space size={6}>
                 <Spin size="small" />
                 正在遍历所有卷统计用量…

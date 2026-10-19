@@ -19,7 +19,7 @@ const PROMPTS = [
 ];
 
 test("submit multiple prompts and capture overlay", { timeout: 600000 }, async ({ page }) => {
-  await page.goto("http://127.0.0.1:8189/", { waitUntil: "domcontentloaded" });
+  await page.goto("http://127.0.0.1:18189/", { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(6000);
 
   const clientId = await page.evaluate(() => {

@@ -17,7 +17,8 @@ from ..modal_volume import client as modal_cli
 from ..modal_volume.client import ModalCliError
 
 _TTL = 60.0
-_CONCURRENCY = 6
+_COMPUTE_TIMEOUT = 60.0
+_CONCURRENCY = 2
 _WARN_BYTES = 512 * 1024**3
 _OVER_BYTES = 1024 * 1024**3
 
@@ -86,29 +87,55 @@ async def _compute() -> None:
     async with _LOCK:
         gen = _CACHE["generation"]
         try:
-            rows = await modal_cli.volumes_list()
-            names = [str(r.get("name")) for r in rows if r.get("name")]
-            results = await asyncio.gather(*(_volume_usage(n, r) for n, r in zip(names, rows)))
-            volumes = sorted(results, key=lambda v: v["total_bytes"], reverse=True)
-            if _CACHE["generation"] != gen:  # 计算期间发生账号切换，结果作废
-                return
-            _CACHE.update(
-                volumes=volumes,
-                total_bytes=sum(v["total_bytes"] for v in volumes),
-                file_count=sum(v["file_count"] for v in volumes),
-                error=None,
-                computed_mono=time.monotonic(),
-                computed_ms=int(time.time() * 1000),
+            await asyncio.wait_for(_compute_snapshot(gen), timeout=_COMPUTE_TIMEOUT)
+        except TimeoutError:
+            _CACHE["error"] = (
+                f"数据卷用量统计超时（超过 {_COMPUTE_TIMEOUT:g} 秒），"
+                "已保留上次完成的统计结果"
             )
+            _CACHE["computed_mono"] = time.monotonic()
         except Exception as exc:  # noqa: BLE001 —— SDK/凭证问题都落到 error
             _CACHE["error"] = str(exc)[:300]
             _CACHE["computed_mono"] = time.monotonic()
+            # 失败后保留上一轮已完成的快照；若从未成功过，明确标记为未知，
+            # 不把空列表伪装成“0 个卷”。
+            if _CACHE["computed_ms"] <= 0:
+                _CACHE["volumes"] = []
+                _CACHE["total_bytes"] = 0
+                _CACHE["file_count"] = 0
+        finally:
+            # 成功、失败或账号代际变化后丢弃结果，都必须结束 computing；
+            # 否则前端会永久轮询，单飞锁也不会再触发重算。
             _CACHE["computing"] = False
-            return
-        _CACHE["computing"] = False
 
 
-async def _volume_usage(name: str, row: dict) -> dict:
+async def _compute_snapshot(gen: int) -> None:
+    rows = await modal_cli.volumes_list()
+    names = [str(r.get("name")) for r in rows if r.get("name")]
+    sem = asyncio.Semaphore(_CONCURRENCY)
+    results = await asyncio.gather(
+        *(_volume_usage(n, r, sem) for n, r in zip(names, rows))
+    )
+    volumes = sorted(results, key=lambda v: v["total_bytes"], reverse=True)
+    if _CACHE["generation"] != gen:  # 计算期间发生账号切换，结果作废
+        return
+    _CACHE.update(
+        volumes=volumes,
+        total_bytes=sum(v["total_bytes"] for v in volumes),
+        file_count=sum(v["file_count"] for v in volumes),
+        error=None,
+        computed_mono=time.monotonic(),
+        computed_ms=int(time.time() * 1000),
+    )
+
+
+async def _volume_usage(
+    name: str,
+    row: dict,
+    sem: asyncio.Semaphore | None = None,
+) -> dict:
+    if sem is None:
+        sem = asyncio.Semaphore(_CONCURRENCY)
     entry: dict[str, Any] = {
         "name": name,
         "created_at": str(row.get("created_at") or ""),
@@ -116,13 +143,15 @@ async def _volume_usage(name: str, row: dict) -> dict:
         "file_count": 0,
         "error": None,
     }
-    sem = asyncio.Semaphore(_CONCURRENCY)
-
     async def walk(rel_dir: str) -> None:
         async with sem:
             try:
                 entries = await modal_cli.list_dir(rel_dir, volume=name)
             except ModalCliError as exc:
+                # 限流不是单个目录的永久状态：整体本轮作废，交由 _compute 统一收敛，
+                # 避免前端拿到“计算完成但有 0 个卷”的误导快照。
+                if exc.category == "rate_limited":
+                    raise
                 entry["error"] = str(exc)[:200]
                 return
         subs: list[str] = []
@@ -137,6 +166,10 @@ async def _volume_usage(name: str, row: dict) -> dict:
 
     try:
         await walk("")
+    except ModalCliError as exc:
+        if exc.category == "rate_limited":
+            raise
+        entry["error"] = entry["error"] or str(exc)[:200]
     except Exception as exc:  # noqa: BLE001
         entry["error"] = entry["error"] or str(exc)[:200]
     return entry

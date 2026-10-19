@@ -192,18 +192,24 @@ async def workflows_compare(name: str) -> dict:
     root = workflows_dir()
     local = await asyncio.to_thread(_side_meta, root / name, True)
     cloud: dict = {"exists": False}
-    if workflows_sync.modal_configured():
+    cloud_missing = False
+    modal_configured = workflows_sync.modal_configured()
+    if modal_configured:
         tmp_root = Path(tempfile.mkdtemp(prefix="cb-wf-cmp-"))
         try:
             dest = tmp_root / name
             await volume_cli.get_file(f"{workflows_sync.CLOUD_DIR}/{name}", dest, force=True)
             cloud = await asyncio.to_thread(_side_meta, dest, False)
         except ModalCliError as exc:
-            cloud = {"exists": False, "error": str(exc)[:300]}
+            detail = str(exc)
+            cloud_missing = "No such file or directory" in detail
+            cloud = {"exists": False, "error": detail[:300]}
         finally:
             shutil.rmtree(tmp_root, ignore_errors=True)
     else:
         cloud = {"exists": False, "error": "未配置 Modal 凭证"}
+    if not local.get("exists") and not cloud.get("exists") and cloud_missing:
+        raise HTTPException(status_code=404, detail=f"工作流不存在: {name}")
     return {
         "name": name,
         "local": local,

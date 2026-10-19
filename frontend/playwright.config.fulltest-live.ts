@@ -11,7 +11,7 @@ export default defineConfig({
   reporter: "list",
   outputDir: resolve("test-results/fulltest"),
   use: {
-    baseURL: "http://127.0.0.1:8189",
+    baseURL: "http://127.0.0.1:18189",
     channel: "msedge",
     viewport: { width: 1440, height: 900 },
     trace: "retain-on-failure",

@@ -64,7 +64,7 @@ class RoutingRule(BaseModel):
 
 
 class BridgeConfig(BaseModel):
-    listen: str = "127.0.0.1:8189"
+    listen: str = "127.0.0.1:18189"
     # 路由规则（§3.1）：default 规则兜底 / 视频类请求目标 / 大分辨率阈值（0=关闭）/ Modal 不可用策略
     default_backend: str = "local"
     video_backend: str = "modal"
@@ -84,6 +84,10 @@ class BridgeConfig(BaseModel):
     # 云端提交前隐私确认（P2-5）：首次把工作流分流到 Modal 时返回一次数据边界说明，
     # 调用方带 X-Bridge-Privacy-Confirmed: 1 重试放行；关闭后不再拦截（可在设置页撤销）。
     privacy_confirm: bool = True
+    # 出站请求是否走系统代理（HTTP_PROXY/HTTPS_PROXY 等环境变量），默认关闭。
+    # 仅作用于云端通信（Runner HTTP / Modal CLI）；本地回环（ComfyUI、桥接器内部）
+    # 永远直连，避免系统代理污染导致健康检查与透传不可达。
+    use_system_proxy: bool = False
     # /object_info 两端合并策略：
     # - local-first（默认）：同名 class_type 完全使用本地 schema，只追加云端独有节点 + 云端模型名；
     # - union：同名 class_type 保留本地 schema，但把云端独有的模型组合项并入本地 schema；
@@ -136,6 +140,7 @@ class ModalConfig(BaseModel):
     # [modal] 本体始终是「当前活跃账号的生效视图」；激活 = 把档案字段整体复制进本体。
     # 1 账号 = 1 份凭据：token_id 唯一，轮换 = 覆盖写回档案，不做多凭据并存。
     accounts: list[AccountProfile] = []
+    active_account: str = ""
 
 
 class AppConfig(BaseModel):

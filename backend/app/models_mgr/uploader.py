@@ -212,6 +212,13 @@ def _public(session: dict[str, Any]) -> dict[str, Any]:
     total = int(session["total_chunks"])
     received = {int(i) for i in session.get("uploaded_chunks", [])}
     missing = [i for i in range(total) if i not in received]
+    status = session["status"]
+    if status in {"done", "error"}:
+        phase = status
+    elif session.get("uploaded_bytes", 0) <= 0:
+        phase = "not_started"
+    else:
+        phase = "in_progress"
     return {
         "id": session["id"],
         "filename": session["filename"],
@@ -230,7 +237,8 @@ def _public(session: dict[str, Any]) -> dict[str, Any]:
         "missing_count": len(missing),
         "uploaded_bytes": session.get("uploaded_bytes", 0),
         "ready": not missing,
-        "status": session["status"],
+        "status": status,
+        "phase": phase,
         "error_stage": session.get("error_stage"),
         "error": session.get("error"),
         "created_ms": session["created_ms"],
@@ -312,6 +320,31 @@ def list_uploads(limit: int = _JOBS_KEEP) -> list[dict[str, Any]]:
         items.append(session)
     items.sort(key=lambda s: s.get("updated_ms", s.get("created_ms", 0)), reverse=True)
     return [_public(s) for s in items[: max(1, limit)]]
+
+
+def prune_not_started(*, older_than_ms: int = 0) -> int:
+    """删除从未写入任何分块的接收会话；已完成/失败/有进度的断点会话保留。"""
+    root = upload_root()
+    if not root.is_dir():
+        return 0
+    cutoff = now_ms() - max(0, older_than_ms)
+    removed = 0
+    for path in root.iterdir():
+        if not path.is_dir() or not _ID_RE.match(path.name):
+            continue
+        try:
+            session = _load(path.name, recover=False)
+        except (OSError, ValueError, json.JSONDecodeError, TypeError):
+            continue
+        if (
+            session.get("status") == "receiving"
+            and int(session.get("uploaded_bytes", 0)) <= 0
+            and int(session.get("updated_ms", session.get("created_ms", 0))) <= cutoff
+            and not _looks_like_active_task(path.name)
+        ):
+            shutil.rmtree(path, ignore_errors=True)
+            removed += 1
+    return removed
 
 
 async def get_upload(upload_id: str) -> dict[str, Any]:

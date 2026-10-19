@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from ...core import comfy_client
 from ...core.config import get_settings
@@ -61,8 +62,20 @@ async def modal_cli_health() -> dict:
     return {**status, **modal_cli.diagnostics()}
 
 
+def _bridge_entry(request: Request) -> tuple[str, str]:
+    """健康检查里的桥接入口应反映“现在从哪访问”，而不是可能过期的配置值。"""
+    runtime = os.environ.get("CB_BRIDGE_RUNTIME_LISTEN", "").strip()
+    if runtime:
+        return f"http://{runtime}", runtime
+    host = request.headers.get("host", "").strip()
+    if host:
+        return f"http://{host}", host
+    listen = get_settings().bridge.listen
+    return f"http://{listen}", listen
+
+
 @router.get("/health")
-async def health() -> dict:
+async def health(request: Request) -> dict:
     all_settings = get_settings()
     settings = all_settings.local
     local: dict = {
@@ -117,8 +130,9 @@ async def health() -> dict:
     else:
         modal_status = {"online": False, "reason": "未配置 Modal 凭证（设置 → Modal）"}
 
+    bridge_url, bridge_listen = _bridge_entry(request)
     return {
         "local": local,
         "modal": modal_status,
-        "bridge": {"url": f"http://{all_settings.bridge.listen}", "listen": all_settings.bridge.listen},
+        "bridge": {"url": bridge_url, "listen": bridge_listen},
     }

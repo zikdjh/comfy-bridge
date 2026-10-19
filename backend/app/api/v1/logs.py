@@ -18,7 +18,7 @@ router = APIRouter(prefix="/logs", tags=["logs"])
 async def local_logs(tail: int = Query(default=300, ge=1, le=500)) -> dict:
     """本地 ComfyUI 日志快照（REST 兜底，实时请用 /local/stream）。"""
     base = get_settings().local.comfy_url.rstrip("/")
-    async with httpx.AsyncClient(base_url=base, timeout=5.0) as client:
+    async with httpx.AsyncClient(base_url=base, timeout=5.0, trust_env=False) as client:
         try:
             entries = await fetch_snapshot(client)
             return {"online": True, "entries": entries[-tail:]}

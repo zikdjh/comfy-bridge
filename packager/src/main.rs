@@ -18,7 +18,8 @@ use std::time::{Duration, Instant};
 const LAUNCHER_VERSION: &str = env!("CARGO_PKG_VERSION");
 const EMBEDDED_WHEEL_NAME: &str = env!("CB_EMBEDDED_WHEEL_NAME");
 const DEFAULT_HOST: &str = "127.0.0.1";
-const DEFAULT_PORT: u16 = 8189;
+const DEFAULT_PORT: u16 = 18189;
+const DEFAULT_PORT_CANDIDATES: [u16; 5] = [18189, 18190, 18191, 18192, 18193];
 
 #[cfg(windows)]
 mod win32 {
@@ -369,16 +370,18 @@ fn run_app(args: &[String]) -> i32 {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Listen {
     host: String,
     port: u16,
+    port_explicit: bool,
 }
 
 /// 桌面模式只解析本机监听参数；拒绝非回环地址，避免把桌面壳变成隐式远程服务。
 fn desktop_listen(args: &[String]) -> Result<Listen, String> {
     let mut host = DEFAULT_HOST.to_string();
     let mut port = DEFAULT_PORT;
+    let mut port_explicit = false;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -392,6 +395,7 @@ fn desktop_listen(args: &[String]) -> Result<Listen, String> {
                 port = raw
                     .parse()
                     .map_err(|_| format!("--port 不是有效端口: {raw}"))?;
+                port_explicit = true;
             }
             other => return Err(format!("桌面模式不支持参数: {other}")),
         }
@@ -403,7 +407,11 @@ fn desktop_listen(args: &[String]) -> Result<Listen, String> {
     if port == 0 {
         return Err("--port 必须在 1-65535 之间".to_string());
     }
-    Ok(Listen { host, port })
+    Ok(Listen {
+        host,
+        port,
+        port_explicit,
+    })
 }
 
 fn port_in_use(listen: &Listen) -> bool {
@@ -411,6 +419,39 @@ fn port_in_use(listen: &Listen) -> bool {
         .parse()
         .ok()
         .is_some_and(|addr| TcpStream::connect_timeout(&addr, Duration::from_millis(250)).is_ok())
+}
+
+/// 默认端口可自动回退，避免与 ComfyUI 或本机其它服务撞车；
+/// 用户显式传入 `--port` 时必须完全尊重，不做静默替换。
+fn resolve_listen(listen: &Listen, is_busy: impl Fn(&Listen) -> bool) -> Result<Listen, String> {
+    if listen.port_explicit {
+        if is_busy(listen) {
+            return Err(format!(
+                "端口 {} 已被占用。请释放端口，或更换 --port 后重试。\n\
+                 排查: Get-NetTCPConnection -LocalPort {}",
+                listen.port, listen.port
+            ));
+        }
+        return Ok(listen.clone());
+    }
+
+    for port in DEFAULT_PORT_CANDIDATES {
+        let candidate = Listen {
+            host: listen.host.clone(),
+            port,
+            port_explicit: false,
+        };
+        if !is_busy(&candidate) {
+            return Ok(candidate);
+        }
+    }
+
+    Err(format!(
+        "默认端口 {}-{} 均被占用。请释放其中一个端口，或用 --port 指定空闲端口。\n\
+         排查: Get-NetTCPConnection -LocalPort 18189",
+        DEFAULT_PORT_CANDIDATES[0],
+        DEFAULT_PORT_CANDIDATES[DEFAULT_PORT_CANDIDATES.len() - 1]
+    ))
 }
 
 fn spawn_backend(state: &BundleState, listen: &Listen) -> Result<Child, String> {
@@ -504,11 +545,15 @@ fn run_desktop(args: &[String]) -> i32 {
         Ok(v) => v,
         Err(e) => return fail(e),
     };
-    if port_in_use(&listen) {
-        return fail(format!(
-            "端口 {} 已被占用。请关闭已运行实例，或使用 --port 指定其他端口。",
+    let listen = match resolve_listen(&listen, port_in_use) {
+        Ok(v) => v,
+        Err(e) => return fail(e),
+    };
+    if listen.port != DEFAULT_PORT {
+        eprintln!(
+            "[comfy-bridge] 默认端口 {DEFAULT_PORT} 被占用，已自动切换到 {}。",
             listen.port
-        ));
+        );
     }
     let mut backend = match Backend::spawn(&state, &listen) {
         Ok(v) => v,
@@ -526,7 +571,7 @@ fn run_desktop(args: &[String]) -> i32 {
                 "main",
                 tauri::WebviewUrl::External(url.parse()?),
             )
-            .title("ComfyBridge")
+            .title(format!("ComfyBridge - {}:{}", listen.host, listen.port))
             .inner_size(1280.0, 820.0)
             .min_inner_size(960.0, 640.0)
             .build()?;
@@ -555,9 +600,10 @@ launcher 选项（仅作为第一个参数时生效）:\n\
   --console     不打开桌面窗口，按原 CLI 方式启动\n\
 \n\
 默认打开桌面窗口；可指定本机监听地址与端口:\n\
-  comfy-bridge --port 8190\n\
-  comfy-bridge --console --host 0.0.0.0 --port 8189\n\
+  comfy-bridge --port 18195\n\
+  comfy-bridge --console --host 0.0.0.0 --port 18189\n\
 \n\
+默认端口 18189；被占用时自动尝试 18190-18193。显式 --port 不做自动回退。\n\
 环境变量:\n\
   CB_BRIDGE_RUNTIME   指定 runtime 目录（默认 exe 同级 runtime/）\n"
     )
@@ -717,9 +763,25 @@ mod tests {
 
     #[test]
     fn desktop_listen_accepts_local_arguments() {
-        let listen = desktop_listen(&args(&["--port", "8190"])).unwrap();
+        let listen = desktop_listen(&args(&["--port", "18195"])).unwrap();
         assert_eq!(listen.host, "127.0.0.1");
-        assert_eq!(listen.port, 8190);
+        assert_eq!(listen.port, 18195);
+        assert!(listen.port_explicit);
         assert!(desktop_listen(&args(&["--host", "0.0.0.0"])).is_err());
+    }
+
+    #[test]
+    fn resolve_listen_falls_back_for_default_ports() {
+        let listen = desktop_listen(&args(&[])).unwrap();
+        let busy = |candidate: &Listen| candidate.port < 18191;
+        let resolved = resolve_listen(&listen, busy).unwrap();
+        assert_eq!(resolved.port, 18191);
+    }
+
+    #[test]
+    fn resolve_listen_respects_explicit_port() {
+        let listen = desktop_listen(&args(&["--port", "18189"])).unwrap();
+        let resolved = resolve_listen(&listen, |_| true).unwrap_err();
+        assert!(resolved.contains("端口 18189 已被占用"));
     }
 }

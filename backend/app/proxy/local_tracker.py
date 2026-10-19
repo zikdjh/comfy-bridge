@@ -36,7 +36,10 @@ def _http() -> httpx.AsyncClient:
     global _client
     if _client is None or _client.is_closed:
         # 本地回环 + 短读超时：轮询绝不能因为一次卡住的 /history 永久停摆
-        _client = httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0))
+        _client = httpx.AsyncClient(
+            timeout=httpx.Timeout(15.0, connect=5.0),
+            trust_env=False,
+        )
     return _client
 
 

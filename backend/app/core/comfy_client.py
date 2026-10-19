@@ -14,7 +14,11 @@ from .config import get_settings
 
 
 def _client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(base_url=get_settings().local.comfy_url, timeout=3.0)
+    return httpx.AsyncClient(
+        base_url=get_settings().local.comfy_url,
+        timeout=3.0,
+        trust_env=False,
+    )
 
 
 async def fetch_system_stats() -> dict:

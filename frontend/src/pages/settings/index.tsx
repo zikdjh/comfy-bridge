@@ -103,6 +103,7 @@ export default function SettingsPage() {
       monthlyBudgetUsd: config.bridge.monthly_budget_usd,
       onBudgetExceed: config.bridge.on_budget_exceed,
       rateUsd: config.bridge.gpu_hourly_rate_usd,
+      useSystemProxy: config.bridge.use_system_proxy,
     });
   }, [config, localForm, bridgeForm, modalForm, execForm, guardForm]);
 
@@ -192,6 +193,7 @@ export default function SettingsPage() {
     onBudgetExceed: string;
     rateUsd: number | null;
     maxConcurrent: number | null;
+    useSystemProxy: boolean;
   }) => {
     try {
       await saveConfig({
@@ -201,6 +203,7 @@ export default function SettingsPage() {
           on_budget_exceed: values.onBudgetExceed,
           gpu_hourly_rate_usd: values.rateUsd ?? 1.95,
           max_cloud_concurrent: values.maxConcurrent ?? 0,
+          use_system_proxy: values.useSystemProxy,
         },
         modal: { task_timeout: values.taskTimeout ?? 3600 },
       });
@@ -332,12 +335,12 @@ export default function SettingsPage() {
                     {(fields, { add, remove }) => (
                       <>
                         {fields.map((field) => (
-                          <Space key={field.key} style={{ display: "flex", marginBottom: 4 }} align="baseline">
+                          <Space key={field.key} style={{ display: "flex", marginBottom: 4, flexWrap: "wrap", maxWidth: "100%" }} align="baseline">
                             <Form.Item name={[field.name, "category"]} noStyle>
-                              <Input placeholder="分类" style={{ width: 160 }} />
+                              <Input placeholder="分类" style={{ width: 160, maxWidth: "100%" }} />
                             </Form.Item>
                             <Form.Item name={[field.name, "path"]} noStyle>
-                              <Input placeholder="路径" style={{ width: 340 }} />
+                              <Input placeholder="路径" style={{ width: 340, maxWidth: "100%" }} />
                             </Form.Item>
                             <Button size="small" type="text" danger onClick={() => remove(field.name)}>
                               移除
@@ -611,6 +614,14 @@ export default function SettingsPage() {
                     extra="0 = 不限制；在途云端任务（排队/执行中）达到上限时按「云端不可用动作」处理"
                   >
                     <InputNumber min={0} max={10} style={{ width: 160 }} />
+                  </Form.Item>
+                  <Form.Item
+                    label="使用系统代理（出站请求）"
+                    name="useSystemProxy"
+                    valuePropName="checked"
+                    extra="开启后云端 Runner 请求与 Modal CLI 读取 HTTP_PROXY / HTTPS_PROXY 等系统代理变量；本地 ComfyUI 与桥接器内部通信始终直连，不受影响。默认关闭"
+                  >
+                    <Switch />
                   </Form.Item>
                   <Button type="primary" htmlType="submit">保存</Button>
                 </Form>

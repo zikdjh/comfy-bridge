@@ -20,7 +20,7 @@ def _rewrite_to_upstream(value: str, upstream_authority: str) -> str:
     """把 Origin/Referer 的 authority 改写为上游地址。
 
     ComfyUI origin_only_middleware 对回环地址校验 Host == Origin，不改写会把
-    浏览器的 :8189 判成跨站返回 403（server.py §create_origin_only_middleware）。
+    浏览器的 :18189 判成跨站返回 403（server.py §create_origin_only_middleware）。
     """
     try:
         parts = urlsplit(value)
@@ -35,7 +35,10 @@ def get_upstream_client() -> httpx.AsyncClient:
     global _client
     if _client is None or _client.is_closed:
         # read=None：SSE / 长响应不超时；connect 10s 快速暴露本地不可达
-        _client = httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=None))
+        _client = httpx.AsyncClient(
+            timeout=httpx.Timeout(10.0, read=None),
+            trust_env=False,
+        )
     return _client
 
 

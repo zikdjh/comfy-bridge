@@ -20,7 +20,7 @@ launch_command = []
 node_path = ""
 
 [bridge]
-listen = "127.0.0.1:8189"          # 桥接器监听地址（仅本机）
+listen = "127.0.0.1:18189"         # 桥接器监听地址（仅本机；桌面默认占用 18189-18193）
 # 管理面鉴权与部署边界（P0-5/P2-1）：令牌经环境变量 CB_MANAGEMENT_TOKEN 或
 # <配置目录>/management_token 提供，不写入本文件；非回环监听缺令牌会拒绝启动。
 # 配置令牌后：/api/v1（health 除外）与 /bridge 需认证；跨站 Origin 默认 403，
@@ -34,6 +34,9 @@ on_modal_unavailable = "fallback_local"  # 云端不可用时：fallback_local�
 privacy_confirm = true
 # /object_info 合并策略：local-first（同名以本地为准，默认）| union（同名保留本地并补云端独有模型）| local-only
 object_info_merge = "local-first"
+# 出站请求是否走系统代理（HTTP_PROXY/HTTPS_PROXY 等），默认 false = 全部直连。
+# 仅作用于云端 Runner HTTP 与 Modal CLI；本地 ComfyUI 与桥接器内部通信始终直连。
+use_system_proxy = false
 
 [modal]
 # Modal 平台认证（modal token new 生成，或 modal.com 控制台；设置页可填写，secret 脱敏回显）。

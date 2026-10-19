@@ -7,9 +7,9 @@
   /ws 单上游双向中继，GET /object_info 合并云端模型清单，
   其余端点透明流式透传本地 ComfyUI（规划文档 §2.1 反代拦截层）。
 
-启动：仓库开发 uv run uvicorn app.main:app --reload --port 8189；
+启动：仓库开发 uv run uvicorn app.main:app --reload --port 18189；
 安装态 comfy-bridge 命令（app/cli.py）。
-注意：浏览器指向 :8189 即可透明使用 ComfyUI；生成请求经拦截层路由。
+注意：浏览器指向 :18189 即可透明使用 ComfyUI；生成请求经拦截层路由。
 """
 
 import asyncio
@@ -62,7 +62,8 @@ async def lifespan(_: FastAPI):
 
 
 async def _warm_cloud_index() -> None:
-    """启动即后台构建云端模型索引（子进程列举较慢，不阻塞就绪）。"""
+    """延后后台构建云端模型索引，给启动期其他 Modal 只读调用让出限流窗口。"""
+    await asyncio.sleep(3.0)
     try:
         await cloud_index.refresh()
     except Exception as exc:  # noqa: BLE001

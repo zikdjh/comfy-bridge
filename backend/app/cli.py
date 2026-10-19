@@ -1,6 +1,6 @@
 """comfy-bridge 命令行入口（pipx / pip 安装后的启动脚本）。
 
-仓库开发不走这里，直接 uv run uvicorn app.main:app --port 8189。
+仓库开发不走这里，直接 uv run uvicorn app.main:app --port 18189。
 安装后：comfy-bridge [--host H] [--port P]，控制台在 http://H:P/bridge/，
 ComfyUI 数据面仍在根路径（出图地址不变）。
 """
@@ -8,11 +8,15 @@ ComfyUI 数据面仍在根路径（出图地址不变）。
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 import uvicorn
 
 from .core.management_auth import is_loopback_host, management_token
+
+
+DEFAULT_PORT = 18189
 
 
 def _validate_external_listen(host: str) -> None:
@@ -36,9 +40,17 @@ def main() -> None:
         description="ComfyBridge：本地 ComfyUI × Modal 云端 GPU 桥接器",
     )
     parser.add_argument("--host", default="127.0.0.1", help="监听地址（默认 127.0.0.1）")
-    parser.add_argument("--port", type=int, default=8189, help="监听端口（默认 8189）")
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("CB_BRIDGE_PORT", DEFAULT_PORT)),
+        help="监听端口（默认 18189，可用 CB_BRIDGE_PORT 覆盖）",
+    )
     args = parser.parse_args()
     _validate_external_listen(args.host)
+    # health/管理台以实际启动参数为准；config.toml 的 bridge.listen 是持久配置，
+    # 不应覆盖一次性的 --port/--host（否则“前往出图界面”会跳到旧端口）。
+    os.environ["CB_BRIDGE_RUNTIME_LISTEN"] = f"{args.host}:{args.port}"
     uvicorn.run("app.main:app", host=args.host, port=args.port, log_level="info")
 
 

@@ -10,7 +10,7 @@ import urllib.request
 
 import websockets
 
-BASE = "http://127.0.0.1:8189"
+BASE = "http://127.0.0.1:18189"
 CID = "bridge-ws-regress"
 
 PROMPT = {
@@ -33,7 +33,7 @@ def get(path):
 
 async def main():
     events: list[str] = []
-    async with websockets.connect(f"ws://127.0.0.1:8189/ws?clientId={CID}", max_size=None) as ws:
+    async with websockets.connect(f"ws://127.0.0.1:18189/ws?clientId={CID}", max_size=None) as ws:
         req = urllib.request.Request(BASE + "/prompt", data=json.dumps(
             {"prompt_id": "", "client_id": CID, "prompt": PROMPT}).encode(),
             headers={"content-type": "application/json"}, method="POST")

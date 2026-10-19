@@ -55,8 +55,7 @@ async def refresh(force: bool = False) -> dict[str, set[str]]:
         errors: list[str] = []
         for cat, res in zip(cats, results):
             if isinstance(res, BaseException):
-                if not isinstance(res, ModalCliError):
-                    errors.append(f"{cat}: {res}")
+                errors.append(f"{cat}: {res}")
                 continue
             names: set[str] = set()
             for entry in res:

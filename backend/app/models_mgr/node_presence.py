@@ -70,7 +70,10 @@ async def _fetch_local() -> set[str]:
     base = get_settings().local.comfy_url.rstrip("/")
     if "://" not in base:
         raise RuntimeError("本地 ComfyUI 地址未配置")
-    async with httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=5.0)) as cli:
+    async with httpx.AsyncClient(
+        timeout=httpx.Timeout(20.0, connect=5.0),
+        trust_env=False,
+    ) as cli:
         resp = await cli.get(f"{base}/object_info")
     if resp.status_code != 200:
         raise RuntimeError(f"HTTP {resp.status_code}")

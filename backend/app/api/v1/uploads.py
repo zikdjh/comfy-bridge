@@ -13,6 +13,8 @@ _MAX_CHUNK_BYTES = 16 * 1024 * 1024
 
 
 class InitUploadBody(BaseModel):
+    model_config = {"extra": "forbid"}
+
     filename: str
     size: int
     md5: str
@@ -40,6 +42,14 @@ async def init_upload(body: InitUploadBody) -> dict:
 @router.get("")
 async def upload_list(limit: int = 50) -> dict:
     return {"uploads": uploader.list_uploads(limit=max(1, min(limit, 200)))}
+
+
+@router.post("/prune")
+async def prune_uploads(older_than_ms: int = 0) -> dict:
+    """清理尚未开始写块的会话；有进度的断点上传不会被删除。"""
+    if older_than_ms < 0:
+        raise HTTPException(status_code=422, detail="older_than_ms 不能为负")
+    return {"deleted": uploader.prune_not_started(older_than_ms=older_than_ms)}
 
 
 @router.get("/{upload_id}")

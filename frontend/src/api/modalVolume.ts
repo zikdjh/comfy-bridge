@@ -60,6 +60,7 @@ export interface UploadSession {
   uploaded_bytes: number;
   ready: boolean;
   status: "receiving" | "verifying" | "pushing" | "done" | "error";
+  phase: "not_started" | "in_progress" | "done" | "error";
   error_stage: "verify" | "push" | null;
   error: string | null;
   created_ms: number;
@@ -180,4 +181,11 @@ export function completeUpload(uploadId: string) {
 
 export function deleteUpload(uploadId: string) {
   return apiSend<{ deleted: boolean }>(`/api/v1/uploads/${uploadId}`, "DELETE");
+}
+
+export function pruneNotStartedUploads(olderThanMs = 0) {
+  return apiSend<{ deleted: number }>(
+    `/api/v1/uploads/prune?older_than_ms=${olderThanMs}`,
+    "POST",
+  );
 }

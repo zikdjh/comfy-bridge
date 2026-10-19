@@ -295,3 +295,20 @@ async def test_compare_with_cloud_via_volume(monkeypatch, tmp_path):
     assert data["cloud"]["exists"] and data["cloud"]["node_count"] == 2
     assert data["identical"] is False
     assert {t for t, _ in data["local"]["types"]} != {t for t, _ in data["cloud"]["types"]}
+
+
+async def test_compare_missing_on_both_sides_returns_404(monkeypatch, tmp_path):
+    monkeypatch.setattr(wf_api, "workflows_dir", lambda: tmp_path)
+    monkeypatch.setattr(ws_sync, "modal_configured", lambda: True)
+
+    async def fake_volume_get(*_args, **_kwargs):
+        raise wf_api.ModalCliError(
+            "下载 user/default/workflows/missing.json失败：No such file or directory",
+            category="uncertain",
+        )
+
+    monkeypatch.setattr(wf_api.volume_cli, "get_file", fake_volume_get)
+    with pytest.raises(wf_api.HTTPException) as exc:
+        await wf_api.workflows_compare(name="missing.json")
+    assert exc.value.status_code == 404
+    assert "工作流不存在" in exc.value.detail

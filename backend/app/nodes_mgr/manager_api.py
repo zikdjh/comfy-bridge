@@ -94,7 +94,10 @@ def apply_enrichment(scan: dict, index: dict) -> int:
 
 
 async def _get_json(base: str, path: str) -> dict | list:
-    async with httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=5.0)) as cli:
+    async with httpx.AsyncClient(
+        timeout=httpx.Timeout(20.0, connect=5.0),
+        trust_env=False,
+    ) as cli:
         resp = await cli.get(f"{base.rstrip('/')}{path}")
     if resp.status_code != 200:
         raise RuntimeError(f"HTTP {resp.status_code}")

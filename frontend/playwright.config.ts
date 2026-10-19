@@ -6,19 +6,19 @@
  *   同一路径；可用 E2E_PYTHON 覆盖），就绪探测 /api/v1/health。
  * - 浏览器默认用系统 Edge（本地与 Windows CI 都预装，免 Chromium 下载），可用
  *   E2E_BROWSER 覆盖（如 chromium，需先 playwright install）。
- * - 端口固定 8199，避开开发用 8189；CI 上 reuseExistingServer 关闭。
+ * - 端口固定 18199，避开生产 18189-18193 与 Vite 15173；CI 上 reuseExistingServer 关闭。
  */
 import { defineConfig } from "@playwright/test";
 import { resolve } from "node:path";
 
-const PORT = 8199;
+const PORT = 18199;
 const BASE = `http://127.0.0.1:${PORT}`;
 const python = process.env.E2E_PYTHON ?? "../backend/.venv/Scripts/python.exe";
 
 export default defineConfig({
   testDir: "./e2e",
   // CI/默认门禁只跑隔离后端的核心链路；多提交/队列进度两条依赖
-  // 手工 8189 真机环境，使用独立配置或显式 testMatch 运行。
+   // 手工 18189 真机环境，使用独立配置或显式 testMatch 运行。
   testMatch: /flows\.spec\.ts/,
   timeout: 60_000,
   expect: { timeout: 10_000 },

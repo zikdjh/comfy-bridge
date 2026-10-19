@@ -4,7 +4,7 @@
 本模块在产物存在时把控制台挂到 /bridge：/bridge/assets/* 走静态文件，
 其余 /bridge/* 一律回退 index.html（SPA 客户端路由）。
 / 与未匹配路径仍是 ComfyUI 数据面透传，管理面不得侵占数据面根路径。
-仓库开发通常没有产物目录（GUI 走 Vite :5173），此时跳过挂载。
+仓库开发通常没有产物目录（GUI 走 Vite :15173），此时跳过挂载。
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Button,
@@ -76,6 +76,7 @@ export function ConfigWizard({ open, onClose }: Props) {
   const [checkingRoot, setCheckingRoot] = useState(false);
   const [saving, setSaving] = useState(false);
   const [warming, setWarming] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   const hasSecret = !!config?.modal.has_secret;
   const hasRoot = !!config?.local.comfy_root?.trim();
@@ -89,6 +90,14 @@ export function ConfigWizard({ open, onClose }: Props) {
     runnerForm.setFieldsValue({ webUrl: config.modal.web_url ?? "", proxyTokenId: config.modal.proxy_token_id, proxyTokenSecret: "" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, config]);
+
+  useEffect(() => {
+    if (!open) return;
+    const focusTimer = window.setTimeout(() => {
+      contentRef.current?.focus();
+    }, 0);
+    return () => window.clearTimeout(focusTimer);
+  }, [open]);
 
   const finish = () => {
     try {
@@ -213,6 +222,10 @@ export function ConfigWizard({ open, onClose }: Props) {
           </Space>
         }
         destroyOnHidden
+        keyboard
+        afterOpenChange={(visible) => {
+          if (visible) contentRef.current?.focus();
+        }}
       >
         <Steps
           size="small"
@@ -228,6 +241,7 @@ export function ConfigWizard({ open, onClose }: Props) {
           style={{ marginBottom: 16 }}
         />
 
+        <div ref={contentRef} tabIndex={-1} style={{ outline: "none" }} data-testid="config-wizard-content">
         {step === 0 && (
           <div>
             <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
@@ -383,6 +397,7 @@ export function ConfigWizard({ open, onClose }: Props) {
             </Space>
           </div>
         )}
+        </div>
       </Modal>
       <ComfyScanModal
         open={scanOpen}

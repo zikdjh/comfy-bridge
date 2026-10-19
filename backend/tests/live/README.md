@@ -19,7 +19,7 @@
 | 变量 | 作用 |
 | --- | --- |
 | `CB_LIVE=1` | 总开关，未设置时全部 skip |
-| `CB_BRIDGE_URL` | 桥接器地址，默认 `http://127.0.0.1:8189` |
+| `CB_BRIDGE_URL` | 桥接器地址，默认 `http://127.0.0.1:18189` |
 | `CB_LIVE_MODAL=1` | 允许提交云端生成，会产生真实 Modal 费用 |
 | `CB_LIVE_FIXTURE_JSON` | 自定义 API 工作流 JSON 路径 |
 | `CB_LIVE_LOCAL_FIXTURE_JSON` | 只在本地可运行的工作流 JSON 路径（本地出图用例） |

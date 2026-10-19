@@ -66,10 +66,10 @@ test("UI-03 预热取消：不发起预热", async ({ page }) => {
 
 test("UI-04 前往出图界面：进入 ComfyUI", async ({ page, context }) => {
   const link = page.getByRole("banner").getByRole("link", { name: /前往出图界面/ });
-  await expect(link).toHaveAttribute("href", /127\.0\.0\.1:8189/);
+  await expect(link).toHaveAttribute("href", /127\.0\.0\.1:18189/);
   const [comfy] = await Promise.all([context.waitForEvent("page"), link.click()]);
   await comfy.waitForLoadState("domcontentloaded");
-  await expect(comfy).toHaveURL(/127\.0\.0\.1:8189\/$/);
+  await expect(comfy).toHaveURL(/127\.0\.0\.1:18189\/$/);
   await expect(comfy.locator("body")).toContainText(/Queue Prompt|Queue size/i, { timeout: 30_000 });
   await expect(comfy.locator("canvas")).toHaveCount(1);
   await comfy.screenshot({ path: "test-results/fulltest/UI-04-comfyui.png", fullPage: true });

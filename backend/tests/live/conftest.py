@@ -3,7 +3,7 @@
 本文件不读取用户真实配置，只把显式环境变量转成测试输入：
 
 - ``CB_LIVE=1``：总开关；未设置时所有 live 用例 skip。
-- ``CB_BRIDGE_URL``：桥接器管理面地址，默认 ``http://127.0.0.1:8189``。
+- ``CB_BRIDGE_URL``：桥接器管理面地址，默认 ``http://127.0.0.1:18189``。
 - ``CB_LIVE_MODAL=1``：允许执行会产生 Modal 费用的云端用例。
 - ``CB_LIVE_FIXTURE_JSON``：可选，自定义文生图工作流 JSON 文件路径。
 - ``CB_LIVE_LOCAL_FIXTURE_JSON``：可选，只在本地可运行的工作流路径（本地出图用例）。
@@ -29,7 +29,7 @@ from typing import Any
 import httpx
 import pytest
 
-_DEFAULT_BRIDGE = "http://127.0.0.1:8189"
+_DEFAULT_BRIDGE = "http://127.0.0.1:18189"
 _DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=5.0)
 
 

@@ -171,9 +171,10 @@ def usage_text(version: str) -> str:
 
 1. 解压到任意目录（建议路径不含空格与中文）。
 2. 双击 comfy-bridge.exe 打开 ComfyBridge 桌面应用；关闭窗口即停止内置服务。
-3. 默认仅监听 127.0.0.1:8189；可用 --port 指定其他本机端口。
-4. 自检：comfy-bridge.exe --doctor    版本：comfy-bridge.exe --version
-5. 脚本或排障：comfy-bridge.exe --console [CLI 参数…]
+3. 默认仅监听 127.0.0.1:18189；被占用时桌面模式自动尝试 18190-18193，显式 --port 不回退。
+4. 端口冲突排查：Get-NetTCPConnection -LocalPort 18189；可用 --port 指定其他端口。
+5. 自检：comfy-bridge.exe --doctor    版本：comfy-bridge.exe --version
+6. 脚本或排障：comfy-bridge.exe --console [CLI 参数…]
 
 说明：
 - 桌面窗口使用系统 WebView2；Windows 10/11 通常已自带，缺失时按系统提示安装。

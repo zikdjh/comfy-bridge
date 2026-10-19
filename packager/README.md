@@ -38,7 +38,7 @@ ComfyBridge-<版本>/
 
 ```powershell
 comfy-bridge.exe                 # 打开桌面应用
-comfy-bridge.exe --port 8190     # 指定本机端口
+comfy-bridge.exe --port 18195    # 指定本机端口（显式指定时不自动回退）
 comfy-bridge.exe --console       # 命令行模式（排障/脚本）
 comfy-bridge.exe --doctor        # 自检整合包完整性
 comfy-bridge.exe --version       # 查看版本

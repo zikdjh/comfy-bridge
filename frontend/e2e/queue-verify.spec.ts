@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 const OUT = "E:/JAVA/work/web/zc/modal/comfy-bridge/tmp/ui-verify";
 
 test("overlay shows progress bar", { timeout: 300000 }, async ({ page }) => {
-  await page.goto("http://127.0.0.1:8189/", { waitUntil: "domcontentloaded" });
+  await page.goto("http://127.0.0.1:18189/", { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(6000);
 
   const clientId = await page.evaluate(() => {

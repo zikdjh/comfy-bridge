@@ -11,10 +11,11 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: 15173,
+    strictPort: true,
     proxy: {
       // 管理面请求代理到本地桥接器；数据面（ComfyUI 界面）不经过 Vite
-      "/api": { target: "http://127.0.0.1:8189", changeOrigin: true },
+      "/api": { target: "http://127.0.0.1:18189", changeOrigin: true },
     },
   },
   preview: {

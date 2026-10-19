@@ -16,6 +16,7 @@ import {
   DeleteOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
+  ClearOutlined,
   ReloadOutlined,
   UploadOutlined,
 } from "@ant-design/icons";
@@ -26,6 +27,7 @@ import {
   completeUpload,
   deleteUpload,
   initUpload,
+  pruneNotStartedUploads,
   putUploadChunk,
   useUploadSessions,
   type UploadSession,
@@ -50,12 +52,11 @@ async function fileMd5(file: File): Promise<string> {
 }
 
 const STATUS: Record<
-  UploadSession["status"],
+  UploadSession["phase"],
   { color: string; text: string }
 > = {
-  receiving: { color: "processing", text: "上传中" },
-  verifying: { color: "processing", text: "校验中" },
-  pushing: { color: "processing", text: "落卷中" },
+  not_started: { color: "default", text: "未开始" },
+  in_progress: { color: "processing", text: "上传中" },
   done: { color: "success", text: "已完成" },
   error: { color: "error", text: "失败" },
 };
@@ -123,12 +124,15 @@ function UploadJobTable({
     },
     {
       title: "状态",
-      dataIndex: "status",
+      dataIndex: "phase",
       width: 100,
       render: (_value, row) => {
-        const status = STATUS[row.status];
+        const status = STATUS[row.phase];
+        const detail =
+          row.status === "verifying" ? "服务端校验中" :
+          row.status === "pushing" ? "校验通过，正在落卷" : row.error || undefined;
         return (
-          <Tooltip title={row.error || undefined}>
+          <Tooltip title={detail}>
             <Tag color={status.color}>{status.text}</Tag>
           </Tooltip>
         );
@@ -309,6 +313,16 @@ export function ModelUploadCard({ categories }: { categories: string[] }) {
     }
   };
 
+  const prune = async () => {
+    try {
+      const result = await pruneNotStartedUploads();
+      message.success(`已清理 ${result.deleted} 个未开始的上传会话`);
+      await refresh();
+    } catch (error) {
+      message.error(`清理失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
   return (
     <Card size="small" title="分块上传（断点续传 + MD5 校验）">
       <Space direction="vertical" size={10} style={{ width: "100%" }}>
@@ -345,6 +359,19 @@ export function ModelUploadCard({ categories }: { categories: string[] }) {
         {!categories.length && (
           <Alert type="warning" showIcon message="没有可用的模型分类，请先完成本地模型目录配置" />
         )}
+        <Space size={8} wrap>
+          <Button
+            size="small"
+            icon={<ClearOutlined />}
+            disabled={!sessions.some((item) => item.phase === "not_started")}
+            onClick={prune}
+          >
+            清理未开始会话
+          </Button>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            仅清理尚未写入任何分块的会话；有进度的断点会保留。
+          </Typography.Text>
+        </Space>
         <UploadJobTable
           sessions={sessions}
           activeId={activeId}

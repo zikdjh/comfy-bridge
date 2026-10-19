@@ -69,6 +69,21 @@ def test_upsert_new_profile_reuses_current_secret(monkeypatch, tmp_path):
     assert out["accounts"][0]["has_secret"] is True
 
 
+def test_same_token_snapshot_can_be_deleted_when_explicit_active(monkeypatch, tmp_path):
+    modal = _modal(
+        accounts=[
+            AccountProfile(name="current", token_id="ak-cur", token_secret="as-c"),
+            AccountProfile(name="snapshot", token_id="ak-cur", token_secret="as-c"),
+        ],
+        active_account="current",
+    )
+    box, _events, _invalidated = _install(monkeypatch, tmp_path, modal)
+    out = asyncio.run(config_api.delete_account("snapshot"))
+    assert [a["name"] for a in out["accounts"]] == ["current"]
+    assert out["active"] == "current"
+    assert box["modal"].active_account == "current"
+
+
 def test_upsert_rejects_duplicate_token_id(monkeypatch, tmp_path):
     _install(monkeypatch, tmp_path, _modal(accounts=[AccountProfile(name="a", token_id="ak-1")]))
     with pytest.raises(HTTPException) as exc:
@@ -227,6 +242,99 @@ def test_volume_usage_invalidate_bumps_generation(monkeypatch):
     assert usage._CACHE["generation"] == gen_before + 1
     assert usage._CACHE["computing"] is False
     assert usage._CACHE["total_bytes"] == 0 and usage._CACHE["volumes"] == []
+
+
+async def test_usage_compute_resets_flag_when_generation_changes(monkeypatch):
+    """在途统计因账号切换作废时也必须复位 computing。"""
+    from app.volume_mgr import usage
+
+    usage.invalidate_cache()
+    before = usage._CACHE["generation"]
+    usage._CACHE["computing"] = True
+
+    async def fake_volumes_list():
+        usage._CACHE["generation"] = before + 1
+        return []
+
+    monkeypatch.setattr(usage.modal_cli, "volumes_list", fake_volumes_list)
+    await usage._compute()
+    assert usage._CACHE["computing"] is False
+
+
+async def test_usage_compute_surfaces_rate_limit_and_preserves_snapshot(monkeypatch):
+    from app.modal_volume.client import ModalCliError
+    from app.volume_mgr import usage
+
+    usage._CACHE.update(
+        computing=True,
+        computed_ms=123,
+        volumes=[{"name": "cached", "total_bytes": 9, "file_count": 1}],
+        total_bytes=9,
+        file_count=1,
+        error=None,
+    )
+
+    async def fake_volumes_list():
+        raise ModalCliError("VolumeListFiles rate limit exceeded", category="rate_limited")
+
+    monkeypatch.setattr(usage.modal_cli, "volumes_list", fake_volumes_list)
+    await usage._compute()
+    assert usage._CACHE["computing"] is False
+    assert usage._CACHE["volumes"][0]["name"] == "cached"
+    assert "rate limit" in (usage._CACHE["error"] or "")
+
+
+async def test_usage_compute_surfaces_nested_rate_limit(monkeypatch):
+    from app.modal_volume.client import ModalCliError
+    from app.volume_mgr import usage
+
+    usage._CACHE.update(
+        computing=True,
+        computed_ms=123,
+        volumes=[{"name": "cached", "total_bytes": 9, "file_count": 1}],
+        total_bytes=9,
+        file_count=1,
+        error=None,
+    )
+
+    async def fake_volumes_list():
+        return [{"name": "comfyui-data", "created_at": ""}]
+
+    async def fake_list_dir(_rel, *, volume):
+        assert volume == "comfyui-data"
+        raise ModalCliError("VolumeListFiles rate limit exceeded", category="rate_limited")
+
+    monkeypatch.setattr(usage.modal_cli, "volumes_list", fake_volumes_list)
+    monkeypatch.setattr(usage.modal_cli, "list_dir", fake_list_dir)
+    await usage._compute()
+    assert usage._CACHE["computing"] is False
+    assert usage._CACHE["volumes"][0]["name"] == "cached"
+    assert "rate limit" in (usage._CACHE["error"] or "")
+
+
+async def test_usage_compute_times_out_and_preserves_snapshot(monkeypatch):
+    from app.volume_mgr import usage
+
+    usage._CACHE.update(
+        computing=True,
+        computed_ms=123,
+        volumes=[{"name": "cached", "total_bytes": 9, "file_count": 1}],
+        total_bytes=9,
+        file_count=1,
+        error=None,
+    )
+    monkeypatch.setattr(usage, "_COMPUTE_TIMEOUT", 0.01)
+
+    async def hanging_volumes_list():
+        await asyncio.sleep(60)
+        return []
+
+    monkeypatch.setattr(usage.modal_cli, "volumes_list", hanging_volumes_list)
+    await usage._compute()
+    assert usage._CACHE["computing"] is False
+    assert usage._CACHE["volumes"][0]["name"] == "cached"
+    assert usage._CACHE["total_bytes"] == 9
+    assert "超时" in (usage._CACHE["error"] or "")
 
 
 def test_runner_invalidate_state():

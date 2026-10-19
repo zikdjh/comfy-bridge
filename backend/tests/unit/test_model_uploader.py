@@ -163,3 +163,18 @@ async def test_delete_removes_session(upload_env):
     assert not (root / session["id"]).exists()
     with pytest.raises(FileNotFoundError):
         await uploader.get_upload(session["id"])
+
+
+@pytest.mark.asyncio
+async def test_prune_only_removes_not_started_sessions(upload_env):
+    root, _calls = upload_env
+    pending = await _create(b"abcdefgh")
+    partial = await _create(b"ijklmnop")
+    await uploader.write_chunk(
+        partial["id"], 0, b"ijkl", hashlib.md5(b"ijkl").hexdigest()
+    )
+
+    assert uploader.prune_not_started() == 1
+    assert not (root / pending["id"]).exists()
+    assert (root / partial["id"]).is_dir()
+    assert (await uploader.get_upload(partial["id"]))["phase"] == "in_progress"
