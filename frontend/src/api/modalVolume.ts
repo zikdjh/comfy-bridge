@@ -70,9 +70,12 @@ export interface UploadSession {
 }
 
 export function useVolumeMeta() {
+  const visible = usePageVisible();
   return useQuery({
     queryKey: ["volume-meta"],
     queryFn: ({ signal }) => apiGet<VolumeMeta>("/api/v1/modal-volume", signal),
+    // 与 overview 同档慢轮询，页面隐藏时停止，避免后台 Modal 卷接口撞限流
+    refetchInterval: visible ? 15_000 : false,
   });
 }
 
