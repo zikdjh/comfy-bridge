@@ -165,7 +165,8 @@ export function RequestLogPanel() {
         loading={isLoading}
         rowClassName={() => "clickable-row"}
         onRow={(record) => ({ onClick: () => setDetail(record), style: { cursor: "pointer" } })}
-        pagination={{ pageSize: 50, showSizeChanger: false }}
+        // 日志实时轮询 5s，分页 20 条控制 DOM 节点数；上一版 50 条在低端机有渲染尖刺
+        pagination={{ pageSize: 20, showSizeChanger: false }}
         size="small"
       />
 
