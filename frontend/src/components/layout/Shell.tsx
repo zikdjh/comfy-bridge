@@ -49,14 +49,14 @@ const NAV_ITEMS: MenuProps["items"] = [
 
 type PillState = "online" | "offline" | "pending";
 
-function StatusPill({ title, sub, state, tooltip }: { title: string; sub: string; state: PillState; tooltip?: string }) {
+function StatusPill({ title, sub, state, tooltip, compact }: { title: string; sub: string; state: PillState; tooltip?: string; compact?: boolean }) {
   const badge = state === "online" ? "success" : state === "offline" ? "error" : "default";
   const inner = (
     <Space size={6}>
       <Badge status={badge} />
       <span style={{ fontSize: 13 }}>
         <b>{title}</b>
-        <span style={{ color: t.colors.textSecondary, marginLeft: 6 }}>{sub}</span>
+        {!compact && <span style={{ color: t.colors.textSecondary, marginLeft: 6 }}>{sub}</span>}
       </span>
     </Space>
   );
@@ -270,6 +270,7 @@ export function Shell() {
                 icon={<MenuOutlined />}
                 onClick={() => setMobileMenuOpen(true)}
                 aria-label="打开导航菜单"
+                style={{ flexShrink: 0 }}
               />
             )}
             <StatusPill
@@ -277,12 +278,14 @@ export function Shell() {
               sub={localSub}
               state={localState}
               tooltip={local?.online ? `GPU: ${local.gpu ?? "未知"}` : (local?.error ?? `本地服务未启动（${LOCAL_COMFY_URL}）`)}
+              compact={isNarrow}
             />
             <StatusPill
               title="Modal Runner"
               sub={modalSub}
               state={modalState}
               tooltip={modal?.reason ?? "检测中…"}
+              compact={isNarrow}
             />
           </Space>
           <Space size={12}>
