@@ -467,6 +467,16 @@ fn spawn_backend(state: &BundleState, listen: &Listen) -> Result<Child, String> 
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
+    // 桌面模式父进程是 GUI 子系统（没有控制台），而后端 python.exe 是控制台程序。
+    // 不指定 CREATE_NO_WINDOW 时 Windows 会为它新建一个控制台窗口；该窗口会随
+    // 常驻的 uvicorn 一起存在，即用户看到的那个黑框。Stdio::null() 只重定向句柄，
+    // 并不阻止控制台分配，必须靠 creation flag 才能真正无窗口运行。
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
     command
         .spawn()
         .map_err(|e| format!("无法启动内置后端: {e}"))
