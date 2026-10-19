@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, apiSend } from "./client";
+import { usePageVisible } from "../hooks/usePageVisible";
 
 export interface LocalLaunch {
   detected: boolean;
@@ -88,10 +89,11 @@ export interface ModalStopResult {
 
 /** 本地实例状态（5s 轮询） */
 export function useLocalProcState() {
+  const visible = usePageVisible();
   return useQuery({
     queryKey: ["launch", "local-proc"],
     queryFn: ({ signal }) => apiGet<LocalProcState>("/api/v1/launch/local/status", signal),
-    refetchInterval: 5_000,
+    refetchInterval: visible ? 5_000 : false,
     staleTime: 2_000,
   });
 }
@@ -129,10 +131,11 @@ export interface ModalContainers {
 }
 
 export function useModalContainers() {
+  const visible = usePageVisible();
   return useQuery({
     queryKey: ["launch", "modal-containers"],
     queryFn: ({ signal }) => apiGet<ModalContainers>("/api/v1/launch/modal/containers", signal),
     staleTime: 45_000,
-    refetchInterval: 60_000,
+    refetchInterval: visible ? 60_000 : false,
   });
 }

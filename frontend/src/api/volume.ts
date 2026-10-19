@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, apiSend } from "./client";
+import { usePageVisible } from "../hooks/usePageVisible";
 
 export interface VolumeMeta {
   volume: string;
@@ -149,6 +150,7 @@ export interface TrashList {
 }
 
 export function useTrash(volume: string) {
+  const visible = usePageVisible();
   return useQuery({
     queryKey: ["volume", "trash", volume],
     queryFn: ({ signal }) =>
@@ -156,7 +158,7 @@ export function useTrash(volume: string) {
         `/api/v1/volume/trash?volume=${encodeURIComponent(volume)}`,
         signal,
       ),
-    refetchInterval: 30_000,
+    refetchInterval: visible ? 30_000 : false,
   });
 }
 
@@ -204,11 +206,14 @@ export function createVolumeDownload(url: string, destDir: string, volume: strin
 }
 
 export function useDownloadJobs() {
+  const visible = usePageVisible();
   return useQuery({
     queryKey: ["volume", "downloads"],
     queryFn: ({ signal }) => apiGet<{ jobs: DownloadJob[] }>("/api/v1/volume/downloads", signal),
-    refetchInterval: (query) =>
-      query.state.data?.jobs.some((j) => j.status === "running") ? 3_000 : 15_000,
+    refetchInterval: (query) => {
+      if (!visible) return false;
+      return query.state.data?.jobs.some((j) => j.status === "running") ? 3_000 : 15_000;
+    },
   });
 }
 
@@ -276,11 +281,14 @@ export function createVolumeMove(paths: string[], destDir: string, volume: strin
 }
 
 export function useMoveJobs() {
+  const visible = usePageVisible();
   return useQuery({
     queryKey: ["volume", "moves"],
     queryFn: ({ signal }) => apiGet<{ jobs: MoveJob[] }>("/api/v1/volume/moves", signal),
-    refetchInterval: (query) =>
-      query.state.data?.jobs.some((j) => j.status === "running") ? 3_000 : 15_000,
+    refetchInterval: (query) => {
+      if (!visible) return false;
+      return query.state.data?.jobs.some((j) => j.status === "running") ? 3_000 : 15_000;
+    },
   });
 }
 

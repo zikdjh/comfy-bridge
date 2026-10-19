@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiSend } from "./client";
+import { usePageVisible } from "../hooks/usePageVisible";
 
 export interface VolumeMeta {
   volume: string;
@@ -76,6 +77,7 @@ export function useVolumeMeta() {
 }
 
 export function useVolumeOverview(category: string) {
+  const visible = usePageVisible();
   return useQuery({
     queryKey: ["volume-overview", category],
     queryFn: ({ signal }) =>
@@ -83,17 +85,20 @@ export function useVolumeOverview(category: string) {
         `/api/v1/modal-volume/overview?category=${encodeURIComponent(category)}`,
         signal,
       ),
-    refetchInterval: 15_000,
+    // 15s 慢轮询但页面隐藏时停止，避免后台 Modal 卷列表撞限流
+    refetchInterval: visible ? 15_000 : false,
   });
 }
 
 export function useSyncJobs() {
+  const visible = usePageVisible();
   return useQuery({
     queryKey: ["sync-jobs"],
     queryFn: ({ signal }) =>
       apiGet<{ jobs: SyncJobDto[] }>("/api/v1/modal-volume/jobs", signal),
     // 有进行中的作业时 2 秒快轮询，空闲时 10 秒慢轮询
     refetchInterval: (query) => {
+      if (!visible) return false;
       const list = query.state.data?.jobs;
       return list?.some((j) => j.status === "running") ? 2_000 : 10_000;
     },
@@ -132,16 +137,19 @@ export function initUpload(input: {
 }
 
 export function useUploadSessions() {
+  const visible = usePageVisible();
   return useQuery({
     queryKey: ["uploads"],
     queryFn: ({ signal }) =>
       apiGet<{ uploads: UploadSession[] }>("/api/v1/uploads", signal),
-    refetchInterval: (query) =>
-      query.state.data?.uploads.some((u) =>
+    refetchInterval: (query) => {
+      if (!visible) return false;
+      return query.state.data?.uploads.some((u) =>
         ["receiving", "verifying", "pushing"].includes(u.status),
       )
         ? 2_000
-        : 10_000,
+        : 10_000;
+    },
   });
 }
 

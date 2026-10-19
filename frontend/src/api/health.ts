@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, apiSend } from "./client";
+import { usePageVisible } from "../hooks/usePageVisible";
 
 export interface LocalHealth {
   url: string;
@@ -49,18 +50,20 @@ export interface ModalCliHealth {
 }
 
 export function useModalCliHealth() {
+  const visible = usePageVisible();
   return useQuery({
     queryKey: ["health", "modal-cli"],
     queryFn: ({ signal }) => apiGet<ModalCliHealth>("/api/v1/health/modal-cli", signal),
-    refetchInterval: 30_000,
+    refetchInterval: visible ? 30_000 : false,
   });
 }
 
 export function useHealth() {
+  const visible = usePageVisible();
   return useQuery({
     queryKey: ["health"],
     queryFn: ({ signal }) => apiGet<HealthResponse>("/api/v1/health", signal),
-    refetchInterval: 10_000,
+    refetchInterval: visible ? 10_000 : false,
   });
 }
 

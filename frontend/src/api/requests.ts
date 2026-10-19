@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "./client";
+import { usePageVisible } from "../hooks/usePageVisible";
 
 export interface RuleStep {
   rule: string;
@@ -35,6 +36,7 @@ export interface BridgeRequest {
 }
 
 export function useRequests(backend = "all", status = "all", realtime = true, limit = 200) {
+  const visible = usePageVisible();
   return useQuery({
     queryKey: ["requests", backend, status, limit],
     queryFn: ({ signal }) =>
@@ -42,6 +44,7 @@ export function useRequests(backend = "all", status = "all", realtime = true, li
         `/api/v1/requests?backend=${backend}&status=${status}&limit=${limit}`,
         signal,
       ),
-    refetchInterval: realtime ? 5_000 : false,
+    // 页面不可见时停轮询，回到前台立即恢复
+    refetchInterval: realtime && visible ? 5_000 : false,
   });
 }

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "./client";
+import { usePageVisible } from "../hooks/usePageVisible";
 
 export type MediaKind = "image" | "video";
 
@@ -19,11 +20,12 @@ export interface LocalMedia {
 }
 
 export function useLocalMedia(kind: "all" | MediaKind, limit = 500) {
+  const visible = usePageVisible();
   return useQuery({
     queryKey: ["media", "local", kind, limit],
     queryFn: ({ signal }) =>
       apiGet<LocalMedia>(`/api/v1/media/local?kind=${kind}&limit=${limit}`, signal),
-    refetchInterval: 30_000,
+    refetchInterval: visible ? 30_000 : false,
   });
 }
 

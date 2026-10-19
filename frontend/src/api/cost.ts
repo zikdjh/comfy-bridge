@@ -1,6 +1,7 @@
 /** 额度与成本 API（M4-1）：仪表盘成本卡片与设置页「护栏与预算」的数据源。 */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiSend } from "./client";
+import { usePageVisible } from "../hooks/usePageVisible";
 
 export interface CostBucket {
   requests: number;
@@ -45,10 +46,11 @@ export interface CostSummary {
 }
 
 export function useCostSummary() {
+  const visible = usePageVisible();
   return useQuery({
     queryKey: ["cost-summary"],
     queryFn: ({ signal }) => apiGet<CostSummary>("/api/v1/cost/summary", signal),
-    refetchInterval: 30_000,
+    refetchInterval: visible ? 30_000 : false,
   });
 }
 

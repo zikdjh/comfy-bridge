@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, apiSend } from "./client";
+import { usePageVisible } from "../hooks/usePageVisible";
 
 export interface LocalWorkflow {
   name: string;
@@ -24,10 +25,11 @@ export interface LocalWorkflows {
 }
 
 export function useLocalWorkflows() {
+  const visible = usePageVisible();
   return useQuery({
     queryKey: ["workflows", "local"],
     queryFn: ({ signal }) => apiGet<LocalWorkflows>("/api/v1/workflows/local", signal),
-    refetchInterval: 30_000,
+    refetchInterval: visible ? 30_000 : false,
   });
 }
 

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, apiSend } from "./client";
 import type { SyncJob } from "./jobs";
+import { usePageVisible } from "../hooks/usePageVisible";
 
 export interface CustomNodePackage {
   name: string;
@@ -34,10 +35,11 @@ export interface LocalNodes {
 }
 
 export function useLocalNodes() {
+  const visible = usePageVisible();
   return useQuery({
     queryKey: ["nodes", "local"],
     queryFn: ({ signal }) => apiGet<LocalNodes>("/api/v1/nodes/local", signal),
-    refetchInterval: 30_000,
+    refetchInterval: visible ? 30_000 : false,
   });
 }
 
@@ -58,10 +60,11 @@ export interface CloudNodes {
 }
 
 export function useCloudNodes() {
+  const visible = usePageVisible();
   return useQuery({
     queryKey: ["nodes", "cloud"],
     queryFn: ({ signal }) => apiGet<CloudNodes>("/api/v1/nodes/cloud", signal),
-    refetchInterval: 30_000,
+    refetchInterval: visible ? 30_000 : false,
   });
 }
 

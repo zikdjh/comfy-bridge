@@ -13,7 +13,8 @@ dayjs.locale("zh-cn");
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { retry: 1, refetchOnWindowFocus: false },
+    // staleTime 15s：页面导航往返命中缓存不重复请求；失效/轮询/refetch 仍照常触发
+    queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 15_000 },
   },
 });
 

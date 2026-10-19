@@ -18,6 +18,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# modal-cli 自检短缓存：app_status 是 Modal 云端 RPC，连点/轮询时不必每次往返；
+# TTL 内返回上次结果（含错误），配置变更等需要即时刷新的场景走 restart/重启进程。
+# 30s 与前端状态页轮询间隔一致：两次轮询之间的重复请求全部命中缓存。
+_MODAL_CLI_CACHE_TTL = 30.0
+_modal_cli_cache: dict[str, tuple[float, dict]] = {}
+
 
 def _cli_status() -> dict:
     return {
@@ -34,6 +40,10 @@ def _cli_status() -> dict:
 @router.get("/health/modal-cli")
 async def modal_cli_health() -> dict:
     """Modal SDK 启动自检：版本、登录态、网络延迟、应用状态与最近失败。"""
+    app_name = get_settings().modal.app_name
+    cached = _modal_cli_cache.get(app_name)
+    if cached and (time.monotonic() - cached[0]) < _MODAL_CLI_CACHE_TTL:
+        return cached[1]
     status = _cli_status()
     if not status["found"]:
         error = modal_cli.ModalCliError(
@@ -59,7 +69,9 @@ async def modal_cli_health() -> dict:
         status["error"] = exc.to_dict()
         if exc.category == "not_logged_in":
             status["logged_in"] = False
-    return {**status, **modal_cli.diagnostics()}
+    result = {**status, **modal_cli.diagnostics()}
+    _modal_cli_cache[app_name] = (time.monotonic(), result)
+    return result
 
 
 def _bridge_entry(request: Request) -> tuple[str, str]:

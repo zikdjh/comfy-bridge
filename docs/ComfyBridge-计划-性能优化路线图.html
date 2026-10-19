@@ -247,6 +247,25 @@
     </tbody>
   </table>
   <blockquote><p>首轮含页面 chunk 冷加载；p95 由 n=3 取上界，仅作方向参考。采集命令：<code>pnpm exec playwright test -c playwright.config.web-perf.ts</code>（需后端 18189 + Vite 15173 在线）。已完成：路由级代码分割 + antd/react/echarts vendor 分包 + 仪表盘图表懒加载，echarts（347KB gzip）已移出首屏。已识别：路由规则页首访 551ms（含规则/工作流两个请求串行）与系统状态页 391ms 为下批优化点；Modal 卷列表接口在页面不可见时仍触发 VolumeListFiles 限流重试，属 P2 轮询治理。</p></blockquote>
+  <h4>6.1.2 第二批基线（2026-10-19，同机同口径，n=3）</h4>
+  <p>本批改动：<b>轮询可见性治理</b>（新增 <code>usePageVisible</code>，requests / modalVolume / health / cost / workflows / nodes / media / launch / volume 全部轮询在页面隐藏时停止，回到前台恢复）；<b>请求缓存 staleTime 15s</b>（导航往返命中缓存不重复请求）；<b>modal-cli 自检服务端 30s TTL 缓存</b>（app_status 云端 RPC 不随轮询重复打）。</p>
+  <table>
+    <thead><tr><th>页面</th><th>第一批 p95</th><th>第二批 p95</th><th>变化</th></tr></thead>
+    <tbody>
+      <tr><td>路由规则</td><td>551ms</td><td>137ms</td><td style="color:var(--ok)">-75%</td></tr>
+      <tr><td>系统状态</td><td>391ms</td><td>136ms</td><td style="color:var(--ok)">-65%</td></tr>
+      <tr><td>数据卷</td><td>252ms</td><td>103ms</td><td style="color:var(--ok)">-59%</td></tr>
+      <tr><td>模型卷</td><td>204ms</td><td>100ms</td><td style="color:var(--ok)">-51%</td></tr>
+      <tr><td>媒体库</td><td>242ms</td><td>159ms</td><td style="color:var(--ok)">-34%</td></tr>
+      <tr><td>成本报表</td><td>221ms</td><td>259ms</td><td>波动</td></tr>
+      <tr><td>设置</td><td>299ms</td><td>215ms</td><td style="color:var(--ok)">-28%</td></tr>
+      <tr><td>仪表盘</td><td>218ms</td><td>213ms</td><td>持平</td></tr>
+      <tr><td>节点管理</td><td>92ms</td><td>113ms</td><td>持平</td></tr>
+      <tr><td>工作流</td><td>119ms</td><td>118ms</td><td>持平</td></tr>
+      <tr><td>日志</td><td>135ms</td><td><b style="color:var(--warn)">466ms</b></td><td>大表渲染尖刺，待虚拟化</td></tr>
+    </tbody>
+  </table>
+  <blockquote><p>10/11 页面 p95 已达 300ms 预算（路由规则、系统状态两个原热点分别 -75% / -65%）。剩余：日志页整表渲染尖刺（P1 列表虚拟化，下批从 RequestLogPanel 试点）；Modal 卷目录接口在进入数据卷页时仍偶发 VolumeListFiles 限流（服务端 list_dir 已有重试，可考虑加短 TTL 缓存，P2）。</p></blockquote>
   <h3>6.2 优化项</h3>
   <ol>
     <li>建立页面切换基准：记录每个菜单的导航耗时、请求瀑布、主线程长任务。</li>
