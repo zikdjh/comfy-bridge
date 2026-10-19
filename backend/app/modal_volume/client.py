@@ -43,6 +43,11 @@ _CLIENT_KEY: tuple[str, str] | None = None
 _CLIENT_LOOP: object | None = None
 _VOLUMES: dict[tuple[str, str], Any] = {}
 
+# list_dir 短 TTL 缓存：前端轮询 15s + 页面往返重进，TTL 内直接返回上次结果，
+# 避免连续 Modal RPC 撞限流；写操作后由调用方走 _invalidate_list_dir() 主动失效。
+_LIST_DIR_TTL = 12.0
+_list_dir_cache: dict[tuple[str, str], tuple[float, list[dict]]] = {}
+
 _modal: Any = None
 _MODAL_IMPORT_FAILED = False
 
@@ -255,6 +260,17 @@ def reset_runtime_state() -> None:
     _CLIENT_KEY = None
     _CLIENT_LOOP = None
     _VOLUMES.clear()
+    _list_dir_cache.clear()
+
+
+def _invalidate_list_dir(remote_path: str | None = None, volume: str | None = None) -> None:
+    """写操作后按前缀失效 list_dir 缓存；不传参则清全量。"""
+    if remote_path is None and volume is None:
+        _list_dir_cache.clear()
+        return
+    prefix = (volume or "", remote_path or "")
+    for key in [k for k in _list_dir_cache if k[0] == prefix[0] and k[1].startswith(prefix[1])]:
+        _list_dir_cache.pop(key, None)
 
 
 def _forget_volume(name: str) -> None:
@@ -559,6 +575,11 @@ def _map_sdk_error(exc: Exception, context: str) -> ModalCliError:
 
 async def list_dir(remote_path: str, volume: str | None = None, *, timeout: float = 600.0) -> list[dict]:
     """列一层目录；SDK FileEntry 归一化为既有 CLI dict 形状。"""
+    cache_key = (volume or "", remote_path or "/")
+    cached = _list_dir_cache.get(cache_key)
+    if cached and (time.monotonic() - cached[0]) < _LIST_DIR_TTL:
+        return cached[1]
+
     async def _call() -> list[dict]:
         try:
             handle = await _get_volume(volume)
@@ -583,7 +604,9 @@ async def list_dir(remote_path: str, volume: str | None = None, *, timeout: floa
         _record_success()
         return out
 
-    return await _with_retry("list_dir", _call)
+    result = await _with_retry("list_dir", _call)
+    _list_dir_cache[cache_key] = (time.monotonic(), result)
+    return result
 
 
 async def list_files(remote_dir: str, max_depth: int = 3, *, timeout: float = 600.0) -> list[dict]:
@@ -681,6 +704,7 @@ async def put_file(
 
     await _run_sdk_write("put_file", f"上传文件到 {remote_path}", timeout, _do)
     _record_success()
+    _invalidate_list_dir(str(PurePosixPath(remote_path).parent), volume)
 
 
 async def put_directory(
@@ -704,6 +728,7 @@ async def put_directory(
 
     await _run_sdk_write("put_directory", f"上传目录到 {remote_path}", timeout, _do)
     _record_success()
+    _invalidate_list_dir(str(PurePosixPath(remote_path).parent), volume)
 
 
 async def put_many(
@@ -729,6 +754,7 @@ async def put_many(
 
     await _run_sdk_write("put_many", f"批量上传 {len(items)} 项", timeout, _do)
     _record_success()
+    _invalidate_list_dir()
 
 
 async def get_file(
@@ -764,6 +790,7 @@ async def get_file(
 
     await _run_sdk_write("get_file", f"下载 {remote_path}", timeout, _do)
     _record_success()
+    _invalidate_list_dir(str(PurePosixPath(remote_path).parent), volume)
 
 
 async def _download_one(handle: Any, remote_path: str, destination: Path, force: bool) -> None:
@@ -819,6 +846,7 @@ async def remove_file(
 
     await _run_sdk_write("remove_file", f"删除 {remote_path}", timeout, _do)
     _record_success()
+    _invalidate_list_dir(str(PurePosixPath(remote_path).parent), volume)
 
 
 async def volume_create(name: str, *, timeout: float = 600.0) -> None:
@@ -830,6 +858,7 @@ async def volume_create(name: str, *, timeout: float = 600.0) -> None:
 
     await _run_sdk_write("volume_create", f"创建数据卷 {name}", timeout, _do)
     _forget_volume(name)
+    _invalidate_list_dir()
     _record_success()
 
 
@@ -842,6 +871,7 @@ async def volume_delete(name: str, *, timeout: float = 600.0) -> None:
 
     await _run_sdk_write("volume_delete", f"删除数据卷 {name}", timeout, _do)
     _forget_volume(name)
+    _invalidate_list_dir()
     _record_success()
 
 
