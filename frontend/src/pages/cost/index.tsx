@@ -28,6 +28,9 @@ import { bridgeTokens as t } from "../../theme";
 import { PageHeader } from "../../components/common/PageHeader";
 import { StatBlock } from "../../components/common/StatCard";
 
+/** 表格横向滚动兜底：窄屏下列宽超出自动出横向滚动条 */
+const TABLE_SCROLL_X = { x: true } as const;
+
 const DAYS = 30;
 
 const usd = (v: number | null | undefined, digits = 4) => (v == null ? "—" : `$${v.toFixed(digits)}`);
@@ -119,6 +122,7 @@ function ReportCard() {
         loading={isLoading}
         columns={columns}
         dataSource={report?.rows ?? []}
+        scroll={TABLE_SCROLL_X}
         locale={{ emptyText: "暂无云端成本记录（仅统计已入账的云端请求）" }}
         pagination={{ pageSize: 10, hideOnSinglePage: true, showSizeChanger: false }}
       />
@@ -245,6 +249,7 @@ function ReconCard() {
             rowKey="date"
             columns={dailyCols}
             dataSource={recon.daily}
+            scroll={TABLE_SCROLL_X}
             locale={{ emptyText: "该月暂无两侧数据" }}
             pagination={{ pageSize: 10, hideOnSinglePage: true, showSizeChanger: false }}
           />

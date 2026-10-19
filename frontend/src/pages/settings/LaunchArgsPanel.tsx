@@ -502,7 +502,7 @@ function TargetPanel({ target, launch, state, onChange, onReset }: TargetPanelPr
         rowKey="name"
         size="small"
         pagination={false}
-        scroll={{ y: 360 }}
+        scroll={{ y: 360, x: true }}
       />
 
       <div style={{ marginTop: 12 }}>

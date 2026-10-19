@@ -42,6 +42,9 @@ import { EmptyGuide } from "../../components/common/EmptyGuide";
 import dayjs from "dayjs";
 import { bridgeTokens as t } from "../../theme";
 
+/** 表格横向滚动兜底：窄屏下列宽超出自动出横向滚动条 */
+const TABLE_SCROLL_X = { x: true } as const;
+
 /* ---------------- 本地清单（真实数据） ---------------- */
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100, 200];
@@ -84,7 +87,7 @@ function ClassTypeTable({ classTypes }: { classTypes: string[] }) {
         dataSource={filtered}
         rowKey={(c) => c}
         size="small"
-        scroll={{ y: 320 }}
+        scroll={{ y: 320, x: true }}
         pagination={{
           current: page,
           pageSize: size,
@@ -688,6 +691,7 @@ function DiffMatrix() {
               dataSource={rows}
               pagination={rows.length > 20 ? { pageSize: 20, showSizeChanger: false } : false}
               size="small"
+              scroll={TABLE_SCROLL_X}
               rowKey="name"
               rowSelection={{
                 selectedRowKeys: selectedKeys,
@@ -723,7 +727,7 @@ function DiffMatrix() {
                   dataSource={clsFiltered}
                   rowKey={(r) => r.name}
                   size="small"
-                  scroll={{ y: 360 }}
+                  scroll={{ y: 360, x: true }}
                   pagination={{
                     current: clsPage,
                     pageSize: clsSize,

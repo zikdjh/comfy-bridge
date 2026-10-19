@@ -3,6 +3,7 @@ import { Segmented, Tabs } from "antd";
 import { LiveConsole } from "./LiveConsole";
 import { ModalConsole } from "./ModalConsole";
 import { RequestLogPanel } from "./RequestLogPanel";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 
 type ConsoleLayout = "auto" | "row" | "column";
 
@@ -11,17 +12,6 @@ const LAYOUT_STORAGE_KEY = "console.layout";
 const BOTTOM_PADDING = 16;
 /** 高度测量到位前的兜底值（页头 64 + 内容边距 32 + 页签导航 ~46） */
 const FALLBACK_CHROME = 158;
-
-function useMediaQuery(query: string): boolean {
-  const [match, setMatch] = useState(() => window.matchMedia(query).matches);
-  useEffect(() => {
-    const mq = window.matchMedia(query);
-    const onChange = (e: MediaQueryListEvent) => setMatch(e.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, [query]);
-  return match;
-}
 
 export default function LogsPage() {
   const [tab, setTab] = useState("requests");

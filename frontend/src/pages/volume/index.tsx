@@ -66,6 +66,9 @@ import type {
 import { EmptyGuide } from "../../components/common/EmptyGuide";
 import { bridgeTokens as t } from "../../theme";
 
+/** 表格横向滚动兜底：窄屏下列宽超出自动出横向滚动条 */
+const TABLE_SCROLL = { x: true } as const;
+
 /* 常用落卷目录（与 runner.py 的卷目录结构对应） */
 const QUICK_DIRS = [
   "models/checkpoints",
@@ -276,6 +279,7 @@ function UsageCard() {
           rowKey="name"
           size="small"
           pagination={false}
+          scroll={TABLE_SCROLL}
         />
       )}
 
@@ -726,6 +730,7 @@ function VolumeBrowser({
             rowSelection={{ selectedRowKeys: selectedKeys, onChange: setSelectedKeys }}
             size="small"
             pagination={false}
+            scroll={TABLE_SCROLL}
           />
         )}
       </Space>
@@ -754,6 +759,7 @@ function VolumeBrowser({
               <Table
                 size="small"
                 pagination={false}
+                scroll={TABLE_SCROLL}
                 rowKey={(r) => `${r.source}-${r.ref}-${r.detail}`}
                 dataSource={deletePreview.reference.refs}
                 columns={[
@@ -958,6 +964,7 @@ function DownloadJobsCard() {
           rowKey="id"
           size="small"
           pagination={false}
+          scroll={TABLE_SCROLL}
         />
       )}
     </Card>
@@ -1087,6 +1094,7 @@ function TrashCard({ volume }: { volume: string }) {
           rowKey="path"
           size="small"
           pagination={false}
+          scroll={TABLE_SCROLL}
         />
       )}
     </Card>
@@ -1211,7 +1219,7 @@ function MoveJobsCard() {
       {jobs.length === 0 ? (
         <EmptyGuide description="暂无移动任务 —— 在目录浏览中勾选条目后点「移动到」" />
       ) : (
-        <Table columns={columns} dataSource={jobs} rowKey="id" size="small" pagination={false} />
+        <Table columns={columns} dataSource={jobs} rowKey="id" size="small" pagination={false} scroll={TABLE_SCROLL} />
       )}
     </Card>
   );

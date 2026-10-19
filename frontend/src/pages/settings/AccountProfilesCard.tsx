@@ -155,6 +155,7 @@ export default function AccountProfilesCard() {
         columns={columns}
         dataSource={data?.accounts ?? []}
         pagination={false}
+        scroll={{ x: true }}
         locale={{ emptyText: "暂无档案：配置好当前凭据后点「保存当前为档案」" }}
       />
       <Modal

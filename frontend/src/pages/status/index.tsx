@@ -5,6 +5,9 @@ import dayjs from "dayjs";
 import { useModalCliHealth, type ModalCliFailure } from "../../api/health";
 import { PageHeader } from "../../components/common/PageHeader";
 
+/** 表格横向滚动兜底：窄屏下列宽超出自动出横向滚动条 */
+const TABLE_SCROLL_X = { x: true } as const;
+
 const CATEGORY_COLOR: Record<ModalCliFailure["category"], string> = {
   not_installed: "red",
   not_logged_in: "orange",
@@ -59,6 +62,7 @@ function FailureTable({ rows }: { rows: ModalCliFailure[] }) {
       dataSource={rows}
       pagination={false}
       size="small"
+      scroll={TABLE_SCROLL_X}
       locale={{ emptyText: "当前进程还没有 SDK 失败记录" }}
     />
   );

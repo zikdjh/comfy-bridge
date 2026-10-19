@@ -20,6 +20,9 @@ import { openJobDrawer, startWorkflowSync, useJob } from "../../api/jobs";
 import { bridgeTokens as t } from "../../theme";
 import { PageHeader } from "../../components/common/PageHeader";
 
+/** 表格横向滚动兜底：窄屏下列宽超出自动出横向滚动条 */
+const TABLE_SCROLL_X = { x: true } as const;
+
 /* ---------------- 本地清单（真实数据） ---------------- */
 
 function fmtSize(bytes: number) {
@@ -66,7 +69,7 @@ function LocalInventory() {
             description="本地尚未保存工作流 —— 在出图界面（顶栏入口）保存工作流后，此处自动出现"
           />
         ) : (
-          <Table<LocalWorkflow> columns={wfColumns} dataSource={data.workflows} pagination={false} size="small" />
+          <Table<LocalWorkflow> columns={wfColumns} dataSource={data.workflows} pagination={false} size="small" scroll={TABLE_SCROLL_X} />
         )}
       </Card>
       {data.assets_db && (
@@ -364,7 +367,7 @@ function SyncMatrix() {
         {data.rows.length === 0 ? (
           <EmptyGuide description="本地工作流目录与云端卷 user/default/workflows/ 均为空——保存工作流后这里出现对比" />
         ) : (
-          <Table<WfSyncRow> columns={columns} dataSource={data.rows} pagination={false} size="small" rowKey="name" />
+          <Table<WfSyncRow> columns={columns} dataSource={data.rows} pagination={false} size="small" rowKey="name" scroll={TABLE_SCROLL_X} />
         )}
       </Card>
       <CompareModal name={compareName} onClose={() => setCompareName(null)} />
@@ -448,6 +451,7 @@ function RunStats() {
         loading={isLoading}
         pagination={false}
         size="small"
+        scroll={TABLE_SCROLL_X}
         locale={{ emptyText: `近 ${days} 天没有记录到工作流运行 —— 经桥接提交一次生成后这里会出现统计` }}
       />
     </Space>

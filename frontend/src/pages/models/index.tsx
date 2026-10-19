@@ -28,6 +28,9 @@ import {
 } from "../../api/modalVolume";
 import { bridgeTokens as t } from "../../theme";
 
+/** 表格横向滚动兜底：窄屏下列宽超出自动出横向滚动条 */
+const TABLE_SCROLL_X = { x: true } as const;
+
 const statusTag = (status: SyncRow["status"]) =>
   status === "both" ? (
     <Tag color="green">已同步</Tag>
@@ -116,6 +119,7 @@ function JobTable({ jobs }: { jobs: SyncJobDto[] }) {
       dataSource={jobs}
       rowKey="id"
       size="small"
+      scroll={TABLE_SCROLL_X}
       pagination={{
         pageSize: 10,
         showTotal: (total) => `共 ${total} 条作业`,
@@ -259,6 +263,7 @@ export default function ModelsPage() {
             dataSource={rows}
             rowKey="name"
             size="small"
+            scroll={TABLE_SCROLL_X}
             pagination={{
               pageSize: 10,
               hideOnSinglePage: true,

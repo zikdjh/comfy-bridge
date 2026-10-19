@@ -215,6 +215,7 @@ function UploadJobTable({
       dataSource={sessions}
       rowKey="id"
       size="small"
+      scroll={{ x: true }}
       pagination={{ pageSize: 8, hideOnSinglePage: true }}
     />
   );

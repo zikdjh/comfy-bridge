@@ -12,6 +12,9 @@ import { useLocalWorkflows } from "../../api/workflows";
 import { useRoutingRules, useSaveRoutingRules, type RuleRow, type RuleKindInfo } from "../../api/routing";
 import { PageHeader } from "../../components/common/PageHeader";
 
+/** 表格横向滚动兜底：窄屏下列宽超出自动出横向滚动条 */
+const TABLE_SCROLL_X = { x: true } as const;
+
 // 固定规则（不参与 CRUD，决策链两端的安全与兜底步骤）
 interface BuiltinRule {
   rule: string;
@@ -313,7 +316,7 @@ export default function RoutingPage() {
         <Col xs={24} lg={16}>
           <Card size="small" title="路由规则链（自上而下求值，首条命中生效）">
           <Space direction="vertical" size={10} style={{ width: "100%" }}>
-            <Table<BuiltinRule> columns={fixedColumns} dataSource={fixedRules} pagination={false} size="small" />
+            <Table<BuiltinRule> columns={fixedColumns} dataSource={fixedRules} pagination={false} size="small" scroll={TABLE_SCROLL_X} />
             <Divider plain style={{ margin: "2px 0", fontSize: 12 }}>
               自定义规则{customRules.length ? `（${customRules.length} 条）` : "（未配置）"}
             </Divider>
@@ -324,6 +327,7 @@ export default function RoutingPage() {
                 pagination={false}
                 size="small"
                 tableLayout="fixed"
+                scroll={TABLE_SCROLL_X}
                 rowKey={(_r, i) => String(i)}
               />
             ) : (

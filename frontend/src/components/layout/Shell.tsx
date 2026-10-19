@@ -6,6 +6,7 @@ import {
   DatabaseOutlined,
   FileImageOutlined,
   HddOutlined,
+  MenuOutlined,
   NodeIndexOutlined,
   PartitionOutlined,
   PictureOutlined,
@@ -16,6 +17,7 @@ import {
 } from "@ant-design/icons";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import type { MenuProps } from "antd";
+import { Drawer, Menu as AntMenu } from "antd";
 import { useHealth } from "../../api/health";
 import { useCostSummary } from "../../api/cost";
 import { useConfig } from "../../api/config";
@@ -27,6 +29,7 @@ import { openBridgeEventStream } from "../../api/events";
 import { useQueryClient } from "@tanstack/react-query";
 import { UpdateBanner } from "./UpdateBanner";
 import { bridgeTokens as t } from "../../theme";
+import { useIsNarrow } from "../../hooks/useMediaQuery";
 
 const { Sider, Header, Content } = Layout;
 
@@ -64,6 +67,9 @@ export function Shell() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
+  // 窄屏（<768px）：Sider 收起为抽屉式浮层，展开时点击遮罩或菜单项自动关闭
+  const isNarrow = useIsNarrow();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const { data: health, isLoading } = useHealth();
 
@@ -188,38 +194,66 @@ export function Shell() {
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
-      <Sider
-        theme="light"
-        collapsible
-        collapsed={collapsed}
-        onCollapse={setCollapsed}
-        width={200}
-        style={{ borderRight: `1px solid ${t.colors.border}` }}
+      {/* 窄屏抽屉导航：点击菜单项后自动收起 */}
+      <Drawer
+        placement="left"
+        open={isNarrow && mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        width={220}
+        styles={{ body: { padding: 0 } }}
+        title={
+          <span style={{ fontWeight: 700, letterSpacing: 1 }}>ComfyBridge</span>
+        }
       >
-        <div
-          style={{
-            height: 52,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontWeight: 700,
-            fontSize: collapsed ? 14 : 16,
-            letterSpacing: 1,
-          }}
-        >
-          {collapsed ? "CB" : "ComfyBridge"}
-        </div>
-        <Menu
+        <AntMenu
           mode="inline"
           selectedKeys={[location.pathname]}
           items={NAV_ITEMS}
-          onClick={({ key }) => navigate(key)}
+          onClick={({ key }) => {
+            navigate(key);
+            setMobileMenuOpen(false);
+          }}
           style={{ borderInlineEnd: "none" }}
         />
         <div style={{ position: "absolute", bottom: 12, width: "100%", textAlign: "center", color: t.colors.textSecondary, fontSize: 12 }}>
-          {!collapsed && <span>v0.1.0</span>}
+          <span>v0.1.0</span>
         </div>
-      </Sider>
+      </Drawer>
+
+      {!isNarrow && (
+        <Sider
+          theme="light"
+          collapsible
+          collapsed={collapsed}
+          onCollapse={setCollapsed}
+          width={200}
+          style={{ borderRight: `1px solid ${t.colors.border}` }}
+        >
+          <div
+            style={{
+              height: 52,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontWeight: 700,
+              fontSize: collapsed ? 14 : 16,
+              letterSpacing: 1,
+            }}
+          >
+            {collapsed ? "CB" : "ComfyBridge"}
+          </div>
+          <Menu
+            mode="inline"
+            selectedKeys={[location.pathname]}
+            items={NAV_ITEMS}
+            onClick={({ key }) => navigate(key)}
+            style={{ borderInlineEnd: "none" }}
+          />
+          <div style={{ position: "absolute", bottom: 12, width: "100%", textAlign: "center", color: t.colors.textSecondary, fontSize: 12 }}>
+            {!collapsed && <span>v0.1.0</span>}
+          </div>
+        </Sider>
+      )}
       <Layout>
         <Header
           style={{
@@ -230,7 +264,14 @@ export function Shell() {
             paddingInline: 16,
           }}
         >
-          <Space size={24}>
+          <Space size={isNarrow ? 12 : 24} wrap>
+            {isNarrow && (
+              <Button
+                icon={<MenuOutlined />}
+                onClick={() => setMobileMenuOpen(true)}
+                aria-label="打开导航菜单"
+              />
+            )}
             <StatusPill
               title="本地 ComfyUI"
               sub={localSub}

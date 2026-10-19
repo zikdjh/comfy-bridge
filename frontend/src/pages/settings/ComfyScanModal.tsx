@@ -168,6 +168,7 @@ export function ComfyScanModal({
             dataSource={state?.found}
             rowKey="path"
             pagination={false}
+            scroll={{ x: true }}
             rowSelection={{
               type: "radio",
               selectedRowKeys: selected ? [selected] : [],

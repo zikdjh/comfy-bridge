@@ -148,6 +148,7 @@ export function SettingsSyncTab() {
           size="small"
           loading={isLoading}
           pagination={false}
+          scroll={{ x: true }}
           locale={{ emptyText: data?.cloud_available ? "两端暂无任何设置键" : "云端不可读，无法对比" }}
         />
         <Typography.Text type="secondary" style={{ fontSize: 12, display: "block", marginTop: 10 }}>

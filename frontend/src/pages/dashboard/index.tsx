@@ -16,6 +16,9 @@ import { useCostSummary, useUpdateBudget, type ModalBilling } from "../../api/co
 import { statusMeta } from "../logs/RequestLogPanel";
 import { bridgeTokens as t } from "../../theme";
 
+/** 表格横向滚动兜底：窄屏下列宽超出自动出横向滚动条 */
+const TABLE_SCROLL_X = { x: true } as const;
+
 // 图表懒加载：echarts 体量大且只在数据就绪后渲染，骨架先出、图表随后补上
 const TrendChart = lazy(() => import("../../components/common/TrendChart").then((m) => ({ default: m.TrendChart })));
 const CostChart = lazy(() => import("../../components/common/CostChart").then((m) => ({ default: m.CostChart })));
@@ -487,6 +490,7 @@ export default function DashboardPage() {
           dataSource={running}
           rowKey="id"
           loading={isLoading}
+          scroll={TABLE_SCROLL_X}
           pagination={{ pageSize: 5, hideOnSinglePage: true, showSizeChanger: false, size: "small" }}
           size="small"
           locale={{ emptyText: "当前没有排队或执行中的任务 —— 在出图界面提交一次生成即可实时看到进度" }}
@@ -507,6 +511,7 @@ export default function DashboardPage() {
           dataSource={items}
           rowKey="id"
           loading={isLoading}
+          scroll={TABLE_SCROLL_X}
           pagination={{ pageSize: 10, showSizeChanger: false, size: "small", showTotal: (total) => `共 ${total} 条` }}
           size="small"
           rowClassName={() => "clickable-row"}
