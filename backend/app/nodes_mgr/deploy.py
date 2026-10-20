@@ -14,10 +14,25 @@ import time
 from collections.abc import Callable
 
 from .. import runner_assets
+from ..core.config import get_settings
 from ..events import publish
 from ..modal_volume.client import cli_argv, cli_env
 
 RUNNER_FILE = runner_assets.runner_file("runner.py")
+
+
+def resource_env() -> dict[str, str]:
+    """部署期资源规格：runner.py 在 modal deploy 时读取并写入 @app.function。
+
+    Modal 的 gpu/cpu/memory 只能在 deploy 时确定，因此「设置 → Modal → 云端资源
+    规格」保存后必须触发一次部署才生效；本函数是配置到部署的唯一注入点。
+    """
+    modal = get_settings().modal
+    return {
+        "CB_MODAL_GPU": (modal.gpu or "").strip() or "L40S",
+        "CB_MODAL_CPU": f"{modal.cpu:g}",
+        "CB_MODAL_MEMORY_MB": str(int(modal.memory_mb)),
+    }
 
 _DEPLOY_TIMEOUT = 1800.0        # 镜像重建兜底 30 分钟（实测热缓存 ~80s）
 _LOG_TAIL_LINES = 14
@@ -111,7 +126,7 @@ async def run_deploy(rollback) -> None:
             *cli_argv("deploy", str(RUNNER_FILE)),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env=cli_env(),
+            env=cli_env(resource_env()),
         )
     except (FileNotFoundError, OSError) as exc:
         if rollback:

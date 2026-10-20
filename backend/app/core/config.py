@@ -136,6 +136,13 @@ class ModalConfig(BaseModel):
     # 云端 ComfyUI 追加启动参数：保存时经 SDK 网关写入数据卷
     # /config/launch_args.json，容器冷启动时由 runner.py 读取追加
     extra_launch_args: list[str] = []
+    # —— 云端资源规格（部署期生效，设置 → Modal → 云端资源规格）——
+    # Modal 的 @app.function(gpu/cpu/memory) 在 deploy 时固化（runner.py 从同名
+    # CB_MODAL_* 环境变量读取，由 nodes_mgr.deploy 注入），因此改动后必须经
+    # 「应用并重新部署」触发一次 modal deploy 才生效；仅保存配置不影响运行中的容器。
+    gpu: str = "L40S"       # 型号或规格串，如 L40S / A100-80GB / H100:2（多卡）
+    cpu: float = 4.0         # 物理核心数，可小数（Modal 最小 0.125）
+    memory_mb: int = 32768   # 内存（MiB）；32768 = 32 GiB
     # 账号档案注册表（多账号维护，docs/ComfyBridge-设计-多账号维护.html）：[[modal.accounts]]。
     # [modal] 本体始终是「当前活跃账号的生效视图」；激活 = 把档案字段整体复制进本体。
     # 1 账号 = 1 份凭据：token_id 唯一，轮换 = 覆盖写回档案，不做多凭据并存。

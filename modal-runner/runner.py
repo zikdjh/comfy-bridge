@@ -1,5 +1,6 @@
 """
-在 Modal 上部署 ComfyUI：L40S GPU + 4 核 CPU + 32 GiB 内存。
+在 Modal 上部署 ComfyUI：默认 L40S GPU + 4 核 CPU + 32 GiB 内存，
+可用桥接器「设置 → Modal → 云端资源规格」配置后重新部署。
 
 一、数据卷持久化与 ComfyUI 目录的映射关系
 ------------------------------------------
@@ -70,6 +71,29 @@ VOLUME_NAME = os.environ.get("CB_MODAL_VOLUME") or "comfyui-data"
 DATA_ROOT = "/data"                 # 数据卷挂载点，同时是 ComfyUI 的基准目录
 COMFY_DIR = "/root/ComfyUI"         # 镜像内 ComfyUI 安装目录（仓库根）
 PORT = 8188
+
+
+def _env_positive_float(name: str, default: float) -> float:
+    """读部署期注入的资源规格；缺失/非法/非正一律回落默认值。"""
+    raw = os.environ.get(name, "").strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _env_positive_int(name: str, default: int) -> int:
+    return int(_env_positive_float(name, float(default)))
+
+
+# —— 部署期资源规格 ——
+# modal deploy 由桥接器（nodes_mgr.deploy）注入 CB_MODAL_GPU / CB_MODAL_CPU /
+# CB_MODAL_MEMORY_MB（设置 → Modal → 云端资源规格）；手工 deploy 用下面默认值。
+# @app.function 参数在部署时固化，改动后必须重新部署才生效。
+GPU_SPEC = os.environ.get("CB_MODAL_GPU", "").strip() or "L40S"
+CPU_CORES = _env_positive_float("CB_MODAL_CPU", 4.0)
+MEMORY_MB = _env_positive_int("CB_MODAL_MEMORY_MB", 32768)
 
 # 云端 ComfyUI 版本 pin：读 lock/comfyui_version.txt（桥接器「版本对齐」功能维护，
 # 本地版本为权威；本文件只是消费方），锁文件缺失/为空时回退默认值。
@@ -285,9 +309,9 @@ def launch_comfyui() -> None:
 # ------------------------------------------------------------------ 云函数
 @app.function(
     image=image,
-    gpu="L40S",          # 1x NVIDIA L40S
-    cpu=4,               # 4 核物理 CPU
-    memory=32768,        # 32 GiB 内存（单位 MiB）
+    gpu=GPU_SPEC,        # 默认 1x NVIDIA L40S；可在设置页换型/多卡（如 "H100:2"）
+    cpu=CPU_CORES,       # 默认 4 核物理 CPU
+    memory=MEMORY_MB,    # 默认 32 GiB 内存（单位 MiB）
     volumes={DATA_ROOT: data_volume},
     timeout=86400,
     max_containers=1,    # 单容器：ComfyUI 队列本身串行，且保证 WS/HTTP 路由到同一实例

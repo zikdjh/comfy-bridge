@@ -21,7 +21,7 @@ import json
 from datetime import datetime
 
 from ..core.config import get_settings
-from ..core.constants import GPU_TYPE
+from ..core.constants import gpu_type
 from ..logs import store
 from ..routing.engine import extract_primary_model
 from . import modal_billing
@@ -82,7 +82,7 @@ def summary() -> dict:
     """控制台「额度与成本」汇总：今日/本月 + 近 30 天逐日 + 预算现状。"""
     today = store.cost_totals(_local_day_start_ms(datetime.now().astimezone()))
     return {
-        "gpu_type": GPU_TYPE,
+        "gpu_type": gpu_type(),
         "gpu_hourly_rate_usd": get_settings().bridge.gpu_hourly_rate_usd,
         "today": today,
         "month": month_usage(),

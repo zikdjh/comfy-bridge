@@ -32,7 +32,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from ..core.config import get_settings
-from ..core.constants import GPU_TYPE
+from ..core.constants import gpu_type
 
 _EXE: str | None = None
 logger = logging.getLogger(__name__)
@@ -1045,6 +1045,7 @@ async def billing_report(start: datetime, end: datetime, *, timeout: float = 45.
             _record_failure(error)
             raise error from exc
 
+        gpu_name = gpu_type()  # 账单资源行按当前配置的型号匹配（"H100:2" → "H100"）
         daily: dict[str, dict[str, Decimal]] = {}
         resources: dict[str, Decimal] = {}
         apps: dict[str, Decimal] = {}
@@ -1059,7 +1060,7 @@ async def billing_report(start: datetime, end: datetime, *, timeout: float = 45.
                         date, {"gpu_usd": Decimal(0), "total_usd": Decimal(0)}
                     )
                     bucket["total_usd"] += usd
-                    if resource == GPU_TYPE:
+                    if resource == gpu_name:
                         bucket["gpu_usd"] += usd
                 resources[resource] = resources.get(resource, Decimal(0)) + usd
             app = str(getattr(row, "description", "") or getattr(row, "object_id", "") or "未知应用")
@@ -1069,7 +1070,7 @@ async def billing_report(start: datetime, end: datetime, *, timeout: float = 45.
             apps[app] = apps.get(app, Decimal(0)) + row_total
         data = {
             "ok": True,
-            "gpu_usd": round(float(resources.get(GPU_TYPE, Decimal(0))), 4),
+            "gpu_usd": round(float(resources.get(gpu_name, Decimal(0))), 4),
             "total_usd": round(float(sum(resources.values(), Decimal(0))), 4),
             "resources": {
                 k: round(float(v), 4)

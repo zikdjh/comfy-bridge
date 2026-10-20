@@ -16,16 +16,18 @@ import asyncio
 import re
 from datetime import UTC, datetime
 
-from ..core.constants import GPU_TYPE
+from ..core.constants import gpu_type
 from ..logs import store
 from . import modal_billing
 
 _CYCLE_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
-NOTE = (
-    "对账口径：本地估算 = GPU 单价 × 请求墙钟秒数（含冷启动等待）；Modal GPU = 账单明细中 "
-    f"{GPU_TYPE} 资源的真实计量；日界为 UTC（Modal 账单口径），与控制台逐日图（本地日界）最多差数小时。"
-)
+def _note() -> str:
+    return (
+        "对账口径：本地估算 = GPU 单价 × 请求墙钟秒数（含冷启动等待）；Modal GPU = 账单明细中 "
+        f"{gpu_type()} 资源的真实计量；日界为 UTC（Modal 账单口径），"
+        "与控制台逐日图（本地日界）最多差数小时。"
+    )
 
 # 比例偏差告警阈值：Modal GPU 计量 / 本地估算 落在 [1/T, T] 之外即提醒校准单价。
 # 短期偏离属正常（冷启动等待、scaledown 保活窗口、并发复用计入方式不同），
@@ -94,5 +96,5 @@ async def areconcile(cycle: str) -> dict:
         "ratio_warn_factor": RATIO_WARN_FACTOR,
         "diverged": diverged,
         "divergence_message": DIVERGENCE_MESSAGE if diverged else None,
-        "note": NOTE,
+        "note": _note(),
     }

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Card, Form, Input, InputNumber, Popconfirm, Segmented, Select, Space, Switch, Table, Tabs, Tag, Typography } from "antd";
+import { Alert, AutoComplete, Button, Card, Form, Input, InputNumber, Popconfirm, Segmented, Select, Space, Switch, Table, Tabs, Tag, Typography } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { message } from "antd";
-import { useConfig, useSaveConfig, fetchNodeEnv, validateComfyRoot } from "../../api/config";
-import type { NodeEnvDto } from "../../api/config";
+import { applyModalResources, fetchModalResourceJob, useConfig, useSaveConfig, fetchNodeEnv, validateComfyRoot } from "../../api/config";
+import type { DeployJobDto, NodeEnvDto } from "../../api/config";
 import { LaunchArgsPanel } from "./LaunchArgsPanel";
 import { ComfyScanModal } from "./ComfyScanModal";
 import { SettingsSyncTab } from "./SettingsSyncTab";
@@ -13,6 +13,20 @@ import AccountProfilesCard from "./AccountProfilesCard";
 import { UpdateCheckCard } from "./UpdateCheckCard";
 import { useDarkMode } from "../../hooks/useDarkMode";
 import type { ThemeMode } from "../../hooks/useDarkMode";
+
+/** Modal 常用 GPU 型号建议（控件允许自定义输入；单价随平台调整，估算值在「护栏与预算」维护） */
+const GPU_OPTIONS = [
+  { value: "L40S" },
+  { value: "L4" },
+  { value: "A10G" },
+  { value: "T4" },
+  { value: "A100" },
+  { value: "A100-80GB" },
+  { value: "H100" },
+  { value: "H100:2" },
+  { value: "H200" },
+  { value: "B200" },
+];
 
 export default function SettingsPage() {
   const { mode, setMode } = useDarkMode();
@@ -28,6 +42,8 @@ export default function SettingsPage() {
   const [checking, setChecking] = useState(false);
   const [nodeEnv, setNodeEnv] = useState<NodeEnvDto | null>(null);
   const [nodeChecking, setNodeChecking] = useState(false);
+  const [resourceJob, setResourceJob] = useState<DeployJobDto | null>(null);
+  const [applyingResources, setApplyingResources] = useState(false);
 
   /** Node.js 环境检测：手动指定路径 → PATH → 常见安装目录快扫（dev.ps1/pnpm 前置条件可视化） */
   const checkNode = async () => {
@@ -99,7 +115,12 @@ export default function SettingsPage() {
       proxyTokenId: config.modal.proxy_token_id,
       proxyTokenSecret: "",
     });
-    execForm.setFieldsValue({ volume: config.modal.volume });
+    execForm.setFieldsValue({
+      volume: config.modal.volume,
+      gpu: config.modal.gpu,
+      cpu: config.modal.cpu,
+      memoryGb: Math.round((config.modal.memory_mb / 1024) * 100) / 100,
+    });
     guardForm.setFieldsValue({
       onModalUnavailable: config.bridge.on_modal_unavailable,
       maxConcurrent: config.bridge.max_cloud_concurrent,
@@ -181,14 +202,67 @@ export default function SettingsPage() {
     }
   };
 
-  const saveExec = async (values: { volume: string }) => {
+  type ExecFormValues = { volume: string; gpu: string; cpu: number; memoryGb: number };
+
+  /** 表单值 → 配置字段：内存以 GB 展示、以 MiB 存储（Modal 口径） */
+  const execPayload = (values: ExecFormValues) => ({
+    volume: values.volume.trim(),
+    gpu: (values.gpu ?? "").trim(),
+    cpu: values.cpu,
+    memory_mb: Math.round((values.memoryGb ?? 0) * 1024),
+  });
+
+  const saveExec = async (values: ExecFormValues) => {
     try {
-      await saveConfig({ modal: { volume: values.volume.trim() } });
-      message.success("执行参数已保存并热生效");
+      await saveConfig({ modal: execPayload(values) });
+      message.success("执行参数已保存；资源规格需重新部署后生效");
     } catch (err) {
       message.error(`保存失败：${err instanceof Error ? err.message : err}`);
     }
   };
+
+  /** 保存当前表单值并触发一次 modal deploy，使 GPU/CPU/内存规格作用到云端容器 */
+  const applyResources = async () => {
+    let values: ExecFormValues;
+    try {
+      values = (await execForm.validateFields()) as ExecFormValues;
+    } catch {
+      return; // 表单校验失败，错误已由 Form.Item 展示
+    }
+    setApplyingResources(true);
+    try {
+      await saveConfig({ modal: execPayload(values) });
+      const { job } = await applyModalResources();
+      setResourceJob(job);
+      message.success("已开始重新部署；完成后资源规格生效");
+    } catch (err) {
+      message.error(`应用失败：${err instanceof Error ? err.message : err}`);
+    } finally {
+      setApplyingResources(false);
+    }
+  };
+
+  // 进页面时同步一次部署任务（可能是别处发起的），进行中每 3s 轮询到结束
+  useEffect(() => {
+    fetchModalResourceJob()
+      .then(({ job }) => setResourceJob(job))
+      .catch(() => {
+        /* 后端未就绪时忽略，用户操作时会重试 */
+      });
+  }, []);
+
+  useEffect(() => {
+    if (resourceJob?.state !== "running") return;
+    const timer = setInterval(async () => {
+      try {
+        const { job } = await fetchModalResourceJob();
+        setResourceJob(job);
+      } catch {
+        /* 单次轮询失败保留上次状态，下个周期继续 */
+      }
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [resourceJob?.state]);
 
   const saveGuard = async (values: {
     onModalUnavailable: string;
@@ -533,7 +607,13 @@ export default function SettingsPage() {
                   </Form>
                 </Card>
                 <AccountProfilesCard />
-                <Card size="small" title="执行参数">
+                <Card size="small" title="执行参数与云端资源规格">
+                  <Alert
+                    type="info"
+                    showIcon
+                    style={{ marginBottom: 16, maxWidth: 640 }}
+                    message="GPU / CPU / 内存由 Modal 在部署时固化：保存后需点「应用并重新部署」触发一次 modal deploy 才作用于云端容器（不影响进行中的任务）。更换 GPU 型号后请在「护栏与预算」同步更新单价，成本估算才准确。"
+                  />
                   <Form
                     layout="vertical"
                     form={execForm}
@@ -549,16 +629,62 @@ export default function SettingsPage() {
                     >
                       <Input />
                     </Form.Item>
-                    <Form.Item label="GPU 类型" extra="云端按固定 GPU 部署（L40S）；更换需修改 modal-runner/runner.py 后重新部署">
-                      <Input value="L40S" disabled />
+                    <Form.Item
+                      label="GPU 类型"
+                      name="gpu"
+                      rules={[{ required: true, message: "请选择或填写 GPU 型号" }]}
+                      extra="Modal GPU 型号或规格串，例如 L40S / A100-80GB / H100 / H100:2（多卡）"
+                    >
+                      <AutoComplete
+                        options={GPU_OPTIONS}
+                        placeholder="L40S"
+                        filterOption={(input, option) =>
+                          String(option?.value ?? "").toLowerCase().includes(input.toLowerCase())
+                        }
+                      />
                     </Form.Item>
+                    <Space size={12} align="start" wrap>
+                      <Form.Item
+                        label="CPU 核心数"
+                        name="cpu"
+                        rules={[{ required: true, message: "请填写 CPU 核心数" }]}
+                        extra="物理核心数，可填小数（Modal 最小 0.125）"
+                      >
+                        <InputNumber min={0.125} max={64} step={1} style={{ width: 160 }} />
+                      </Form.Item>
+                      <Form.Item
+                        label="内存（GB）"
+                        name="memoryGb"
+                        rules={[{ required: true, message: "请填写内存" }]}
+                        extra="Modal 建议每核心 1–8 GB，超出比例可能部署失败"
+                      >
+                        <InputNumber min={1} max={256} step={1} style={{ width: 160 }} />
+                      </Form.Item>
+                    </Space>
                     <Form.Item
                       label="保活策略"
                       extra="单容器（max_containers=1），空闲后自动缩容到零；自定义 scaledown_window 规划中"
                     >
                       <Input value="容器空闲自动缩容到 0" disabled />
                     </Form.Item>
-                    <Button type="primary" htmlType="submit">保存</Button>
+                    <Space>
+                      <Button type="primary" htmlType="submit">保存</Button>
+                      <Button
+                        onClick={applyResources}
+                        loading={applyingResources}
+                        disabled={isLoading || resourceJob?.state === "running"}
+                      >
+                        应用并重新部署
+                      </Button>
+                    </Space>
+                    {resourceJob && resourceJob.state !== "idle" && (
+                      <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
+                        部署任务：
+                        {resourceJob.state === "running" ? "进行中" : resourceJob.state === "ok" ? "已完成" : "失败"}
+                        {resourceJob.label ? ` · ${resourceJob.label}` : ""}
+                        {resourceJob.error ? ` · ${resourceJob.error}` : ""}
+                      </Typography.Paragraph>
+                    )}
                   </Form>
                 </Card>
               </Space>

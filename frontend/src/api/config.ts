@@ -40,6 +40,10 @@ export interface ModalConfigDto {
   web_url: string;
   app_name: string;
   extra_launch_args: string[];
+  /** 云端资源规格（部署期生效：保存后需 applyModalResources 重新部署） */
+  gpu: string;
+  cpu: number;
+  memory_mb: number;
 }
 
 export interface ConfigResponse {
@@ -84,6 +88,9 @@ export function useSaveConfig() {
       volume?: string;
       task_timeout?: number;
       web_url?: string;
+      gpu?: string;
+      cpu?: number;
+      memory_mb?: number;
     };
   }) => {
     const updated = await apiSend<ConfigResponse>("/api/v1/config", "PUT", body);
@@ -226,3 +233,24 @@ export interface NodeEnvDto {
 }
 
 export const fetchNodeEnv = () => apiGet<NodeEnvDto>("/api/v1/config/node-env");
+
+/** 云端资源部署任务（与镜像重建/版本对齐共用 nodes_mgr.deploy 单飞通道） */
+export interface DeployJobDto {
+  state: "idle" | "running" | "ok" | "error";
+  started_ms: number | null;
+  finished_ms: number | null;
+  label: string | null;
+  error: string | null;
+  log_tail: string[];
+}
+
+/** 按当前配置重新部署 runner，使 GPU/CPU/内存规格生效；已有部署在跑时 409 */
+export const applyModalResources = () =>
+  apiSend<{ ok: boolean; job: DeployJobDto }>(
+    "/api/v1/config/modal/resources/apply",
+    "POST",
+    {},
+  );
+
+export const fetchModalResourceJob = () =>
+  apiGet<{ job: DeployJobDto }>("/api/v1/config/modal/resources/status");

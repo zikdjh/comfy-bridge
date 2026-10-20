@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import glob
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -25,10 +26,11 @@ from ...core.config import (
     BridgeConfig,
     ModalConfig,
     get_settings,
+    modal_configured,
 )
 from ...logs.store import count_active_modal
 from ...modal_volume import client as modal_cli
-from ...nodes_mgr import diff_cache
+from ...nodes_mgr import deploy, diff_cache
 from ...proxy import object_info as object_info_merge
 from ...proxy import passthrough
 from ...runner import client as runner_client
@@ -62,6 +64,10 @@ def _modal_view(modal: ModalConfig) -> dict:
         "web_url": modal.web_url,
         "app_name": modal.app_name,
         "extra_launch_args": list(modal.extra_launch_args),
+        # 云端资源规格（部署期生效：保存后需「应用并重新部署」才作用于容器）
+        "gpu": modal.gpu,
+        "cpu": modal.cpu,
+        "memory_mb": modal.memory_mb,
     }
 
 
@@ -378,6 +384,42 @@ class ConfigBody(BaseModel):
     modal: dict | None = None
 
 
+_GPU_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,39}$")
+
+
+def _validate_modal_resources(incoming: dict) -> None:
+    """云端资源规格轻校验：只挡明显非法值。
+
+    型号与配比是否被 Modal 接受，最终由 modal deploy 判定（失败会在部署任务里
+    回显原始错误）；这里避免把空型号、负数核心数之类写进配置。
+    """
+    if incoming.get("gpu") is not None:
+        gpu = str(incoming["gpu"]).strip()
+        if not _GPU_RE.match(gpu):
+            raise HTTPException(
+                status_code=422,
+                detail=f"GPU 型号格式非法: {gpu!r}（示例：L40S / A100-80GB / H100:2）",
+            )
+    if incoming.get("cpu") is not None:
+        try:
+            cpu = float(incoming["cpu"])
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="CPU 核心数必须是数字") from None
+        if not 0.125 <= cpu <= 64:
+            raise HTTPException(
+                status_code=422, detail=f"CPU 核心数需在 0.125–64 之间（当前 {cpu:g}）"
+            )
+    if incoming.get("memory_mb") is not None:
+        try:
+            memory = int(incoming["memory_mb"])
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="内存必须是整数（单位 MiB）") from None
+        if not 256 <= memory <= 262144:
+            raise HTTPException(
+                status_code=422, detail=f"内存需在 256 MiB–256 GiB 之间（当前 {memory} MiB）"
+            )
+
+
 def _merge_modal(current: dict, incoming: dict) -> dict:
     """token_secret / proxy_token_secret：留空（或缺省）= 保留现有；显式 null = 清除。
 
@@ -443,6 +485,7 @@ async def write_config(body: ConfigBody) -> dict:
                     detail=f"Node.js 路径必须是已存在的可执行文件绝对路径: {raw_node!r}（留空 = 自动检测）",
                 )
         clean_local["node_path"] = raw_node
+    _validate_modal_resources(body.modal or {})
     merged = {
         "local": {**current.local.model_dump(), **clean_local},
         "bridge": {**current.bridge.model_dump(), **(body.bridge or {})},
@@ -468,6 +511,37 @@ async def write_config(body: ConfigBody) -> dict:
     # close 是幂等的，其他配置写入路径多关一次无副作用。
     await passthrough.close_upstream_client()
     return _view()
+
+
+@router.post("/modal/resources/apply")
+async def apply_modal_resources() -> dict:
+    """按当前配置重新部署 runner，使 gpu/cpu/memory 生效。
+
+    Modal 的资源规格只能在 deploy 时固化（runner.py 从 CB_MODAL_* 环境变量读取），
+    因此这里与「镜像重建」「版本对齐」共用 nodes_mgr.deploy 的单飞通道：同一时间
+    只允许一个部署在跑，冲突返回 409。部署是后台任务，进度经 SSE `deploy` 事件
+    推送，也可轮询 GET /config/modal/resources/status。
+    """
+    if not modal_configured():
+        raise HTTPException(status_code=400, detail="未配置 Modal 凭证（设置 → Modal）")
+    spec = get_settings().modal
+    label = (
+        f"云端资源规格 → {spec.gpu} / {spec.cpu:g} 核 / {spec.memory_mb / 1024:g} GiB"
+    )
+    try:
+        job = await deploy.begin_exclusive(label)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    deploy.spawn(None)
+    audit.record({"event": "modal_resources_apply", "gpu": spec.gpu, "cpu": spec.cpu,
+                  "memory_mb": spec.memory_mb})
+    return {"ok": job["state"] in ("running", "ok"), "job": job}
+
+
+@router.get("/modal/resources/status")
+async def modal_resources_status() -> dict:
+    """资源规格部署任务状态（设置页轮询用；与镜像重建/版本对齐同一任务对象）。"""
+    return {"job": deploy.job_state()}
 
 
 async def update_bridge_section(updates: dict) -> dict:

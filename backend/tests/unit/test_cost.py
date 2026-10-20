@@ -176,7 +176,7 @@ def test_summary_shape(tmp_db, monkeypatch):
     _patch_budget_settings(monkeypatch, monthly_budget_usd=30.0)
     _insert("modal", 1.0, 3600.0, datetime.now().astimezone())
     s = cost_svc.summary()
-    assert s["gpu_type"] == cost_svc.GPU_TYPE
+    assert s["gpu_type"] == cost_svc.gpu_type()  # 型号来自生效配置（默认 L40S）
     assert s["today"]["requests"] == 1
     assert s["month"]["est_cost_usd"] == pytest.approx(1.0)
     assert s["budget"]["monthly_usd"] == 30.0
