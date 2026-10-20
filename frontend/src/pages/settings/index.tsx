@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, AutoComplete, Button, Card, Form, Input, InputNumber, Popconfirm, Segmented, Select, Space, Switch, Table, Tabs, Tag, Typography } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { message } from "antd";
-import { applyModalResources, fetchModalResourceJob, useConfig, useSaveConfig, fetchNodeEnv, validateComfyRoot } from "../../api/config";
-import type { DeployJobDto, NodeEnvDto } from "../../api/config";
+import { applyModalResources, fetchModalPricing, fetchModalResourceJob, useConfig, useSaveConfig, fetchNodeEnv, validateComfyRoot } from "../../api/config";
+import type { DeployJobDto, ModalPricingDto, NodeEnvDto } from "../../api/config";
 import { LaunchArgsPanel } from "./LaunchArgsPanel";
 import { ComfyScanModal } from "./ComfyScanModal";
 import { SettingsSyncTab } from "./SettingsSyncTab";
@@ -29,7 +29,7 @@ const GPU_OPTIONS = [
 ];
 
 export default function SettingsPage() {
-  const { mode, setMode } = useDarkMode();
+  const { mode, setMode, tokens: t } = useDarkMode();
   const { data: config, isLoading } = useConfig();
   const saveConfig = useSaveConfig();
   const [localForm] = Form.useForm();
@@ -44,6 +44,32 @@ export default function SettingsPage() {
   const [nodeChecking, setNodeChecking] = useState(false);
   const [resourceJob, setResourceJob] = useState<DeployJobDto | null>(null);
   const [applyingResources, setApplyingResources] = useState(false);
+  const [pricing, setPricing] = useState<ModalPricingDto | null>(null);
+  const [pricingError, setPricingError] = useState(false);
+  const pricingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** 表单变化时防抖请求预估价：只预览，不保存、不触发部署 */
+  const refreshPricing = (values: { gpu?: string; cpu?: number; memoryGb?: number }) => {
+    const gpu = (values.gpu ?? "").trim();
+    const { cpu, memoryGb } = values;
+    if (!gpu || cpu == null || memoryGb == null) {
+      setPricing(null);
+      return;
+    }
+    if (pricingTimer.current) clearTimeout(pricingTimer.current);
+    pricingTimer.current = setTimeout(() => {
+      fetchModalPricing({
+        gpu,
+        cpu,
+        memory_mb: Math.round(memoryGb * 1024),
+      })
+        .then((out) => {
+          setPricing(out);
+          setPricingError(false);
+        })
+        .catch(() => setPricingError(true));
+    }, 250);
+  };
 
   /** Node.js 环境检测：手动指定路径 → PATH → 常见安装目录快扫（dev.ps1/pnpm 前置条件可视化） */
   const checkNode = async () => {
@@ -120,6 +146,11 @@ export default function SettingsPage() {
       gpu: config.modal.gpu,
       cpu: config.modal.cpu,
       memoryGb: Math.round((config.modal.memory_mb / 1024) * 100) / 100,
+    });
+    refreshPricing({
+      gpu: config.modal.gpu,
+      cpu: config.modal.cpu,
+      memoryGb: config.modal.memory_mb / 1024,
     });
     guardForm.setFieldsValue({
       onModalUnavailable: config.bridge.on_modal_unavailable,
@@ -620,6 +651,7 @@ export default function SettingsPage() {
                     onFinish={saveExec}
                     style={{ maxWidth: 640 }}
                     disabled={isLoading}
+                    onValuesChange={(_, all) => refreshPricing(all as ExecFormValues)}
                   >
                     <Form.Item
                       label="数据卷名"
@@ -677,6 +709,56 @@ export default function SettingsPage() {
                         应用并重新部署
                       </Button>
                     </Space>
+                    <div
+                      data-testid="modal-pricing"
+                      style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${t.colors.border}` }}
+                    >
+                      <Space size={24} wrap align="start">
+                        <div>
+                          <Typography.Text type="secondary">运行预估（每小时）</Typography.Text>
+                          <div style={{ fontSize: 24, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                            {pricing ? `$${pricing.total_hourly_usd.toFixed(2)}` : "—"}
+                          </div>
+                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                            {pricing ? `约 $${pricing.total_daily_usd.toFixed(2)} / 天（24h 持续运行）` : "按当前输入实时估算"}
+                          </Typography.Text>
+                        </div>
+                        <div>
+                          <Typography.Text type="secondary">GPU</Typography.Text>
+                          <div style={{ fontVariantNumeric: "tabular-nums" }}>
+                            {pricing?.gpu_hourly_usd == null
+                              ? "未匹配参考价"
+                              : `$${pricing.gpu_hourly_usd.toFixed(2)} / h`}
+                          </div>
+                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                            {pricing ? `${pricing.gpu_model ?? "未知型号"} × ${pricing.gpu_cards} 卡` : "—"}
+                          </Typography.Text>
+                        </div>
+                        <div>
+                          <Typography.Text type="secondary">CPU + 内存</Typography.Text>
+                          <div style={{ fontVariantNumeric: "tabular-nums" }}>
+                            {pricing ? `$${(pricing.cpu_hourly_usd + pricing.memory_hourly_usd).toFixed(2)} / h` : "—"}
+                          </div>
+                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                            {pricing ? `CPU $${pricing.cpu_hourly_usd.toFixed(2)} + 内存 $${pricing.memory_hourly_usd.toFixed(2)}` : "—"}
+                          </Typography.Text>
+                        </div>
+                      </Space>
+                      {pricing && !pricing.priced && (
+                        <Alert
+                          type="warning"
+                          showIcon
+                          style={{ marginTop: 10 }}
+                          message="该 GPU 型号不在内置参考价表中，合计仅含 CPU 与内存；请在 Modal 官网确认 GPU 价格。"
+                        />
+                      )}
+                      <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}>
+                        {pricingError
+                          ? "预估价获取失败，保存与部署不受影响。"
+                          : pricing?.note ?? "按 Modal 参考价估算，非账单金额。"}
+                        {pricing ? ` ${pricing.source}` : ""}
+                      </Typography.Paragraph>
+                    </div>
                     {resourceJob && resourceJob.state !== "idle" && (
                       <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
                         部署任务：

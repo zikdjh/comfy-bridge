@@ -38,6 +38,12 @@ test.describe("Modal 云端资源规格", () => {
     await expect(cpu).toHaveValue("4");
     await expect(memory).toHaveValue("32");
 
+    // 默认 L40S + 4 核 + 32 GiB 的参考价：GPU $1.95 + CPU $0.19 + 内存 $0.26
+    const pricing = card.getByTestId("modal-pricing");
+    await expect(pricing).toContainText("$2.39");
+    await expect(pricing).toContainText("$1.95 / h");
+    await expect(pricing).toContainText("L40S × 1 卡");
+
     await gpu.fill("H100:2");
     await cpu.fill("8");
     await memory.fill("64");
@@ -52,6 +58,10 @@ test.describe("Modal 云端资源规格", () => {
     await expect(reloaded.getByRole("combobox", { name: "GPU 类型" })).toHaveValue("H100:2");
     await expect(reloaded.getByRole("spinbutton", { name: "CPU 核心数" })).toHaveValue("8");
     await expect(reloaded.getByRole("spinbutton", { name: "内存（GB）" })).toHaveValue("64");
+
+    // 实时预估随配置变化：H100 ×2 + 8 核 + 64 GiB ≈ $8.79/h
+    await expect(reloaded.getByTestId("modal-pricing")).toContainText("$8.79");
+    await expect(reloaded.getByTestId("modal-pricing")).toContainText("H100 × 2 卡");
 
     // 部署入口存在（用例不真的触发 deploy，避免产生云端费用）
     await expect(reloaded.getByRole("button", { name: "应用并重新部署" })).toBeEnabled();

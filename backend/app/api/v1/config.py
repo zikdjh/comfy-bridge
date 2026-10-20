@@ -18,7 +18,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ValidationError
 
-from ...core import audit, comfy_scan, update_check
+from ...core import audit, comfy_scan, pricing, update_check
 from ...core.config import (
     CONFIG_PATH,
     AccountProfile,
@@ -542,6 +542,25 @@ async def apply_modal_resources() -> dict:
 async def modal_resources_status() -> dict:
     """资源规格部署任务状态（设置页轮询用；与镜像重建/版本对齐同一任务对象）。"""
     return {"job": deploy.job_state()}
+
+
+@router.get("/modal/pricing")
+async def modal_pricing(
+    gpu: str | None = None,
+    cpu: float | None = None,
+    memory_mb: int | None = None,
+) -> dict:
+    """Modal 资源参考价与当前配置的每小时预估值。
+
+    不传参数时按已保存配置估算；设置页编辑表单时带参数实时预览，无需先保存。
+    价格是参考值，界面需同时展示 source/note，不能当作账单金额。
+    """
+    spec = get_settings().modal
+    return pricing.estimate_hourly(
+        gpu if gpu is not None else spec.gpu,
+        cpu if cpu is not None else spec.cpu,
+        memory_mb if memory_mb is not None else spec.memory_mb,
+    ) | {"catalog": pricing.catalog()}
 
 
 async def update_bridge_section(updates: dict) -> dict:

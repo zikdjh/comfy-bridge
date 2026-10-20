@@ -254,3 +254,31 @@ export const applyModalResources = () =>
 
 export const fetchModalResourceJob = () =>
   apiGet<{ job: DeployJobDto }>("/api/v1/config/modal/resources/status");
+
+/** 资源每小时预估价（参考 modal.com/pricing，非账单金额） */
+export interface ModalPricingDto {
+  gpu_model: string | null;
+  gpu_cards: number;
+  gpu_hourly_usd: number | null;
+  cpu_hourly_usd: number;
+  memory_hourly_usd: number;
+  total_hourly_usd: number;
+  total_daily_usd: number;
+  priced: boolean;
+  source: string;
+  note: string;
+  catalog: {
+    gpu: Record<string, number>;
+    cpu_hourly_per_core_usd: number;
+    memory_hourly_per_gib_usd: number;
+    source: string;
+  };
+}
+
+export const fetchModalPricing = (params: { gpu?: string; cpu?: number; memory_mb?: number } = {}) => {
+  const q = new URLSearchParams();
+  if (params.gpu != null) q.set("gpu", params.gpu);
+  if (params.cpu != null) q.set("cpu", String(params.cpu));
+  if (params.memory_mb != null) q.set("memory_mb", String(params.memory_mb));
+  return apiGet<ModalPricingDto>(`/api/v1/config/modal/pricing${q.size ? `?${q}` : ""}`);
+};
