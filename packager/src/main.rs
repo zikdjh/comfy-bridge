@@ -583,7 +583,7 @@ fn run_desktop(args: &[String]) -> i32 {
             )
             .title(format!("ComfyBridge - {}:{}", listen.host, listen.port))
             .inner_size(1280.0, 820.0)
-            .min_inner_size(960.0, 640.0)
+            .min_inner_size(1024.0, 640.0)
             .build()?;
             window.show()?;
             Ok(())

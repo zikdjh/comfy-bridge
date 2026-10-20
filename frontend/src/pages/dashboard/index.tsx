@@ -275,7 +275,7 @@ export default function DashboardPage() {
       )}
 
       <Row gutter={[12, 12]}>
-        <Col xs={24} sm={12} xl={6}>
+        <Col xs={24} sm={12} lg={6}>
           <StatCard
             icon={<ThunderboltOutlined />}
             title="今日生成"
@@ -288,7 +288,7 @@ export default function DashboardPage() {
             }
           />
         </Col>
-        <Col xs={24} sm={12} xl={6}>
+        <Col xs={24} sm={12} lg={6}>
           <StatCard
             icon={<CheckCircleOutlined />}
             title="今日成功率"
@@ -296,7 +296,7 @@ export default function DashboardPage() {
             footer={attempts > 0 ? `完成 ${done} · 失败 ${failed} · 中断 ${cancelled}` : "今日暂无完成的生成请求"}
           />
         </Col>
-        <Col xs={24} sm={12} xl={6}>
+        <Col xs={24} sm={12} lg={6}>
           <StatCard
             icon={<ClockCircleOutlined />}
             title="今日平均耗时"
@@ -304,7 +304,7 @@ export default function DashboardPage() {
             footer={<>本地 {avgLocal == null ? "—" : fmtSec(avgLocal)} · 云端 {avgModal == null ? "—" : fmtSec(avgModal)}</>}
           />
         </Col>
-        <Col xs={24} sm={12} xl={6}>
+        <Col xs={24} sm={12} lg={6}>
           <Card size="small">
             <Statistic
               title="Modal 执行通道"
@@ -336,12 +336,12 @@ export default function DashboardPage() {
       </Row>
 
       <Row gutter={[12, 12]}>
-        <Col xs={24} xl={16}>
+        <Col xs={24} lg={16}>
           <Card size="small" title="生成趋势（近 14 天）">
             <Suspense fallback={null}><TrendChart data={trend} /></Suspense>
           </Card>
         </Col>
-        <Col xs={24} xl={8}>
+        <Col xs={24} lg={8}>
           <Card size="small" title="运行环境">
             <Descriptions column={1} size="small">
               <Descriptions.Item label="本地 ComfyUI">
@@ -381,7 +381,7 @@ export default function DashboardPage() {
       </Row>
 
       <Row gutter={[12, 12]}>
-        <Col xs={24} xl={16}>
+        <Col xs={24} lg={16}>
           <Card
             size="small"
             title={
@@ -401,7 +401,7 @@ export default function DashboardPage() {
             <Suspense fallback={null}><CostChart data={costTrend} /></Suspense>
           </Card>
         </Col>
-        <Col xs={24} xl={8}>
+        <Col xs={24} lg={8}>
           <Card
             size="small"
             title={

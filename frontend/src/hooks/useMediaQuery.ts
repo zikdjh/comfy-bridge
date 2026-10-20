@@ -15,7 +15,7 @@ export function useMediaQuery(query: string): boolean {
   return match;
 }
 
-/** 常用断线：<768px 视为窄屏（手机/小窗），布局切换为单列 + 抽屉导航 */
+/** 低于桌面最低宽度的兜底断点；本项目布局只以桌面端为验收范围。 */
 export function useIsNarrow(): boolean {
-  return useMediaQuery("(max-width: 767px)");
+  return useMediaQuery("(max-width: 1023px)");
 }

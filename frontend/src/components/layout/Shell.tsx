@@ -29,6 +29,7 @@ import { openBridgeEventStream } from "../../api/events";
 import { useQueryClient } from "@tanstack/react-query";
 import { UpdateBanner } from "./UpdateBanner";
 import { useIsNarrow } from "../../hooks/useMediaQuery";
+import { useIsCompactDesktop } from "../../hooks/useDesktopLayout";
 import { useDarkMode } from "../../hooks/useDarkMode";
 
 const { Sider, Header, Content } = Layout;
@@ -57,7 +58,11 @@ function StatusPill({ title, sub, state, tooltip, compact }: { title: string; su
       <Badge status={badge} />
       <span style={{ fontSize: 13 }}>
         <b>{title}</b>
-        {!compact && <span style={{ color: t.colors.textSecondary, marginLeft: 6 }}>{sub}</span>}
+        {compact ? (
+          <span style={{ color: t.colors.textSecondary, marginLeft: 6 }}>{state === "online" ? "在线" : state === "offline" ? "离线" : "检测中"}</span>
+        ) : (
+          <span style={{ color: t.colors.textSecondary, marginLeft: 6 }}>{sub}</span>
+        )}
       </span>
     </Space>
   );
@@ -69,11 +74,13 @@ export function Shell() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  // 窄屏（<768px）：Sider 收起为抽屉式浮层，展开时点击遮罩或菜单项自动关闭
+  // 低于桌面最低宽度时用抽屉兜底；1024-1279px 自动使用紧凑 Sider。
   const isNarrow = useIsNarrow();
+  const isCompactDesktop = useIsCompactDesktop();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const { data: health, isLoading } = useHealth();
+  const siderCollapsed = isCompactDesktop || collapsed;
 
   // —— 首次配置向导（M4-3）：Modal 凭证未配置且本浏览器未完成过向导时，自动弹一次 + 顶部常驻提示 ——
   const { data: config } = useConfig();
@@ -196,7 +203,7 @@ export function Shell() {
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
-      {/* 窄屏抽屉导航：点击菜单项后自动收起 */}
+      {/* 低于桌面最低宽度的兜底导航；1024px 起始终使用桌面 Sider。 */}
       <Drawer
         placement="left"
         open={isNarrow && mobileMenuOpen}
@@ -227,9 +234,10 @@ export function Shell() {
         <Sider
           theme={isDark ? "dark" : "light"}
           collapsible
-          collapsed={collapsed}
+          collapsed={siderCollapsed}
           onCollapse={setCollapsed}
           width={200}
+          collapsedWidth={64}
           style={{ borderRight: `1px solid ${t.colors.border}` }}
         >
           <div
@@ -239,11 +247,11 @@ export function Shell() {
               alignItems: "center",
               justifyContent: "center",
               fontWeight: 700,
-              fontSize: collapsed ? 14 : 16,
+              fontSize: siderCollapsed ? 14 : 16,
               letterSpacing: 1,
             }}
           >
-            {collapsed ? "CB" : "ComfyBridge"}
+            {siderCollapsed ? "CB" : "ComfyBridge"}
           </div>
           <Menu
             mode="inline"
@@ -253,7 +261,7 @@ export function Shell() {
             style={{ borderInlineEnd: "none" }}
           />
           <div style={{ position: "absolute", bottom: 12, width: "100%", textAlign: "center", color: t.colors.textSecondary, fontSize: 12 }}>
-            {!collapsed && <span>v0.1.0</span>}
+            {!siderCollapsed && <span>v0.1.0</span>}
           </div>
         </Sider>
       )}
@@ -265,9 +273,11 @@ export function Shell() {
             alignItems: "center",
             justifyContent: "space-between",
             paddingInline: 16,
+            gap: 16,
+            overflow: "hidden",
           }}
         >
-          <Space size={isNarrow ? 12 : 24} wrap>
+          <Space size={isNarrow ? 12 : isCompactDesktop ? 16 : 24} style={{ minWidth: 0, flex: 1 }}>
             {isNarrow && (
               <Button
                 icon={<MenuOutlined />}
@@ -277,23 +287,23 @@ export function Shell() {
               />
             )}
             <StatusPill
-              title="本地 ComfyUI"
+              title="本地"
               sub={localSub}
               state={localState}
               tooltip={local?.online ? `GPU: ${local.gpu ?? "未知"}` : (local?.error ?? `本地服务未启动（${LOCAL_COMFY_URL}）`)}
-              compact={isNarrow}
+              compact={isNarrow || isCompactDesktop}
             />
             <StatusPill
-              title="Modal Runner"
+              title="Modal"
               sub={modalSub}
               state={modalState}
               tooltip={modal?.reason ?? "检测中…"}
-              compact={isNarrow}
+              compact={isNarrow || isCompactDesktop}
             />
           </Space>
-          <Space size={12}>
+          <Space size={12} style={{ flexShrink: 0 }}>
             <Tooltip title={budgetTooltip + modalLine} placement="bottom">
-              {budgetTag}
+              <span style={{ whiteSpace: "nowrap" }}>{budgetTag}</span>
             </Tooltip>
             <Tooltip
               title={eventStreamOnline ? "任务状态实时推送已连接" : "事件流不可用，任务状态每 15 秒轮询兜底"}
@@ -312,12 +322,12 @@ export function Shell() {
                 icon={<PictureOutlined />}
                 onClick={() => window.location.assign(bridgeUrl)}
               >
-                前往出图界面
+                {isCompactDesktop ? "出图" : "前往出图界面"}
               </Button>
             </Tooltip>
           </Space>
         </Header>
-        <Content style={{ padding: 16 }}>
+        <Content style={{ padding: 16, minWidth: 0, overflowX: "hidden" }}>
           <UpdateBanner />
           {needSetup && !wizardDismissed && (
             <Alert

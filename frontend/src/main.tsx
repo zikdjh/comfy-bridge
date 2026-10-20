@@ -9,6 +9,7 @@ import { RouterProvider } from "react-router-dom";
 import { router } from "./router";
 import { bridgeTheme, bridgeThemeDark } from "./theme";
 import { DarkModeProvider, useDarkMode } from "./hooks/useDarkMode";
+import "./index.css";
 
 dayjs.locale("zh-cn");
 

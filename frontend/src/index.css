@@ -1,0 +1,24 @@
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+/* 桌面端表格在内容区内滚动，避免把整页撑出横向滚动条。 */
+.ant-table-wrapper,
+.ant-table,
+.ant-table-container {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 1023px) {
+  .ant-layout-header {
+    min-width: 0;
+  }
+}

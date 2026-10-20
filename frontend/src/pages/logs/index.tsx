@@ -18,8 +18,8 @@ export default function LogsPage() {
   const [layout, setLayout] = useState<ConsoleLayout>(
     () => (localStorage.getItem(LAYOUT_STORAGE_KEY) as ConsoleLayout) || "auto",
   );
-  // 左右并排需要每栏 ~650px 才放得下工具行；更窄自动改上下堆叠，两栏同屏各占一半
-  const wide = useMediaQuery("(min-width: 1600px)");
+  // 1280px 桌面加 64px 紧凑侧栏时，每栏约 590px；工具行会在 700px 以下自动紧凑化。
+  const wide = useMediaQuery("(min-width: 1280px)");
   const direction = layout === "auto" ? (wide ? "row" : "column") : layout;
 
   // 实测控制台区顶边的文档坐标（页头+页签导航），反推可用高度，避免硬编码页头尺寸
