@@ -65,6 +65,19 @@ SITE_DEV_PREFIXES = (
     "certifi-stubs",
     "toml-stubs",
 )
+# 这些是运行时依赖，即使名字接近开发工具也不能排除。
+SITE_RUNTIME_ALLOW = ("google", "protobuf", "grpc", "grpclib")
+
+
+def is_dev_package_name(name: str) -> bool:
+    """只排除开发工具目录及其 dist-info，避免 startswith 误伤 google 等运行时包。"""
+    lower = name.lower()
+    if any(lower == keep or lower.startswith(f"{keep}-") for keep in SITE_RUNTIME_ALLOW):
+        return False
+    return name == "__pycache__" or any(
+        lower == prefix or lower.startswith(f"{prefix}-")
+        for prefix in SITE_DEV_PREFIXES
+    )
 
 
 def latest_wheel() -> Path:
@@ -104,42 +117,15 @@ def lib_ignore(src_lib: Path):
     return _ignore
 
 
-def dev_dir_names(site: Path) -> list[str]:
-    """枚举 venv site-packages 里的开发工具链目录/egg-info，作为 robocopy 精确排除名单。"""
-    return [
-        name
-        for name in os.listdir(site)
-        if name == "__pycache__" or name.startswith(SITE_DEV_PREFIXES)
-    ]
-
-
-def _robocopy(src: Path, dst: Path, *, dirs_exclude: list[str] | None = None,
-              files_exclude: list[str] | None = None, files: list[str] | None = None) -> None:
-    """Windows 装配走 robocopy：python.exe 写 vcruntime 等 DLL 会被 AV 行为拦截。"""
-    cmd = ["robocopy", str(src), str(dst), "/E", "/NFL", "/NDL", "/NJH", "/NJS", "/NP"]
-    if files:
-        cmd += files
-    if dirs_exclude:
-        cmd += ["/XD", *dirs_exclude]
-    if files_exclude:
-        cmd += ["/XF", *files_exclude]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    # robocopy 返回码 0-7 均为成功（1=有文件复制，3=有复制有跳过…）
-    if result.returncode > 7:
-        sys.exit(f"robocopy 失败（{result.returncode}）:\n{result.stdout}\n{result.stderr}")
-
-
 def assemble_runtime(base: Path, runtime: Path) -> None:
     runtime.mkdir(parents=True)
     if sys.platform == "win32":
-        _robocopy_files(base, runtime, ["python.exe", "*.dll", "LICENSE.txt"])
-        _robocopy(base / "DLLs", runtime / "DLLs")
-        _robocopy(
-            base / "Lib",
-            runtime / "Lib",
-            dirs_exclude=sorted(LIB_PRUNE | {"__pycache__"}),
-            files_exclude=["*.pyc"],
-        )
+        for path in base.iterdir():
+            if path.name == "python.exe" or path.name == "LICENSE.txt" or path.suffix.lower() == ".dll":
+                # vcruntime DLL 带有系统/AV 文件锁，逐字节复制到新文件可避开 copy2 的元数据写入失败。
+                shutil.copyfile(path, runtime / path.name)
+        shutil.copytree(base / "DLLs", runtime / "DLLs")
+        shutil.copytree(base / "Lib", runtime / "Lib", ignore=lib_ignore(base / "Lib"))
         return
     for dll in base.glob("*.dll"):
         shutil.copy2(dll, runtime / dll.name)
@@ -151,18 +137,11 @@ def assemble_runtime(base: Path, runtime: Path) -> None:
     shutil.copytree(base / "Lib", runtime / "Lib", ignore=lib_ignore(base / "Lib"))
 
 
-def _robocopy_files(src: Path, dst: Path, files: list[str]) -> None:
-    cmd = ["robocopy", str(src), str(dst), *files, "/NFL", "/NDL", "/NJH", "/NJS", "/NP"]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    if result.returncode > 7:
-        sys.exit(f"robocopy 失败（{result.returncode}）:\n{result.stdout}\n{result.stderr}")
-
-
 def site_ignore(_directory: str, names: list[str]) -> list[str]:
     return [
         name
         for name in names
-        if name == "__pycache__" or name.endswith(".pyc") or name.startswith(SITE_DEV_PREFIXES)
+        if name.endswith(".pyc") or is_dev_package_name(name)
     ]
 
 
@@ -250,33 +229,29 @@ def main() -> None:
     version = wheel_version(wheel.name)
     base = runtime_base()
 
-    # staging 放系统临时目录：留在仓库内会被 pytest 递归收集第三方测试
-    workdir = Path(tempfile.mkdtemp(prefix="cb-bundle-"))
+    # staging 放仓库 tmp 下：避开系统临时目录的权限重定向，同时仍被 .gitignore 排除。
+    tmp_root = REPO / "tmp"
+    tmp_root.mkdir(parents=True, exist_ok=True)
+    workdir = Path(tempfile.mkdtemp(prefix="cb-bundle-", dir=tmp_root))
     bundle = workdir
     stage = bundle / f"ComfyBridge-{version}"
     runtime = stage / "runtime"
 
     try:
-        print(f"组装运行时: {base} -> {runtime}")
+        print(f"[1/7] 组装 Python 运行时: {base} -> {runtime}", flush=True)
         assemble_runtime(base, runtime)
 
+        print("[2/7] 复制运行依赖", flush=True)
         if not VENV_SITE.is_dir():
             sys.exit(f"未找到 {VENV_SITE}；先执行 uv sync 初始化开发环境")
         site_dst = runtime / "Lib" / "site-packages"
-        if sys.platform == "win32":
-            _robocopy(
-                VENV_SITE,
-                site_dst,
-                dirs_exclude=dev_dir_names(VENV_SITE),
-                files_exclude=["*.pyc"],
-            )
-        else:
-            shutil.copytree(VENV_SITE, site_dst, ignore=site_ignore)
+        shutil.copytree(VENV_SITE, site_dst, ignore=site_ignore)
 
-        # wheel 内含 app 代码 + GUI 产物 + modal-runner 副本，直接解包进 site-packages
+        print("[3/7] 解包应用 wheel", flush=True)
         with zipfile.ZipFile(wheel) as zf:
             zf.extractall(runtime / "Lib" / "site-packages")
 
+        print("[4/7] 构建 Rust 桌面启动器", flush=True)
         cargo = shutil.which("cargo")
         if not cargo:
             sys.exit("未找到 cargo（需要 Rust 工具链）")
@@ -287,16 +262,18 @@ def main() -> None:
             sys.exit(f"cargo 产物缺失: {built}")
         shutil.copy2(built, stage / exe_name)
 
-        # 包根版本号（git tag），启动时更新检查与 --doctor 显示用
+        print("[5/7] 写入版本与用户文档", flush=True)
         (stage / "version.txt").write_text(bundle_version(), encoding="ascii")
 
         (stage / "使用说明.txt").write_text(usage_text(version), encoding="utf-8-sig")
 
         copy_docs(stage)
 
+        print("[6/7] 包内运行时自检", flush=True)
         python = runtime / "python.exe" if sys.platform == "win32" else runtime / "bin" / "python3"
         smoke_check(python)
 
+        print("[7/7] 生成 zip", flush=True)
         out = BACKEND / "dist" / f"ComfyBridge-{version}-win64.zip"
         make_zip(bundle, stage, out)
         print(f"OK {out.name}  ({out.stat().st_size / 1024 / 1024:.1f} MiB)  app={wheel.name}  python={base.name}")
