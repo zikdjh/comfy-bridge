@@ -26,6 +26,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path, PurePosixPath
@@ -47,6 +48,29 @@ _VOLUMES: dict[tuple[str, str], Any] = {}
 # 避免连续 Modal RPC 撞限流；写操作后由调用方走 _invalidate_list_dir() 主动失效。
 _LIST_DIR_TTL = 12.0
 _list_dir_cache: dict[tuple[str, str], tuple[float, list[dict]]] = {}
+# 同一路径只允许一个在途读取；并发闸门则覆盖不同路径，避免用量遍历或页面轮询
+# 在 TTL 到期后同时向 VolumeListFiles 发起过多请求而触发平台限流。
+_LIST_DIR_CONCURRENCY = 4
+_list_dir_gate: asyncio.Semaphore | None = None
+_list_dir_gate_loop: asyncio.AbstractEventLoop | None = None
+
+
+@dataclass(slots=True)
+class _ListDirRequest:
+    """同一目录的一次共享读取；waiters 只在仍有消费者时保留底层 RPC。"""
+
+    key: tuple[str, str]
+    task: asyncio.Task[list[dict]] | None = None
+    waiters: int = 0
+    invalidated: bool = False
+
+
+_list_dir_inflight: dict[tuple[str, str], _ListDirRequest] = {}
+
+
+class _ListDirInvalidated(Exception):
+    """在途目录读取被写操作失效；外层在预算内重读，不向外暴露内部信号。"""
+
 
 _modal: Any = None
 _MODAL_IMPORT_FAILED = False
@@ -254,28 +278,107 @@ def _clear_diagnostics() -> None:
 
 def reset_runtime_state() -> None:
     """账号切换后清空诊断并丢弃缓存的 SDK client / Volume 句柄（config API 联动点）。"""
-    global _CLIENT, _CLIENT_KEY, _CLIENT_LOOP
+    global _CLIENT, _CLIENT_KEY, _CLIENT_LOOP, _list_dir_gate, _list_dir_gate_loop
     _clear_diagnostics()
     _CLIENT = None
     _CLIENT_KEY = None
     _CLIENT_LOOP = None
     _VOLUMES.clear()
+    _forget_list_dir_requests()
     _list_dir_cache.clear()
+    _list_dir_gate = None
+    _list_dir_gate_loop = None
+
+
+def _cache_path(remote_path: str | None) -> str:
+    """缓存键统一为卷内绝对 POSIX 路径，调用方仍收到原始 SDK 形态。"""
+    path = (remote_path or "/").replace("\\", "/").strip()
+    if not path or path == "/":
+        return "/"
+    return "/" + path.strip("/")
+
+
+def _path_is_within(path: str, prefix: str) -> bool:
+    """按目录边界判断前缀，避免失效 /models 时误伤 /models-old。"""
+    return prefix == "/" or path == prefix or path.startswith(prefix + "/")
+
+
+def _forget_list_dir_requests(
+    remote_path: str | None = None, volume: str | None = None,
+) -> None:
+    """写操作或账号切换后取消受影响的在途读，避免旧快照晚到后写回缓存。"""
+    forget_all = remote_path is None and volume is None
+    volume_key = volume or ""
+    path_prefix = "/" if forget_all else _cache_path(remote_path)
+    for key, request in list(_list_dir_inflight.items()):
+        volume_matches = forget_all or key[0] == volume_key
+        path_matches = forget_all or _path_is_within(key[1], path_prefix)
+        if not (volume_matches and path_matches):
+            continue
+        request.invalidated = True
+        if _list_dir_inflight.get(key) is request:
+            _list_dir_inflight.pop(key, None)
+        task = request.task
+        if task is not None and not task.done():
+            task.cancel()
 
 
 def _invalidate_list_dir(remote_path: str | None = None, volume: str | None = None) -> None:
     """写操作后按前缀失效 list_dir 缓存；不传参则清全量。"""
-    if remote_path is None and volume is None:
-        _list_dir_cache.clear()
-        return
-    prefix = (volume or "", remote_path or "")
-    for key in [k for k in _list_dir_cache if k[0] == prefix[0] and k[1].startswith(prefix[1])]:
+    _forget_list_dir_requests(remote_path, volume)
+    forget_all = remote_path is None and volume is None
+    volume_key = volume or ""
+    path_prefix = "/" if forget_all else _cache_path(remote_path)
+    for key in [
+        k for k in _list_dir_cache
+        if (forget_all or k[0] == volume_key) and _path_is_within(k[1], path_prefix)
+    ]:
         _list_dir_cache.pop(key, None)
 
 
 def _forget_volume(name: str) -> None:
     for key in [key for key in _VOLUMES if key[1] == name]:
         _VOLUMES.pop(key, None)
+
+
+def _get_list_dir_gate() -> asyncio.Semaphore:
+    """进程内全局闸门；event loop 更换时重建，避免复用绑定旧 loop 的等待者。"""
+    global _list_dir_gate, _list_dir_gate_loop
+    loop = asyncio.get_running_loop()
+    if _list_dir_gate is None or _list_dir_gate_loop is not loop:
+        _list_dir_gate = asyncio.Semaphore(_LIST_DIR_CONCURRENCY)
+        _list_dir_gate_loop = loop
+    return _list_dir_gate
+
+
+async def _list_dir_uncached(remote_path: str, volume: str | None, timeout: float) -> list[dict]:
+    """单次 list_dir 读取；调用方负责缓存、单飞和失效判定。"""
+    async with _get_list_dir_gate():
+        async def _call() -> list[dict]:
+            try:
+                handle = await _get_volume(volume)
+                entries = await asyncio.wait_for(handle.listdir.aio(remote_path or "/"), timeout=timeout)
+            except ModalCliError:
+                raise
+            except TimeoutError as exc:
+                error = ModalCliError(f"列出数据卷目录超时（超过 {timeout:g}s）", category="uncertain")
+                _record_failure(error)
+                raise error from exc
+            except Exception as exc:
+                # The SDK reports a missing prefix (including a removed final child)
+                # as NotFoundError/FileNotFoundError; CLI list treated both as an empty
+                # directory. Keep that contract for all existing callers.
+                if type(exc).__name__ in ("NotFoundError", "FileNotFoundError"):
+                    _record_success()
+                    return []
+                error = _map_sdk_error(exc, "列出数据卷目录")
+                _record_failure(error)
+                raise error from exc
+            out = [_normalize_entry(entry) for entry in entries]
+            _record_success()
+            return out
+
+        return await _with_retry("list_dir", _call)
 
 
 def sdk_available() -> bool:
@@ -575,38 +678,85 @@ def _map_sdk_error(exc: Exception, context: str) -> ModalCliError:
 
 async def list_dir(remote_path: str, volume: str | None = None, *, timeout: float = 600.0) -> list[dict]:
     """列一层目录；SDK FileEntry 归一化为既有 CLI dict 形状。"""
-    cache_key = (volume or "", remote_path or "/")
+    remote_path = remote_path or "/"
+    deadline = asyncio.get_running_loop().time() + timeout
+
+    async def _list() -> list[dict]:
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            raise ModalCliError(
+                f"列出数据卷目录超时（超过 {timeout:g}s）",
+                category="uncertain",
+            )
+        return await _list_dir_request(remote_path, volume, remaining)
+
+    while True:
+        try:
+            return await _list()
+        except _ListDirInvalidated:
+            # 写失效属于内部协调信号，不让页面把正常写后的刷新呈现为限流错误。
+            continue
+
+
+async def _list_dir_request(
+    remote_path: str, volume: str | None, timeout: float,
+) -> list[dict]:
+    """读取一层目录；同一 cache key 共享一个请求，写失效时以内部信号重试。"""
+    cache_key = (volume or "", _cache_path(remote_path))
     cached = _list_dir_cache.get(cache_key)
     if cached and (time.monotonic() - cached[0]) < _LIST_DIR_TTL:
-        return cached[1]
+        return list(cached[1])
 
-    async def _call() -> list[dict]:
-        try:
-            handle = await _get_volume(volume)
-            entries = await asyncio.wait_for(handle.listdir.aio(remote_path or "/"), timeout=timeout)
-        except ModalCliError:
-            raise
-        except TimeoutError as exc:
-            error = ModalCliError(f"列出数据卷目录超时（超过 {timeout:g}s）", category="uncertain")
-            _record_failure(error)
-            raise error from exc
-        except Exception as exc:
-            # The SDK reports a missing prefix (including a removed final child)
-            # as NotFoundError/FileNotFoundError; CLI list treated both as an empty
-            # directory. Keep that contract for all existing callers.
-            if type(exc).__name__ in ("NotFoundError", "FileNotFoundError"):
-                _record_success()
-                return []
-            error = _map_sdk_error(exc, "列出数据卷目录")
-            _record_failure(error)
-            raise error from exc
-        out = [_normalize_entry(entry) for entry in entries]
-        _record_success()
-        return out
+    request = _list_dir_inflight.get(cache_key)
+    if request is None:
+        request = _ListDirRequest(cache_key)
 
-    result = await _with_retry("list_dir", _call)
-    _list_dir_cache[cache_key] = (time.monotonic(), result)
-    return result
+        async def _load() -> list[dict]:
+            result = await _list_dir_uncached(remote_path, volume, timeout)
+            # 写失效后即使底层调用没有及时响应取消，也不能把旧快照写回缓存。
+            if request.invalidated or _list_dir_inflight.get(cache_key) is not request:
+                raise _ListDirInvalidated
+            _list_dir_cache[cache_key] = (time.monotonic(), list(result))
+            return list(result)
+
+        request.task = asyncio.create_task(_load())
+        _list_dir_inflight[cache_key] = request
+
+        def _finish(done: asyncio.Task[list[dict]]) -> None:
+            if _list_dir_inflight.get(cache_key) is request:
+                _list_dir_inflight.pop(cache_key, None)
+
+        request.task.add_done_callback(_finish)
+
+    task = request.task
+    assert task is not None
+    request.waiters += 1
+    try:
+        result = await asyncio.shield(task)
+    except asyncio.CancelledError:
+        if (
+            not task.done()
+            and request.waiters <= 1
+            and _list_dir_inflight.get(cache_key) is request
+        ):
+            # 仅最后一个消费者离开时才取消共享 RPC，避免误伤并发读者。
+            _list_dir_inflight.pop(cache_key, None)
+            task.cancel()
+        if request.invalidated:
+            raise _ListDirInvalidated from None
+        raise
+    finally:
+        request.waiters -= 1
+        if (
+            request.waiters == 0
+            and not task.done()
+            and _list_dir_inflight.get(cache_key) is request
+        ):
+            _list_dir_inflight.pop(cache_key, None)
+            task.cancel()
+    if request.invalidated:
+        raise _ListDirInvalidated
+    return list(result)
 
 
 async def list_files(remote_dir: str, max_depth: int = 3, *, timeout: float = 600.0) -> list[dict]:

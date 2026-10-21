@@ -27,6 +27,16 @@ class _Entry:
     size: int
 
 
+def _reset_list_dir_state() -> None:
+    for request in modal_cli._list_dir_inflight.values():
+        if request.task is not None and not request.task.done():
+            request.task.cancel()
+    modal_cli._list_dir_cache.clear()
+    modal_cli._list_dir_inflight.clear()
+    modal_cli._list_dir_gate = None
+    modal_cli._list_dir_gate_loop = None
+
+
 def test_humanize_filesize_matches_cli_format():
     assert _humanize_filesize(0) == "0 B"
     assert _humanize_filesize(6) == "6 B"
@@ -258,6 +268,207 @@ async def test_list_dir_missing_prefix_matches_cli_empty_directory(monkeypatch):
     monkeypatch.setattr(modal_cli, "_get_volume", fake_get_volume)
     assert await modal_cli.list_dir("/removed", volume="vol") == []
     assert modal_cli.diagnostics()["last_failure"] is None
+
+
+async def test_list_dir_single_flight_caches_shared_result(monkeypatch):
+    _reset_list_dir_state()
+    calls = 0
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def fake_uncached(_remote_path, _volume, _timeout):
+        nonlocal calls
+        calls += 1
+        started.set()
+        await release.wait()
+        return [{"name": "shared.txt", "type": "file"}]
+
+    monkeypatch.setattr(modal_cli, "_list_dir_uncached", fake_uncached)
+    first = asyncio.create_task(modal_cli.list_dir("/models", volume="vol"))
+    await started.wait()
+    second = asyncio.create_task(modal_cli.list_dir("models/", volume="vol"))
+    await asyncio.sleep(0)
+    release.set()
+    assert await asyncio.gather(first, second) == [
+        [{"name": "shared.txt", "type": "file"}],
+        [{"name": "shared.txt", "type": "file"}],
+    ]
+    assert calls == 1
+
+    assert (await modal_cli.list_dir("/models", volume="vol"))[0]["name"] == "shared.txt"
+    assert calls == 1
+
+
+async def test_list_dir_limits_distinct_concurrent_reads(monkeypatch):
+    _reset_list_dir_state()
+    active = 0
+    peak = 0
+    release = asyncio.Event()
+
+    class _Handle:
+        class _Listdir:
+            async def aio(self, _path):
+                nonlocal active, peak
+                active += 1
+                peak = max(peak, active)
+                try:
+                    await release.wait()
+                    return []
+                finally:
+                    active -= 1
+
+        listdir = _Listdir()
+
+    async def fake_get_volume(_volume=None):
+        return _Handle()
+
+    monkeypatch.setattr(modal_cli, "_get_volume", fake_get_volume)
+    tasks = [
+        asyncio.create_task(modal_cli.list_dir(f"/dir-{index}", volume="vol"))
+        for index in range(12)
+    ]
+    await asyncio.sleep(0.05)
+    assert peak == modal_cli._LIST_DIR_CONCURRENCY
+    release.set()
+    assert await asyncio.gather(*tasks) == [[] for _ in tasks]
+    assert peak == modal_cli._LIST_DIR_CONCURRENCY
+
+
+async def test_list_dir_invalidation_does_not_backfill_old_result(monkeypatch):
+    _reset_list_dir_state()
+    started = asyncio.Event()
+    release = asyncio.Event()
+    calls = 0
+
+    async def fake_uncached(_remote_path, _volume, _timeout):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            started.set()
+            await release.wait()
+            return [{"name": "old.txt"}]
+        return [{"name": "new.txt"}]
+
+    monkeypatch.setattr(modal_cli, "_list_dir_uncached", fake_uncached)
+    old = asyncio.create_task(modal_cli.list_dir("/models", volume="vol"))
+    await started.wait()
+    modal_cli._invalidate_list_dir("/models", "vol")
+    release.set()
+    assert (await old)[0]["name"] == "new.txt"
+    assert (await modal_cli.list_dir("/models", volume="vol"))[0]["name"] == "new.txt"
+    assert calls == 2
+
+
+async def test_list_dir_invalidation_then_immediate_read_uses_new_request(monkeypatch):
+    _reset_list_dir_state()
+    first_started = asyncio.Event()
+    release_old = asyncio.Event()
+    calls = 0
+
+    async def fake_uncached(_remote_path, _volume, _timeout):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            first_started.set()
+            await release_old.wait()
+            return [{"name": "stale.txt"}]
+        return [{"name": "fresh.txt"}]
+
+    monkeypatch.setattr(modal_cli, "_list_dir_uncached", fake_uncached)
+    stale = asyncio.create_task(modal_cli.list_dir("/models", volume="vol"))
+    await first_started.wait()
+    modal_cli._invalidate_list_dir("/models", "vol")
+    fresh = asyncio.create_task(modal_cli.list_dir("/models", volume="vol"))
+    assert (await fresh)[0]["name"] == "fresh.txt"
+    release_old.set()
+    assert (await stale)[0]["name"] == "fresh.txt"
+    assert calls == 2
+
+
+async def test_list_dir_failure_is_not_cached(monkeypatch):
+    _reset_list_dir_state()
+    calls = 0
+
+    async def fake_uncached(_remote_path, _volume, _timeout):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise ModalCliError("boom", category="command")
+        return [{"name": "recovered.txt"}]
+
+    monkeypatch.setattr(modal_cli, "_list_dir_uncached", fake_uncached)
+    with pytest.raises(ModalCliError):
+        await modal_cli.list_dir("/models", volume="vol")
+    assert (await modal_cli.list_dir("/models", volume="vol"))[0]["name"] == "recovered.txt"
+    assert calls == 2
+
+
+async def test_list_dir_timeout_budget_covers_invalidation_retry(monkeypatch):
+    _reset_list_dir_state()
+    loop = asyncio.get_running_loop()
+    calls = 0
+
+    async def fake_uncached(_remote_path, _volume, _timeout):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            modal_cli._invalidate_list_dir("/models", "vol")
+        await asyncio.sleep(0.03)
+        return []
+
+    monkeypatch.setattr(modal_cli, "_list_dir_uncached", fake_uncached)
+    started = loop.time()
+    assert await modal_cli.list_dir("/models", volume="vol", timeout=0.05) == []
+    assert calls == 2
+    assert loop.time() - started < 0.2
+
+
+async def test_list_dir_waiter_that_started_after_invalidation_retries(monkeypatch):
+    _reset_list_dir_state()
+    started = asyncio.Event()
+    release = asyncio.Event()
+    calls = 0
+
+    async def fake_uncached(_remote_path, _volume, _timeout):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            started.set()
+            await release.wait()
+        return [{"name": f"result-{calls}.txt"}]
+
+    monkeypatch.setattr(modal_cli, "_list_dir_uncached", fake_uncached)
+    first = asyncio.create_task(modal_cli.list_dir("/models", volume="vol"))
+    await started.wait()
+    modal_cli._invalidate_list_dir("/models", "vol")
+    await asyncio.sleep(0)
+    second = asyncio.create_task(modal_cli.list_dir("/models", volume="vol"))
+    release.set()
+    assert (await first)[0]["name"] == "result-2.txt"
+    assert (await second)[0]["name"] == "result-2.txt"
+    assert calls == 2
+
+
+async def test_cancelling_one_list_dir_waiter_does_not_cancel_shared_read(monkeypatch):
+    _reset_list_dir_state()
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def fake_uncached(_remote_path, _volume, _timeout):
+        started.set()
+        await release.wait()
+        return [{"name": "shared.txt"}]
+
+    monkeypatch.setattr(modal_cli, "_list_dir_uncached", fake_uncached)
+    first = asyncio.create_task(modal_cli.list_dir("/models", volume="vol"))
+    await started.wait()
+    second = asyncio.create_task(modal_cli.list_dir("/models", volume="vol"))
+    await asyncio.sleep(0)
+    first.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await first
+    release.set()
+    assert await second == [{"name": "shared.txt"}]
 
 
 async def test_volume_delete_forgets_cached_handle(monkeypatch):
