@@ -110,6 +110,20 @@ export function Shell() {
   }, []);
   const runningJobs = jobsData?.running ?? 0;
 
+  // 键盘用户无需离开当前页；输入框内不抢 Ctrl/⌘+J。
+  useEffect(() => {
+    const onShortcut = (ev: KeyboardEvent) => {
+      const target = ev.target as HTMLElement | null;
+      if (!(ev.ctrlKey || ev.metaKey) || ev.key.toLowerCase() !== "j") return;
+      if (target?.matches("input, textarea, select, [contenteditable='true']")) return;
+      ev.preventDefault();
+      setJobFocusId(null);
+      setJobsOpen((previous) => !previous);
+    };
+    window.addEventListener("keydown", onShortcut);
+    return () => window.removeEventListener("keydown", onShortcut);
+  }, []);
+
   // —— 统一事件流（P1-5）：推送直接回写查询缓存；断线由 EventSource 自动重连并轮询兜底 ——
   useEffect(() => {
     const upsertJob = (job: SyncJob) => {
@@ -310,7 +324,11 @@ export function Shell() {
               placement="bottom"
             >
               <Badge count={runningJobs} size="small" offset={[-2, 2]}>
-                <Button icon={<UnorderedListOutlined />} onClick={() => { setJobFocusId(null); setJobsOpen(true); }}>
+                <Button
+                  icon={<UnorderedListOutlined />}
+                  aria-keyshortcuts="Control+J Meta+J"
+                  onClick={() => { setJobFocusId(null); setJobsOpen(true); }}
+                >
                   任务
                 </Button>
               </Badge>
@@ -356,6 +374,7 @@ export function Shell() {
         onClose={() => setJobsOpen(false)}
         focusId={jobFocusId}
         onFocusHandled={() => setJobFocusId(null)}
+        onJobSelected={setJobFocusId}
       />
     </Layout>
   );

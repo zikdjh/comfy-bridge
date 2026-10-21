@@ -34,7 +34,24 @@ async def test_job_lifecycle_ok_with_items_and_logs():
     assert done["done"] == 2 and done["total"] == 2
     assert [i["name"] for i in done["items"]] == ["a", "b"]
     assert any("开始" in line for line in done["logs"])
+    assert done["started_ms"] is not None
+    assert done["phase"] == "已完成"
     assert done["finished_ms"] is not None
+
+
+async def test_job_phase_is_persisted_and_emitted():
+    seen: list[str] = []
+
+    async def runner(handle):
+        handle.phase("上传节点")
+        seen.append(jobs.get_job(handle._id)["phase"])
+        handle.advance({"name": "a", "ok": True})
+        handle.phase("写入清单")
+
+    job = jobs.start_job("node_sync", "节点同步", 1, runner)
+    done = await jobs.wait_job(job["id"])
+    assert seen == ["上传节点"]
+    assert done["phase"] == "已完成"
 
 
 async def test_job_error_on_exception():

@@ -1,7 +1,8 @@
 """同步任务注册表（M2-6 余项）：把长耗时同步操作任务化，前端统一 JobDrawer 跟踪。
 
 设计（对齐前端界面规划 §5.2「长任务提交后立即返回 job_id → 自动打开 JobDrawer」）：
-- 内存态注册表：job = {id, kind, label, state, total, done, items, logs, error, created_ms, finished_ms}
+- 注册表：job = {id, kind, label, state, phase, total, done, items, logs, error,
+  created_ms, started_ms, finished_ms}
 - runner 是 async 函数，接收 JobHandle（log/advance/check_cancel），注册表负责 spawn 与兜底异常
 - 取消为协作式：runner 在条目间调用 check_cancel()，取消后 state=cancelled、已完成的条目保留
 - 保留最近 MAX_JOBS 个作业（新作业挤出最老的已结束作业）；运行中作业永不清理
@@ -70,6 +71,15 @@ class JobHandle:
             _store().save(_NAMESPACE, self._id, job)
             _emit_job(job, "log")
 
+    def phase(self, phase: str) -> None:
+        """更新当前阶段；前端据此展示“正在做什么”，而不是只看进度数字。"""
+        job = _store().get(_NAMESPACE, self._id)
+        if job is None:
+            return
+        job["phase"] = str(phase).strip()[:80] or "处理中"
+        _store().save(_NAMESPACE, self._id, job)
+        _emit_job(job, "phase")
+
     def advance(self, item: dict) -> None:
         """推进一个条目（{name, ok, ...}）；item 原样入 items 列表供前端逐项展示。"""
         job = _store().get(_NAMESPACE, self._id)
@@ -105,6 +115,7 @@ def start_job(kind: str, label: str, total: int, runner, cancellable: bool = Fal
         "kind": kind,
         "label": label,
         "state": "running",
+        "phase": "准备中",
         "total": max(int(total), 0),
         "done": 0,
         "items": [],
@@ -113,6 +124,7 @@ def start_job(kind: str, label: str, total: int, runner, cancellable: bool = Fal
         "cancellable": bool(cancellable),
         "cancel_requested": False,
         "created_ms": time.time() * 1000,
+        "started_ms": None,
         "finished_ms": None,
     }
     _store().create(_NAMESPACE, job_id, job)
@@ -120,6 +132,9 @@ def start_job(kind: str, label: str, total: int, runner, cancellable: bool = Fal
     async def _run() -> None:
         handle = JobHandle(job_id)
         try:
+            job["started_ms"] = time.time() * 1000
+            job["phase"] = "执行中"
+            _store().save(_NAMESPACE, job_id, job)
             await runner(handle)
             if job["cancel_requested"]:
                 job["state"] = "cancelled"
@@ -141,6 +156,11 @@ def start_job(kind: str, label: str, total: int, runner, cancellable: bool = Fal
             job["error"] = str(exc) or type(exc).__name__
         finally:
             job["finished_ms"] = time.time() * 1000
+            job["phase"] = {
+                "ok": "已完成",
+                "error": "执行失败",
+                "cancelled": "已取消",
+            }.get(job["state"], job.get("phase") or "已结束")
             _store().save(_NAMESPACE, job_id, job)
             _emit_job(job, "finished")
 

@@ -488,6 +488,7 @@ async def _sync_body(handle, names: list[str]) -> None:
     async with _SYNC_LOCK:
         for name in names:
             handle.check_cancel()
+            handle.phase(f"准备 {name}")
             if not _safe_name(name):
                 result = {"name": name, "ok": False, "error": "非法节点名"}
             else:
@@ -501,6 +502,7 @@ async def _sync_body(handle, names: list[str]) -> None:
                         remote = f"custom_nodes/{name}"
                         if src.is_dir():
                             handle.log(f"打包上传 {name} …")
+                            handle.phase(f"上传 {name}")
                             staged = _stage_dir(src)
                             try:
                                 await volume_cli.put_directory(staged, remote, force=True)
@@ -516,6 +518,7 @@ async def _sync_body(handle, names: list[str]) -> None:
                         result = {"name": name, "ok": False, "error": str(exc)}
             results.append(result)
             handle.advance(result)
+            handle.phase(f"完成 {name}")
             handle.log(f"{name} → {'已写入数据卷' if result['ok'] else result.get('error', '失败')}")
         if any(r["ok"] for r in results):
             current = _manifest(await asyncio.to_thread(scan_custom_nodes))

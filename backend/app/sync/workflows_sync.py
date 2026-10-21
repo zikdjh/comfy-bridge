@@ -152,7 +152,9 @@ async def _apply_body(handle, actions: list[dict]) -> None:
     """作业体：逐条执行 push/pull/keep_both 并推进作业条目；基线随成功项推进。"""
     root = workflows_dir()
     async with _APPLY_LOCK:
+        handle.phase("读取本地工作流")
         local = await asyncio.to_thread(local_hashes)
+        handle.phase("读取云端清单")
         cloud, error = await cloud_hashes()
         if error:
             raise RuntimeError(f"云端清单读取失败：{error}")
@@ -160,6 +162,7 @@ async def _apply_body(handle, actions: list[dict]) -> None:
         for action in actions:
             handle.check_cancel()
             name, op = str(action.get("name", "")), str(action.get("action", ""))
+            handle.phase(f"同步 {name}")
             if not rules.valid_workflow_name(name):
                 result: dict = {"name": name, "ok": False, "action": op, "error": "非法文件名"}
             else:

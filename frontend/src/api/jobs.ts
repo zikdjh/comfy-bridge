@@ -16,6 +16,8 @@ export interface SyncJob {
   kind: string; // workflow_sync | node_sync（后续其他长任务可接入）
   label: string;
   state: "running" | "ok" | "error" | "cancelled";
+  /** 当前阶段（旧任务快照可能没有该字段） */
+  phase?: string;
   total: number;
   done: number;
   items: SyncJobItem[];
@@ -23,6 +25,7 @@ export interface SyncJob {
   error: string | null;
   cancellable: boolean;
   created_ms: number;
+  started_ms?: number | null;
   finished_ms: number | null;
 }
 

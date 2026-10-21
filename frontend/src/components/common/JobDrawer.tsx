@@ -1,8 +1,18 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Button, Drawer, List, Popconfirm, Progress, Space, Spin, Tag, Tooltip, Typography, message } from "antd";
-import { CheckCircleOutlined, CloseCircleOutlined, MinusCircleOutlined, SyncOutlined } from "@ant-design/icons";
-import { cancelJob, useJob, useJobs, type SyncJob } from "../../api/jobs";
+import { CheckCircleOutlined, CloseCircleOutlined, MinusCircleOutlined, RedoOutlined, SyncOutlined } from "@ant-design/icons";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  cancelJob,
+  startNodeSync,
+  startWorkflowSync,
+  useJob,
+  useJobs,
+  type JobsSnapshot,
+  type SyncJob,
+} from "../../api/jobs";
 import { useDarkMode } from "../../hooks/useDarkMode";
+import { InlineError } from "./ActionableError";
 
 const KIND_META: Record<string, { text: string; color: string }> = {
   workflow_sync: { text: "工作流同步", color: "geekblue" },
@@ -21,14 +31,38 @@ function jobTime(ms: number) {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
 }
 
-function JobCard({ job }: { job: SyncJob }) {
+function fmtElapsed(ms: number) {
+  if (ms < 1000) return `${Math.max(0, Math.round(ms))}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  const minutes = Math.floor(ms / 60_000);
+  return `${minutes}m${Math.round((ms % 60_000) / 1000)}s`;
+}
+
+function estimateRemainingMs(job: SyncJob, elapsedMs: number): number | null {
+  if (job.state !== "running" || job.done <= 0 || job.total <= job.done) return null;
+  return (elapsedMs / job.done) * (job.total - job.done);
+}
+
+function JobCard({ job, onRetried }: { job: SyncJob; onRetried?: (jobId: string) => void }) {
   const { tokens: t } = useDarkMode();
+  const queryClient = useQueryClient();
   const [cancelling, setCancelling] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [now, setNow] = useState(Date.now());
   const state = STATE_META[job.state] ?? STATE_META.cancelled;
   const kind = KIND_META[job.kind] ?? { text: job.kind, color: "default" };
   const running = job.state === "running";
   const percent = job.total > 0 ? Math.round((job.done / job.total) * 100) : 0;
   const failed = job.items.filter((i) => !i.ok);
+  const startedMs = job.started_ms ?? job.created_ms;
+  const elapsedMs = Math.max((job.finished_ms ?? now) - startedMs, 0);
+  const remainingMs = estimateRemainingMs(job, elapsedMs);
+
+  useEffect(() => {
+    if (!running) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [running]);
 
   const doCancel = async () => {
     setCancelling(true);
@@ -40,6 +74,36 @@ function JobCard({ job }: { job: SyncJob }) {
       message.error(`取消失败：${exc instanceof Error ? exc.message : String(exc)}`);
     } finally {
       setCancelling(false);
+    }
+  };
+
+  const retryFailed = async () => {
+    setRetrying(true);
+    try {
+      const names = [...new Set(failed.map((item) => item.name))];
+      let res: Awaited<ReturnType<typeof startNodeSync>>;
+      if (job.kind === "node_sync") {
+        res = await startNodeSync(names);
+      } else {
+        const actions = failed.map((item) => ({ name: item.name, action: item.action ?? "push" }));
+        res = await startWorkflowSync(actions);
+      }
+      if (!res.ok || !res.job) {
+        message.error(res.error ?? "重试任务提交失败");
+        return;
+      }
+      queryClient.setQueryData<JobsSnapshot>(["jobs"], (previous) => ({
+        running: (previous?.running ?? 0) + 1,
+        jobs: [res.job!, ...(previous?.jobs ?? []).filter((item) => item.id !== res.job!.id)],
+      }));
+      queryClient.setQueryData(["jobs", res.job.id], res.job);
+      void queryClient.invalidateQueries({ queryKey: ["jobs"], exact: true });
+      message.info(`已重试 ${names.length} 个失败条目，进度见任务抽屉`);
+      onRetried?.(res.job.id);
+    } catch (exc) {
+      message.error(`重试提交失败：${exc instanceof Error ? exc.message : String(exc)}`);
+    } finally {
+      setRetrying(false);
     }
   };
 
@@ -55,6 +119,21 @@ function JobCard({ job }: { job: SyncJob }) {
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {jobTime(job.created_ms)} 提交
           </Typography.Text>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {running ? "已运行" : "耗时"} {fmtElapsed(elapsedMs)}
+          </Typography.Text>
+          {running && job.total > 0 && job.done === 0 && (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              预计等待：样本积累中
+            </Typography.Text>
+          )}
+          {remainingMs != null && (
+            <Tooltip title="根据本次已完成条目的平均速度估算；网络、依赖安装或单个条目大小差异可能使实际时间更长。">
+              <Typography.Text type="secondary" style={{ fontSize: 12 }} data-testid="job-estimate">
+                预计约 {fmtElapsed(remainingMs)}
+              </Typography.Text>
+            </Tooltip>
+          )}
         </Space>
         {running && job.cancellable && (
           <Popconfirm title="取消该任务？" description="当前条目完成后停止，已完成条目保留。" onConfirm={doCancel}>
@@ -71,11 +150,11 @@ function JobCard({ job }: { job: SyncJob }) {
         format={() => `${job.done}/${job.total}`}
         style={{ maxWidth: 480, margin: "4px 0" }}
       />
-      {job.error && (
-        <Typography.Text type="danger" style={{ display: "block", fontSize: 12 }}>
-          {job.error}
-        </Typography.Text>
-      )}
+      <div style={{ fontSize: 12, marginBottom: 4 }}>
+        <Typography.Text type="secondary">当前阶段：</Typography.Text>
+        <Typography.Text strong>{job.phase ?? (running ? "执行中" : state.text)}</Typography.Text>
+      </div>
+      {job.error && <InlineError error={job.error} />}
       {job.items.length > 0 && (
         <div style={{ maxHeight: 180, overflow: "auto", margin: "6px 0", padding: "4px 8px", background: t.colors.surfaceFaint, borderRadius: 6 }}>
           {job.items.map((item, idx) => (
@@ -95,19 +174,29 @@ function JobCard({ job }: { job: SyncJob }) {
                 </Typography.Text>
               )}
               {!item.ok && (
-                <Typography.Text type="danger" style={{ fontSize: 12 }}>
-                  {" "}
-                  {item.error ?? "失败"}
-                </Typography.Text>
+                <div style={{ marginTop: 2 }}>
+                  <InlineError error={item.error ?? "该条目执行失败"} />
+                </div>
               )}
             </div>
           ))}
         </div>
       )}
       {failed.length > 0 && job.state !== "running" && (
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          失败条目可修正后重新发起；已完成条目不受影响。
-        </Typography.Text>
+        <Space size={8} wrap>
+          <Button
+            size="small"
+            icon={<RedoOutlined />}
+            loading={retrying}
+            disabled={retrying || !["node_sync", "workflow_sync"].includes(job.kind)}
+            onClick={() => void retryFailed()}
+          >
+            重试失败项（{failed.length}）
+          </Button>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            只重跑失败条目；已完成条目不受影响。
+          </Typography.Text>
+        </Space>
       )}
       {job.logs.length > 0 && (
         <Tooltip title="任务日志（最近 12 条）">
@@ -132,17 +221,17 @@ function JobCard({ job }: { job: SyncJob }) {
 }
 
 /** 全局任务抽屉（M2-6）：任务化同步操作的统一进度/日志/取消面，Shell 头部角标唤起。 */
-export function JobDrawer({ open, onClose, focusId, onFocusHandled }: {
+export function JobDrawer({ open, onClose, focusId, onFocusHandled, onJobSelected }: {
   open: boolean;
   onClose: () => void;
   focusId: string | null;
   onFocusHandled?: () => void;
+  onJobSelected?: (jobId: string) => void;
 }) {
   const { tokens: t } = useDarkMode();
   const { data } = useJobs();
   const [selected, setSelected] = useState<string | null>(null);
-  const currentId = focusId ?? selected;
-  const { data: focusData, isLoading: focusLoading } = useJob(open && focusId ? focusId : null);
+  const { data: focusData, isLoading: focusLoading } = useJob(open ? (focusId ?? selected) : null);
 
   // 焦点作业数据到位后转内部选中态（Shell 清掉 focusId，之后由抽屉自持）
   useEffect(() => {
@@ -153,7 +242,13 @@ export function JobDrawer({ open, onClose, focusId, onFocusHandled }: {
   }, [focusId, focusData, onFocusHandled]);
 
   const jobs = data?.jobs ?? [];
-  const focused = focusData ?? jobs.find((j) => j.id === currentId) ?? null;
+  const selectedJob = selected ? jobs.find((job) => job.id === selected) : undefined;
+  const defaultJob = jobs.find((job) => job.state === "running") ?? jobs[0];
+  const focused = focusData
+    ?? (focusId ? jobs.find((job) => job.id === focusId) : undefined)
+    ?? selectedJob
+    ?? defaultJob
+    ?? null;
   const others = jobs.filter((j) => j.id !== focused?.id);
 
   return (
@@ -169,7 +264,7 @@ export function JobDrawer({ open, onClose, focusId, onFocusHandled }: {
       {focused && (
         <>
           <List split={false} style={{ background: t.colors.surface }}>
-            <JobCard job={focused} />
+            <JobCard job={focused} onRetried={onJobSelected} />
           </List>
           {others.length > 0 && (
             <Typography.Title level={5} style={{ marginTop: 8 }}>
@@ -185,7 +280,20 @@ export function JobDrawer({ open, onClose, focusId, onFocusHandled }: {
           renderItem={(job) => (
             <List.Item
               style={{ padding: "8px 0", cursor: "pointer" }}
-              onClick={() => setSelected(job.id)}
+              role="button"
+              tabIndex={0}
+              aria-label={`查看任务 ${job.label}`}
+              onClick={() => {
+                setSelected(job.id);
+                onJobSelected?.(job.id);
+              }}
+              onKeyDown={(ev) => {
+                if (ev.key === "Enter" || ev.key === " ") {
+                  ev.preventDefault();
+                  setSelected(job.id);
+                  onJobSelected?.(job.id);
+                }
+              }}
             >
               <Space size={8} wrap>
                 <Tag color={(KIND_META[job.kind] ?? { color: "default" }).color}>
