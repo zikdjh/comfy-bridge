@@ -19,6 +19,7 @@ import { EmptyGuide } from "../../components/common/EmptyGuide";
 import { openJobDrawer, startWorkflowSync, useJob } from "../../api/jobs";
 import { PageHeader } from "../../components/common/PageHeader";
 import { useDarkMode } from "../../hooks/useDarkMode";
+import { ActionableError, SettingsErrorAlert } from "../../components/common/ActionableError";
 
 /** 表格横向滚动兜底：窄屏下列宽超出自动出横向滚动条 */
 const TABLE_SCROLL_X = { x: true } as const;
@@ -205,6 +206,7 @@ function SyncMatrix() {
   const queryClient = useQueryClient();
   const [operating, setOperating] = useState(false);
   const [compareName, setCompareName] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<unknown>(null);
   const { data, isLoading, refetch, isFetching } = useWorkflowSync();
 
   const refresh = () => {
@@ -229,14 +231,21 @@ function SyncMatrix() {
     if (syncJob.state === "cancelled") {
       message.warning("同步任务已取消（已完成条目保留）");
     } else if (syncJob.items.length === 0) {
-      message.error(`同步任务失败：${syncJob.error ?? "未知错误"}`);
+      Modal.error({
+        title: "工作流同步失败",
+        width: 560,
+        content: <SettingsErrorAlert error={syncJob.error ?? "未知错误"} />,
+      });
     } else if (failed.length > 0) {
       Modal.error({
         title: "部分同步动作失败",
         content: (
-          <pre style={{ maxHeight: 240, overflow: "auto", whiteSpace: "pre-wrap" }}>
-            {failed.map((f) => `${f.name}: ${f.error ?? "未知错误"}`).join("\n")}
-          </pre>
+          <>
+            <SettingsErrorAlert error={failed[0].error ?? "部分同步动作失败"} compact />
+            <pre style={{ maxHeight: 180, overflow: "auto", whiteSpace: "pre-wrap", marginTop: 10, marginBottom: 0 }}>
+              {failed.map((f) => `${f.name}: ${f.error ?? "未知错误"}`).join("\n")}
+            </pre>
+          </>
         ),
       });
     } else {
@@ -249,10 +258,11 @@ function SyncMatrix() {
 
   const run = async (actions: { name: string; action: WfSyncAction }[]) => {
     setOperating(true);
+    setSubmitError(null);
     try {
       const res = await startWorkflowSync(actions);
       if (!res.ok || !res.job) {
-        message.error(res.error ?? "同步任务提交失败");
+        setSubmitError(res.error ?? "同步任务提交失败");
         return;
       }
       jobHandled.current = false;
@@ -260,7 +270,7 @@ function SyncMatrix() {
       message.info(`同步任务已提交（${actions.length} 项），进度见任务抽屉`);
       openJobDrawer(res.job.id);
     } catch (exc) {
-      message.error(`同步请求失败：${exc instanceof Error ? exc.message : String(exc)}`);
+      setSubmitError(exc);
     } finally {
       setOperating(false);
     }
@@ -345,6 +355,7 @@ function SyncMatrix() {
 
   return (
     <Space direction="vertical" size={12} style={{ width: "100%" }}>
+      {!!submitError && <SettingsErrorAlert error={submitError} compact />}
       {data.ok ? (
         <Alert
           type="info"

@@ -9,6 +9,12 @@ body {
   overflow-x: hidden;
 }
 
+/* 键盘用户始终能看清当前焦点；鼠标点击仍由组件自身状态表达。 */
+:focus-visible {
+  outline: 2px solid #4f5be8;
+  outline-offset: 2px;
+}
+
 /* 桌面端表格在内容区内滚动，避免把整页撑出横向滚动条。 */
 .ant-table-wrapper,
 .ant-table,

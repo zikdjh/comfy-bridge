@@ -16,6 +16,7 @@ import { useConfig, useSaveConfig, validateComfyRoot } from "../../api/config";
 import { useHealth, warmupModal } from "../../api/health";
 import { ComfyScanModal } from "./ComfyScanModal";
 import { useDarkMode } from "../../hooks/useDarkMode";
+import { SettingsErrorAlert } from "../../components/common/ActionableError";
 
 /** 首次配置向导完成标记（localStorage，按浏览器记忆；设置页可随时重跑） */
 export const WIZARD_DONE_KEY = "cb_wizard_done";
@@ -78,6 +79,7 @@ export function ConfigWizard({ open, onClose }: Props) {
   const [checkingRoot, setCheckingRoot] = useState(false);
   const [saving, setSaving] = useState(false);
   const [warming, setWarming] = useState(false);
+  const [lastError, setLastError] = useState<unknown>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const hasSecret = !!config?.modal.has_secret;
@@ -86,6 +88,7 @@ export function ConfigWizard({ open, onClose }: Props) {
 
   useEffect(() => {
     if (!open || !config) return;
+    setLastError(null);
     setStep(0);
     modalForm.setFieldsValue({ tokenId: config.modal.token_id, environment: config.modal.environment, tokenSecret: "" });
     localForm.setFieldsValue({ comfyRoot: config.local.comfy_root });
@@ -112,6 +115,7 @@ export function ConfigWizard({ open, onClose }: Props) {
 
   const saveModalCreds = async (values: { tokenId: string; tokenSecret?: string; environment?: string }) => {
     setSaving(true);
+    setLastError(null);
     try {
       await saveConfig({
         modal: {
@@ -124,7 +128,7 @@ export function ConfigWizard({ open, onClose }: Props) {
       refetchHealth();
       setStep(2);
     } catch (err) {
-      message.error(`保存失败：${err instanceof Error ? err.message : err}`);
+      setLastError(err);
     } finally {
       setSaving(false);
     }
@@ -137,13 +141,14 @@ export function ConfigWizard({ open, onClose }: Props) {
       return;
     }
     setCheckingRoot(true);
+    setLastError(null);
     try {
       const report = await validateComfyRoot(path);
-      if (!report.exists) message.error(`目录不存在：${path}`);
-      else if (!report.valid) message.error(`不是可用的 ComfyUI 目录：缺少 ${report.required_missing.join("、")}`);
+      if (!report.exists) setLastError(`目录不存在：${path}`);
+      else if (!report.valid) setLastError(`不是可用的 ComfyUI 目录：缺少 ${report.required_missing.join("、")}`);
       else message.success(`校验通过${report.version ? `（v${report.version}）` : ""}`);
     } catch (err) {
-      message.error(`校验失败：${err instanceof Error ? err.message : err}`);
+      setLastError(err);
     } finally {
       setCheckingRoot(false);
     }
@@ -151,12 +156,13 @@ export function ConfigWizard({ open, onClose }: Props) {
 
   const saveRoot = async (values: { comfyRoot: string }) => {
     setSaving(true);
+    setLastError(null);
     try {
       await saveConfig({ local: { comfy_root: values.comfyRoot.trim() } });
       message.success("ComfyUI 根目录已保存并热生效");
       setStep(3);
     } catch (err) {
-      message.error(`保存失败：${err instanceof Error ? err.message : err}`);
+      setLastError(err);
     } finally {
       setSaving(false);
     }
@@ -164,6 +170,7 @@ export function ConfigWizard({ open, onClose }: Props) {
 
   const saveRunner = async (values: { webUrl?: string; proxyTokenId?: string; proxyTokenSecret?: string }) => {
     setSaving(true);
+    setLastError(null);
     try {
       await saveConfig({
         modal: {
@@ -176,7 +183,7 @@ export function ConfigWizard({ open, onClose }: Props) {
       await refetchHealth();
       setStep(4);
     } catch (err) {
-      message.error(`保存失败：${err instanceof Error ? err.message : err}`);
+      setLastError(err);
     } finally {
       setSaving(false);
     }
@@ -184,11 +191,14 @@ export function ConfigWizard({ open, onClose }: Props) {
 
   const doWarmup = async () => {
     setWarming(true);
+    setLastError(null);
     try {
       const r = await warmupModal();
       if (r.ok) message.success(`云端容器已就绪（耗时 ${r.seconds}s）`);
-      else message.error(`预热失败：${r.error ?? "未知错误"}`);
+      else setLastError(r.error ?? "预热失败：未知错误");
       refetchHealth();
+    } catch (err) {
+      setLastError(err);
     } finally {
       setWarming(false);
     }
@@ -244,6 +254,11 @@ export function ConfigWizard({ open, onClose }: Props) {
         />
 
         <div ref={contentRef} tabIndex={-1} style={{ outline: "none" }} data-testid="config-wizard-content">
+        {!!lastError && (
+          <div style={{ marginBottom: 12 }} data-testid="wizard-actionable-error">
+            <SettingsErrorAlert error={lastError} compact />
+          </div>
+        )}
         {step === 0 && (
           <div>
             <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>

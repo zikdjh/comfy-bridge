@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Alert, Button, Card, Space, Typography, message } from "antd";
-import { ReloadOutlined } from "@ant-design/icons";
+import { Alert, Button, Card, Space, Typography } from "antd";
+import { ReloadOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
 import { checkUpdate, type UpdateCheckResp } from "../../api/config";
+import { ActionableError } from "../../components/common/ActionableError";
 
 function describeReason(reason: string): string | null {
   switch (reason) {
@@ -17,13 +18,15 @@ function describeReason(reason: string): string | null {
 export function UpdateCheckCard() {
   const [loading, setLoading] = useState(false);
   const [info, setInfo] = useState<UpdateCheckResp | null>(null);
+  const [error, setError] = useState<unknown>(null);
 
   const run = async () => {
     setLoading(true);
+    setError(null);
     try {
       setInfo(await checkUpdate(true));
     } catch (err) {
-      message.error(`检查失败：${err instanceof Error ? err.message : err}`);
+      setError(err);
     } finally {
       setLoading(false);
     }
@@ -40,17 +43,17 @@ export function UpdateCheckCard() {
           {info?.current && <Typography.Text type="secondary">当前版本：{info.current}</Typography.Text>}
           {info?.cached && <Typography.Text type="secondary">（24h 内缓存结果）</Typography.Text>}
         </Space>
+        {!!error && <ActionableError error={error} />}
         {info?.available && (
           <Alert
             type="info"
             showIcon
-            message={
-              <Space size={8} wrap>
-                <span>发现新版本 {info.latest}</span>
-                <Button size="small" type="primary" href={info.release_url} target="_blank">
-                  前往下载
-                </Button>
-              </Space>
+            message={`发现新版本 ${info.latest}`}
+            description="覆盖前请先退出 ComfyBridge。配置和请求数据保存在用户目录，不会随解压目录覆盖；建议保留上一版解压目录，便于回退。"
+            action={
+              <Button size="small" type="primary" href={info.release_url} target="_blank">
+                前往下载
+              </Button>
             }
           />
         )}
@@ -58,6 +61,9 @@ export function UpdateCheckCard() {
         {info && !info.available && info.reason === "ok" && (
           <Typography.Text type="secondary">已是最新版本{info.latest ? `（远端 ${info.latest}）` : ""}。</Typography.Text>
         )}
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          <SafetyCertificateOutlined /> 用户数据位于 ~/.comfybridge；升级只替换程序文件，不覆盖配置、日志和上传会话。
+        </Typography.Text>
       </Space>
     </Card>
   );

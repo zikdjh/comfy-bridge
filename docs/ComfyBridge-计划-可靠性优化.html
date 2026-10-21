@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyBridge 可靠性优化计划</title>
+<style>
+  :root {
+    --bg: #f6f7fb; --card: #ffffff; --ink: #1f2430; --ink-soft: #5a6272;
+    --line: #e4e7ef; --accent: #4f5be8; --accent-soft: #eef0fe;
+    --ok: #1a9e6c; --warn: #b06a10; --bad: #c0392b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    line-height: 1.7; font-size: 15px;
+  }
+  header.hero {
+    background: linear-gradient(135deg, #232a63 0%, #4f5be8 55%, #8a7bff 100%);
+    color: #fff; padding: 34px 24px 26px; text-align: center;
+  }
+  header.hero h1 { margin: 0 0 10px; font-size: 25px; }
+  header.hero p { margin: 4px 0; opacity: .92; font-size: 14px; }
+  header.hero .meta { font-size: 12.5px; opacity: .8; margin-top: 10px; }
+  main { max-width: 1040px; margin: 0 auto; padding: 26px 20px 50px; }
+  section { margin-bottom: 44px; }
+  h2 { font-size: 20px; margin: 0 0 14px; padding-left: 12px; border-left: 4px solid var(--accent); }
+  h3 { font-size: 16.5px; margin: 22px 0 8px; }
+  h4 { font-size: 14.5px; margin: 16px 0 6px; color: #4353d8; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 26px; }
+  li { margin: 4px 0; }
+  table { width: 100%; border-collapse: collapse; background: var(--card); font-size: 13.5px; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  thead th { background: var(--accent-soft); color: #4353d8; font-weight: 600; }
+  tbody tr:nth-child(even) { background: #fafbfe; }
+  .badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: #4353d8; white-space: nowrap; }
+  .badge.ok { background: #e5f6ef; color: var(--ok); }
+  .badge.warn { background: #fdf1e2; color: var(--warn); }
+  .badge.bad { background: #fdeaea; color: var(--bad); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; margin: 14px 0; }
+  .footer { text-align: center; color: var(--ink-soft); font-size: 12.5px; padding: 18px; border-top: 1px solid var(--line); }
+  a { color: var(--accent); }
+  code { background: #f0f2fa; color: #33398f; padding: 1.5px 6px; border-radius: 5px; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>ComfyBridge 可靠性优化计划</h1>
+  <p>状态持久化 · 数据安全 · 升级回滚 · 网络自愈</p>
+  <div class="meta">基线版本：v0.1.0-beta.7 · 编写日期：2026-10-21</div>
+</header>
+
+<main>
+  <section id="r1">
+    <h2>1 背景与目标</h2>
+    <p>当前主链路已经稳定可用，发布流程也闭环。可靠性优化的目标不是继续堆功能，而是把“用户信任”补齐：异常后可恢复、数据不丢、升级不惊吓、失败可诊断。</p>
+    <div class="card">
+      <ul>
+        <li><strong>可恢复</strong>：进程重启、崩溃、断网后，状态和数据能自动收敛。</li>
+        <li><strong>可保全</strong>：请求日志、成本、配置、任务结果有明确的保留与备份策略。</li>
+        <li><strong>可升级</strong>：整合包覆盖升级前可备份，失败后可回退。</li>
+        <li><strong>可诊断</strong>：每个失败都有日志、错误码和用户下一步动作。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="r2">
+    <h2>2 问题清单</h2>
+    <table>
+      <thead><tr><th style="width:18%">主题</th><th style="width:14%">等级</th><th>问题</th><th>期望结果</th></tr></thead>
+      <tbody>
+        <tr><td>作业状态</td><td><span class="badge bad">P0</span></td><td>任务状态偏进程内存，后端重启后在途任务与历史任务不可恢复</td><td>关键作业状态落盘，重启后可查看、可收敛</td></tr>
+        <tr><td>数据保留</td><td><span class="badge bad">P0</span></td><td>请求、日志、成本与媒体记录缺少统一保留周期与备份策略</td><td>默认保留 90 天，可配置，可备份</td></tr>
+        <tr><td>升级回滚</td><td><span class="badge bad">P0</span></td><td>整合包覆盖升级缺少自动备份与回退入口</td><td>升级前备份用户数据与关键配置，失败可回退</td></tr>
+        <tr><td>云端链路</td><td><span class="badge warn">P1</span></td><td>Modal 超时、限流、代理异常时用户感知不明确</td><td>分阶段展示等待原因，支持重试和取消</td></tr>
+        <tr><td>启动冲突</td><td><span class="badge warn">P1</span></td><td>端口占用、runtime 缺失、WebView2 异常等场景缺少自愈</td><td>启动失败可定位，端口冲突可自动迁移或提示</td></tr>
+        <tr><td>审计与观测</td><td><span class="badge warn">P1</span></td><td>错误信息分散，缺少结构化错误码与统一诊断导出</td><td>一键导出诊断包，包含日志、版本、环境摘要</td></tr>
+        <tr><td>数据完整性</td><td><span class="badge">P2</span></td><td>SQLite 损坏、磁盘写满、异常关机缺少恢复流程</td><td>自动检测损坏并引导恢复，磁盘余量预警</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="r3">
+    <h2>3 执行批次</h2>
+    <h3>3.1 R1 · 状态持久化</h3>
+    <ol>
+      <li>梳理全部后台任务类型，明确哪些必须落盘、哪些允许丢弃。</li>
+      <li>为同步、上传、下载、部署、扫描任务补充持久化状态表。</li>
+      <li>重启后标记未完成任务为“中断”，并自动触发可重试项。</li>
+      <li>增加任务历史查询，避免重启后记录消失。</li>
+    </ol>
+    <h3>3.2 R2 · 数据保留与备份</h3>
+    <ol>
+      <li>统一数据保留周期：请求日志、事件日志、媒体记录、任务记录。</li>
+      <li>增加手动备份与恢复入口，覆盖配置、数据库、任务状态。</li>
+      <li>磁盘写满、数据库损坏、权限异常给出明确恢复建议。</li>
+    </ol>
+    <h3>3.3 R3 · 升级与回滚</h3>
+    <ol>
+      <li>升级前自动备份用户数据与配置，并保留最近 N 版。</li>
+      <li>升级后做启动自检，失败时提示回退或保留旧目录。</li>
+      <li>在设置页展示当前版本、更新时间、备份记录。</li>
+    </ol>
+    <h3>3.4 R4 · 网络与云端自愈</h3>
+    <ol>
+      <li>对 Modal 请求按阶段分类：凭证、网络、限流、部署、容器、数据卷。</li>
+      <li>对不同错误给出差异化提示与重试策略。</li>
+      <li>增加代理开关、直连、超时与重试次数的统一配置。</li>
+    </ol>
+  </section>
+
+  <section id="r4">
+    <h2>4 验收标准</h2>
+    <table>
+      <thead><tr><th style="width:30%">场景</th><th>验收</th></tr></thead>
+      <tbody>
+        <tr><td>后端重启</td><td>在途任务标记为中断，可恢复任务自动重试，历史任务可见</td></tr>
+        <tr><td>数据备份</td><td>手动备份可导出，恢复后请求、成本、配置完整</td></tr>
+        <tr><td>升级失败</td><td>可回退到上一版本，用户数据与配置不丢失</td></tr>
+        <tr><td>网络异常</td><td>用户能看到具体阶段和下一步，重试不产生重复任务</td></tr>
+        <tr><td>端口冲突</td><td>自动迁移到备用端口，或在界面给出明确处理指引</td></tr>
+        <tr><td>诊断导出</td><td>一键导出日志、版本、环境、配置摘要，且不泄露密钥</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="r5">
+    <h2>5 风险与边界</h2>
+    <div class="card">
+      <ul>
+        <li><strong>不做分布式</strong>：仍保持单机单实例，不引入共享数据库。</li>
+        <li><strong>不做无限回滚</strong>：只保留有限备份版本，避免磁盘膨胀。</li>
+        <li><strong>不做静默重试</strong>：所有自动重试必须有次数上限和日志留痕。</li>
+        <li><strong>不做密钥回显</strong>：诊断包与日志导出必须脱敏。</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">ComfyBridge 可靠性优化计划 · 2026-10-21</footer>
+</body>
+</html>

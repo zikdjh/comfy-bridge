@@ -27,6 +27,7 @@ import {
   type MediaItem,
 } from "../../api/media";
 import { PageHeader } from "../../components/common/PageHeader";
+import { EmptyGuide } from "../../components/common/EmptyGuide";
 import { useDarkMode } from "../../hooks/useDarkMode";
 
 const TILE_HEIGHT = 160;
@@ -34,10 +35,20 @@ const TILE_HEIGHT = 160;
 function MediaTile({ item, onOpen }: { item: MediaItem; onOpen: (item: MediaItem) => void }) {
   const { tokens: t } = useDarkMode();
   const name = item.path.split("/").pop() ?? item.path;
+  const open = () => onOpen(item);
   return (
     <Tooltip title={item.path}>
       <div
-        onClick={() => onOpen(item)}
+        role="button"
+        tabIndex={0}
+        aria-label={`预览 ${name}`}
+        onClick={open}
+        onKeyDown={(ev) => {
+          if (ev.key === "Enter" || ev.key === " ") {
+            ev.preventDefault();
+            open();
+          }
+        }}
         style={{
           position: "relative",
           borderRadius: 8,
@@ -45,6 +56,7 @@ function MediaTile({ item, onOpen }: { item: MediaItem; onOpen: (item: MediaItem
           cursor: "pointer",
           background: t.colors.console.background,
           border: `1px solid ${t.colors.border}`,
+          outlineOffset: 2,
         }}
       >
         {item.kind === "image" ? (
@@ -179,18 +191,23 @@ export default function MediaPage() {
           <Spin tip="扫描 output 目录…" />
         </div>
       ) : filtered.length === 0 ? (
-        <Empty
-          description={
-            <span>
-              暂无匹配的产出文件
-              <br />
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                ComfyUI SaveImage / 视频节点写入 output 目录后会自动出现在这里（{data?.root ?? "—"}）
-              </Typography.Text>
-            </span>
-          }
-          style={{ padding: "48px 0" }}
-        />
+        kind === "all" && folder === "all" && !keyword ? (
+          <EmptyGuide
+            description={`暂无产出文件 —— ComfyUI SaveImage / 视频节点写入 output 目录后会自动出现在这里（${data?.root ?? "—"}）`}
+            actionLabel="重新扫描"
+            onAction={() => void refetch()}
+          />
+        ) : (
+          <EmptyGuide
+            description="没有符合当前筛选的产出文件 —— 清除类型、目录或文件名筛选后重新查看"
+            actionLabel="清除筛选"
+            onAction={() => {
+              setKind("all");
+              setFolder("all");
+              setKeyword("");
+            }}
+          />
+        )
       ) : (
         <div
           style={{

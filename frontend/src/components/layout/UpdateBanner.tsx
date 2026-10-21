@@ -47,6 +47,9 @@ export function UpdateBanner() {
           <span>
             新版本 <Typography.Text strong>{info.latest}</Typography.Text> 可用（当前 {info.current}）
           </span>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            下载后退出应用再覆盖解压目录；用户数据不会随升级删除
+          </Typography.Text>
         </Space>
       }
       action={

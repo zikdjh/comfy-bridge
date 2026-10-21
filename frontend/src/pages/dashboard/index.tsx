@@ -516,7 +516,18 @@ export default function DashboardPage() {
           pagination={{ pageSize: 10, showSizeChanger: false, size: "small", showTotal: (total) => `共 ${total} 条` }}
           size="small"
           rowClassName={() => "clickable-row"}
-          onRow={(record) => ({ onClick: () => navigate("/logs"), style: { cursor: "pointer" } })}
+          onRow={(record) => ({
+            tabIndex: 0,
+            "aria-label": `在日志中查看请求 ${record.workflow_name ?? `#${record.id}`}`,
+            onClick: () => navigate("/logs"),
+            onKeyDown: (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                navigate("/logs");
+              }
+            },
+            style: { cursor: "pointer" },
+          })}
         />
       </Card>
 

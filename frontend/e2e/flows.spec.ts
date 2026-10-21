@@ -58,6 +58,31 @@ test("首次配置向导：空配置自动弹出、可跳过且本会话不再�
   await expect(page.getByRole("dialog", { name: WIZARD })).toHaveCount(0);
 });
 
+test("首次配置向导：保存失败时在原位给出可行动建议", async ({ page }) => {
+  await page.route("**/api/v1/config", async (route) => {
+    if (route.request().method() !== "PUT") {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ detail: "Token not found" }),
+    });
+  });
+  await page.goto("/bridge/");
+  const dlg = page.getByRole("dialog", { name: WIZARD });
+  await expect(dlg).toBeVisible();
+  await dlg.getByRole("button", { name: "开始配置", exact: true }).click();
+  await dlg.getByPlaceholder("ak-…").fill("ak-test");
+  await dlg.getByPlaceholder("as-…").fill("as-test");
+  await dlg.getByRole("button", { name: "保存并下一步" }).click();
+  const guidance = dlg.getByTestId("wizard-actionable-error");
+  await expect(guidance).toContainText("Modal 凭证不可用");
+  await expect(guidance).toContainText("设置 → Modal");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
 test("仪表盘：侧边栏、状态横幅与核心卡片渲染", async ({ page }) => {
   await page.goto("/bridge/");
   await dismissWizard(page);
@@ -65,13 +90,13 @@ test("仪表盘：侧边栏、状态横幅与核心卡片渲染", async ({ page 
   await expect(page.getByRole("menuitem", { name: /仪表盘/ })).toBeVisible();
   // 状态横幅（scope 到 banner，避免与运行环境表的重名文案歧义）
   const banner = page.getByRole("banner");
-  await expect(banner.getByText(/本地 ComfyUI/)).toBeVisible();
-  await expect(banner.getByText(/Modal Runner/)).toBeVisible();
+  await expect(banner.getByText("本地", { exact: true })).toBeVisible();
+  await expect(banner.getByText("Modal", { exact: true })).toBeVisible();
   await expect(banner.getByText(/未连接/)).toBeVisible();
   // 核心卡片
-  await expect(page.getByText("今日生成", { exact: false })).toBeVisible();
-  await expect(page.getByText("运行中任务", { exact: false })).toBeVisible();
-  await expect(page.getByText("最近请求", { exact: false })).toBeVisible();
+  await expect(page.getByText("今日生成", { exact: true })).toBeVisible();
+  await expect(page.getByText("运行中任务", { exact: true })).toBeVisible();
+  await expect(page.getByText("最近请求", { exact: true })).toBeVisible();
 });
 
 test("全页面遍历：每个菜单页有内容且无错误边界", async ({ page }) => {
@@ -126,6 +151,278 @@ test("设置：六 Tab、设置同步面板与任务抽屉空态", async ({ page
   await expect(drawer).toContainText("暂无任务");
 });
 
+test("任务抽屉：展示当前阶段与运行耗时", async ({ page }) => {
+  const now = Date.now();
+  await page.route("**/api/v1/jobs?limit=50", async (route) => {
+    await route.fulfill({
+      json: {
+        running: 1,
+        jobs: [{
+          id: "job-phase-1",
+          kind: "node_sync",
+          label: "节点同步（1 项）",
+          state: "running",
+          phase: "上传 node-x",
+          total: 1,
+          done: 0,
+          items: [],
+          logs: [],
+          error: null,
+          cancellable: true,
+          created_ms: now - 12_000,
+          started_ms: now - 10_000,
+          finished_ms: null,
+        }],
+      },
+    });
+  });
+  await page.goto("/bridge/");
+  await dismissWizard(page);
+  await page.getByRole("banner").getByRole("button", { name: /任务/ }).click();
+  const drawer = page.locator(".ant-drawer-open");
+  await expect(drawer).toBeVisible();
+  await expect(drawer).toContainText("当前阶段：");
+  await expect(drawer).toContainText("上传 node-x");
+  await expect(drawer).toContainText("已运行");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+test("任务抽屉：按已完成条目估算剩余时间并说明局限", async ({ page }) => {
+  const now = Date.now();
+  await page.route("**/api/v1/jobs?limit=50", async (route) => {
+    await route.fulfill({
+      json: {
+        running: 1,
+        jobs: [{
+          id: "job-estimate-1",
+          kind: "node_sync",
+          label: "节点同步（3 项）",
+          state: "running",
+          phase: "安装 node-b",
+          total: 3,
+          done: 1,
+          items: [{ name: "node-a", ok: true }],
+          logs: [],
+          error: null,
+          cancellable: true,
+          created_ms: now - 11_000,
+          started_ms: now - 10_000,
+          finished_ms: null,
+        }],
+      },
+    });
+  });
+  await page.goto("/bridge/");
+  await dismissWizard(page);
+  await page.getByRole("banner").getByRole("button", { name: /任务/ }).click();
+  const drawer = page.locator(".ant-drawer-open");
+  const estimate = drawer.getByTestId("job-estimate");
+  await expect(estimate).toContainText("预计约");
+  await estimate.hover();
+  await expect(page.getByRole("tooltip")).toContainText("根据本次已完成条目的平均速度估算");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+test("任务抽屉：无已完成条目时明确提示暂不能估算", async ({ page }) => {
+  await page.route("**/api/v1/jobs?limit=50", async (route) => {
+    await route.fulfill({
+      json: {
+        running: 1,
+        jobs: [{
+          id: "job-estimate-empty-1",
+          kind: "node_sync",
+          label: "节点同步（2 项）",
+          state: "running",
+          phase: "安装 node-a",
+          total: 2,
+          done: 0,
+          items: [],
+          logs: [],
+          error: null,
+          cancellable: true,
+          created_ms: Date.now() - 1000,
+          started_ms: Date.now() - 1000,
+          finished_ms: null,
+        }],
+      },
+    });
+  });
+  await page.goto("/bridge/");
+  await dismissWizard(page);
+  await page.getByRole("banner").getByRole("button", { name: /任务/ }).click();
+  const drawer = page.locator(".ant-drawer-open");
+  await expect(drawer).toContainText("预计等待：样本积累中");
+  await expect(drawer.getByTestId("job-estimate")).toHaveCount(0);
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+test("节点管理：高级筛选收起、启用后保留结果", async ({ page }) => {
+  await page.route("**/api/v1/nodes/diff", async (route) => {
+    await route.fulfill({
+      json: {
+        ok: true,
+        cloud_error: null,
+        app_state: "running",
+        volume: "comfyui-data",
+        rows: [
+          {
+            name: "package-ready", kind: "pkg", repo: null, commit: "abc123",
+            has_requirements: false, enabled: true, local: true, cloud: false,
+            cloud_size: null, state: "missing_cloud",
+          },
+          {
+            name: "package-synced", kind: "pkg", repo: null, commit: "def456",
+            has_requirements: false, enabled: true, local: true, cloud: true,
+            cloud_size: "1 MB", state: "same",
+          },
+        ],
+        counts: { synced: 1, only_local: 1, only_cloud: 0 },
+        cached: false,
+        cached_at: null,
+        class_types: { local: null, cloud: null, error: null },
+      },
+    });
+  });
+  await page.goto("/bridge/");
+  await dismissWizard(page);
+  await gotoMenu(page, "节点管理");
+  await page.getByRole("tab", { name: "差异矩阵" }).click();
+  const filterButton = page.getByRole("button", { name: "高级筛选" });
+  await expect(filterButton).toBeVisible();
+  await filterButton.click();
+  await page.getByRole("combobox", { name: "差异筛选" }).focus();
+  await page.keyboard.press("Enter");
+  await page.locator(".ant-select-dropdown:visible").getByText("仅云端缺失", { exact: true }).click();
+  const panel = page.locator(".ant-tabs-tabpane-active");
+  await expect(panel.getByText("package-ready", { exact: true })).toBeVisible();
+  await expect(panel.getByText("package-synced", { exact: true })).toHaveCount(0);
+  await filterButton.click();
+  await expect(page.getByRole("button", { name: /高级筛选，当前条件：仅云端缺失/ })).toBeVisible();
+  await expect(panel.getByText("package-ready", { exact: true })).toBeVisible();
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+test("任务抽屉：快捷键可开关、失败项仅重跑失败子集", async ({ page }) => {
+  const now = Date.now();
+  let retryPayload: { names: string[] } | null = null;
+  await page.route("**/api/v1/jobs?limit=50", async (route) => {
+    await route.fulfill({
+      json: {
+        running: 0,
+        jobs: [{
+          id: "job-failed-1",
+          kind: "node_sync",
+          label: "节点同步（2 项）",
+          state: "error",
+          phase: "执行失败",
+          total: 2,
+          done: 2,
+          items: [
+            { name: "node-ok", ok: true, remote: "custom_nodes/node-ok" },
+            { name: "node-failed", ok: false, error: "proxy connection failed" },
+          ],
+          logs: [],
+          error: "1 个条目失败",
+          cancellable: true,
+          created_ms: now - 12_000,
+          started_ms: now - 10_000,
+          finished_ms: now,
+        }],
+      },
+    });
+  });
+  await page.route("**/api/v1/nodes/sync", async (route) => {
+    retryPayload = route.request().postDataJSON() as { names: string[] };
+    await route.fulfill({
+      json: {
+        ok: true,
+        job: {
+          id: "job-retry-1",
+          kind: "node_sync",
+          label: "节点同步（1 项）",
+          state: "running",
+          phase: "准备中",
+          total: 1,
+          done: 0,
+          items: [],
+          logs: [],
+          error: null,
+          cancellable: true,
+          created_ms: now,
+          started_ms: null,
+          finished_ms: null,
+        },
+      },
+    });
+  });
+  await page.goto("/bridge/");
+  await dismissWizard(page);
+  await page.keyboard.press("Control+J");
+  const drawer = page.locator(".ant-drawer-open");
+  await expect(drawer).toBeVisible();
+  await page.keyboard.press("Control+J");
+  await expect(drawer).toBeHidden();
+  await page.keyboard.press("Control+J");
+  await expect(drawer).toContainText("重试失败项（1）");
+  await drawer.getByRole("button", { name: "重试失败项（1）" }).click();
+  await expect.poll(() => retryPayload).toEqual({ names: ["node-failed"] });
+  await expect(drawer).toContainText("节点同步（1 项）");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+test("媒体库：缩略图可用键盘打开预览", async ({ page }) => {
+  await page.route("**/api/v1/media/local?kind=all&limit=1000", async (route) => {
+    await route.fulfill({
+      json: {
+        root: "C:/ComfyUI/output",
+        total: 1,
+        items: [{ path: "sample.png", kind: "image", size: 1024, mtime: Date.now() / 1000 }],
+      },
+    });
+  });
+  await page.goto("/bridge/");
+  await dismissWizard(page);
+  await gotoMenu(page, "媒体库");
+  const tile = page.getByRole("button", { name: "预览 sample.png" });
+  await expect(tile).toBeVisible();
+  await tile.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog").getByText("sample.png", { exact: true })).toBeVisible();
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+test("设置：URL 页签可直达且错误按钮能跳转", async ({ page }) => {
+  await page.goto("/bridge/settings?tab=modal");
+  await dismissWizard(page);
+  await expect(page.getByRole("tab", { name: "Modal", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByText("Token ID", { exact: false }).first()).toBeVisible();
+});
+
+test("设置：向导错误可前往对应页签", async ({ page }) => {
+  await page.route("**/api/v1/config", async (route) => {
+    if (route.request().method() !== "PUT") {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ detail: "Token not found" }),
+    });
+  });
+  await page.goto("/bridge/");
+  const dlg = page.getByRole("dialog", { name: WIZARD });
+  await expect(dlg).toBeVisible();
+  await dlg.getByRole("button", { name: "开始配置", exact: true }).click();
+  await dlg.getByPlaceholder("ak-…").fill("ak-test");
+  await dlg.getByPlaceholder("as-…").fill("as-test");
+  await dlg.getByRole("button", { name: "保存并下一步" }).click();
+  await dlg.getByRole("button", { name: "前往设置" }).click();
+  await expect(page).toHaveURL(/\/bridge\/settings\?tab=modal$/);
+  await expect(page.getByRole("tab", { name: "Modal", exact: true })).toHaveAttribute("aria-selected", "true");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
 test("状态页与模型页：SDK 不可用时展示迁移后告警", async ({ page }) => {
   await page.route("**/api/v1/health/modal-cli", async (route) => {
     await route.fulfill({
@@ -172,4 +469,114 @@ test("状态页与模型页：SDK 不可用时展示迁移后告警", async ({ p
   await gotoMenu(page, "模型卷");
   await expect(page.getByText("Modal Python SDK 不可用", { exact: true })).toBeVisible();
   await expect(page.getByText(/同步通过 Modal SDK 执行/)).toBeVisible();
+});
+
+test("请求日志：表格行可用键盘打开详情并展示可行动错误", async ({ page }) => {
+  const now = Date.now();
+  let lastRequestUrl = "";
+  await page.route("**/api/v1/requests?**", async (route) => {
+    lastRequestUrl = route.request().url();
+    await route.fulfill({
+      json: {
+        total: 1,
+        items: [{
+          id: 101,
+          prompt_id: "prompt-keyboard-101",
+          created_at: "2026-10-21T10:00:00+08:00",
+          created_ms: now,
+          backend: "modal",
+          final_backend: "modal",
+          gen_type: "image",
+          workflow_name: "keyboard-flow",
+          graph_hash: null,
+          graph_file: null,
+          client_id: null,
+          status: "error",
+          rule_trace: [],
+          error: "proxy connection failed",
+          started_ms: now,
+          finished_ms: now + 1000,
+          duration_ms: 1000,
+          gpu_seconds: null,
+          est_cost_usd: null,
+        }],
+      },
+    });
+  });
+  await page.goto("/bridge/");
+  await dismissWizard(page);
+  await gotoMenu(page, "日志");
+  const detailButton = page.getByRole("button", { name: "查看请求详情 #101" });
+  await expect(detailButton).toBeVisible();
+  await detailButton.focus();
+  await page.keyboard.press("Enter");
+  const drawer = page.locator(".ant-drawer-open");
+  await expect(drawer).toContainText("请求详情 #101");
+  await expect(drawer).toContainText("代理连接失败");
+  await expect(drawer).toContainText("关闭「使用系统代理」");
+  await page.keyboard.press("Escape");
+  await expect(drawer).toBeHidden();
+  const filterButton = page.getByRole("button", { name: "高级筛选" });
+  await filterButton.click();
+  await page.getByRole("combobox", { name: "请求状态筛选" }).focus();
+  await page.keyboard.press("Enter");
+  await page.locator(".ant-select-dropdown:visible").getByText("失败", { exact: true }).click();
+  await expect.poll(() => lastRequestUrl).toContain("status=error");
+  await filterButton.click();
+  await expect(page.getByRole("button", { name: /高级筛选，当前条件：失败/ })).toBeVisible();
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+test("数据卷：目录与文件条目支持键盘操作", async ({ page }) => {
+  await page.route("**/api/v1/volume/meta", async (route) => {
+    await route.fulfill({ json: { volume: "comfyui-data", credentials_ok: true, cli_found: true } });
+  });
+  await page.route("**/api/v1/volume/volumes", async (route) => {
+    await route.fulfill({
+      json: {
+        computing: false,
+        computed_ms: Date.now(),
+        total_bytes: 0,
+        file_count: 0,
+        status: "ok",
+        volumes: [],
+        error: null,
+      },
+    });
+  });
+  await page.route("**/api/v1/volume/list?**", async (route) => {
+    const url = new URL(route.request().url());
+    const path = url.searchParams.get("path") ?? "";
+    await route.fulfill({
+      json: path
+        ? { ok: true, error: null, path, volume: "comfyui-data", entries: [] }
+        : {
+            ok: true,
+            error: null,
+            path: "",
+            volume: "comfyui-data",
+            entries: [{ name: "models", type: "dir", size: "—", mtime: "—" }],
+          },
+    });
+  });
+  await page.route("**/api/v1/volume/trash?**", async (route) => {
+    await route.fulfill({ json: { ok: true, volume: "comfyui-data", entries: [], error: null } });
+  });
+  await page.route("**/api/v1/volume/downloads", async (route) => {
+    await route.fulfill({ json: { jobs: [] } });
+  });
+  await page.route("**/api/v1/volume/moves", async (route) => {
+    await route.fulfill({ json: { jobs: [] } });
+  });
+
+  await page.goto("/bridge/");
+  await dismissWizard(page);
+  await gotoMenu(page, "数据卷");
+  const dirCard = page.locator(".ant-card").filter({ hasText: "目录浏览" });
+  const openButton = dirCard.getByRole("button", { name: "打开", exact: true });
+  await expect(openButton).toBeVisible();
+  await openButton.focus();
+  await page.keyboard.press("Enter");
+  await expect(dirCard.getByText(/该目录为空/)).toBeVisible();
+  await page.unrouteAll({ behavior: "ignoreErrors" });
 });

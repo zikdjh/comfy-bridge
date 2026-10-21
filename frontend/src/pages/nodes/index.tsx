@@ -39,6 +39,8 @@ import { stopModalContainers } from "../../api/launch";
 import { openJobDrawer, useJob } from "../../api/jobs";
 import { warmupModal } from "../../api/health";
 import { EmptyGuide } from "../../components/common/EmptyGuide";
+import { ErrorDetails, SettingsErrorAlert } from "../../components/common/ActionableError";
+import { AdvancedFilters } from "../../components/common/AdvancedFilters";
 import dayjs from "dayjs";
 import { useDarkMode, type BridgeTokens } from "../../hooks/useDarkMode";
 
@@ -238,6 +240,13 @@ const statusCell = (t: BridgeTokens, ok: boolean, extra?: string) =>
 
 type DiffFilter = "all" | "only_local" | "only_cloud" | "synced";
 
+const DIFF_FILTER_OPTIONS: { value: DiffFilter; label: string }[] = [
+  { value: "all", label: "全部" },
+  { value: "only_local", label: "仅云端缺失" },
+  { value: "only_cloud", label: "仅本地缺失" },
+  { value: "synced", label: "已同步" },
+];
+
 function DiffMatrix() {
   const { tokens: t } = useDarkMode();
   const queryClient = useQueryClient();
@@ -287,14 +296,20 @@ function DiffMatrix() {
     if (syncJob.state === "cancelled") {
       message.warning("节点同步任务已取消（已完成条目保留）");
     } else if (syncJob.items.length === 0) {
-      message.error(`节点同步任务失败：${syncJob.error ?? "未知错误"}`);
+      Modal.error({
+        title: "节点同步任务失败",
+        width: 560,
+        content: <SettingsErrorAlert error={syncJob.error ?? "未知错误"} compact />,
+      });
     } else if (failed.length > 0) {
       Modal.error({
         title: "部分节点同步失败",
+        width: 560,
         content: (
-          <pre style={{ maxHeight: 240, overflow: "auto", whiteSpace: "pre-wrap" }}>
-            {failed.map((f) => `${f.name}: ${f.error ?? "未知错误"}`).join("\n")}
-          </pre>
+          <ErrorDetails
+            error={failed[0].error ?? "节点同步失败"}
+            detail={failed.map((f) => `${f.name}: ${f.error ?? "未知错误"}`).join("\n")}
+          />
         ),
       });
     } else {
@@ -351,17 +366,24 @@ function DiffMatrix() {
       if (res.ok) {
         message.success(`已从云端移除 ${res.results.length} 个节点`);
       } else {
+        const failures = res.results.filter((r) => !r.ok);
         Modal.error({
           title: "部分节点移除失败",
+          width: 560,
           content: (
-            <pre style={{ maxHeight: 240, overflow: "auto", whiteSpace: "pre-wrap" }}>
-              {res.results.filter((r) => !r.ok).map((f) => `${f.name}: ${f.error ?? "未知错误"}`).join("\n")}
-            </pre>
+            <ErrorDetails
+              error={failures[0]?.error ?? "节点移除失败"}
+              detail={failures.map((f) => `${f.name}: ${f.error ?? "未知错误"}`).join("\n")}
+            />
           ),
         });
       }
     } catch (exc) {
-      message.error(`移除请求失败：${exc instanceof Error ? exc.message : String(exc)}`);
+      Modal.error({
+        title: "节点移除请求失败",
+        width: 560,
+        content: <SettingsErrorAlert error={exc} />,
+      });
     } finally {
       setOperating(false);
     }
@@ -375,9 +397,10 @@ function DiffMatrix() {
           title: "节点依赖预检未通过",
           width: 720,
           content: (
-            <pre style={{ maxHeight: 320, overflow: "auto", whiteSpace: "pre-wrap" }}>
-              {dependencyPrecheckError(precheck)}
-            </pre>
+            <ErrorDetails
+              error={precheck.detail ?? "节点依赖预检未通过"}
+              detail={dependencyPrecheckError(precheck)}
+            />
           ),
         });
         return;
@@ -389,10 +412,18 @@ function DiffMatrix() {
       if (res.ok) {
         message.success("重建任务已启动：固化节点依赖 + 版本对齐一次完成（约数分钟）");
       } else {
-        message.error(res.job?.error ?? "重建任务启动失败");
+        Modal.error({
+          title: "重建任务启动失败",
+          width: 560,
+          content: <SettingsErrorAlert error={res.job?.error ?? "重建任务启动失败"} />,
+        });
       }
     } catch (exc) {
-      message.error(`重建请求失败：${exc instanceof Error ? exc.message : String(exc)}`);
+      Modal.error({
+        title: "重建请求失败",
+        width: 560,
+        content: <SettingsErrorAlert error={exc} />,
+      });
     }
     queryClient.invalidateQueries({ queryKey: ["nodes", "version"] });
   };
@@ -638,7 +669,7 @@ function DiffMatrix() {
                 ))}
                 {cloudOnly.length > shown.length && (
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    …等 {cloudOnly.length} 个（切「仅本地缺失」筛选查看全部）
+                    …等 {cloudOnly.length} 个（在「高级筛选」中选择「仅本地缺失」查看全部）
                   </Typography.Text>
                 )}
               </div>
@@ -661,18 +692,18 @@ function DiffMatrix() {
               ]}
             />
             {view === "pkg" && (
-              <Select<DiffFilter>
-                size="small"
-                style={{ width: 140 }}
-                value={filter}
-                onChange={setFilter}
-                options={[
-                  { value: "all", label: "全部" },
-                  { value: "only_local", label: "仅云端缺失" },
-                  { value: "only_cloud", label: "仅本地缺失" },
-                  { value: "synced", label: "已同步" },
-                ]}
-              />
+              <AdvancedFilters summary={DIFF_FILTER_OPTIONS.find((item) => item.value === filter)?.label}>
+                <Space direction="vertical" size={6} style={{ width: "100%" }}>
+                  <Typography.Text strong>差异筛选</Typography.Text>
+                  <Select<DiffFilter>
+                    aria-label="差异筛选"
+                    style={{ width: "100%" }}
+                    value={filter}
+                    onChange={setFilter}
+                    options={DIFF_FILTER_OPTIONS}
+                  />
+                </Space>
+              </AdvancedFilters>
             )}
           </Space>
         }
@@ -778,7 +809,11 @@ function VersionBanner() {
       queryClient.invalidateQueries({ queryKey: ["nodes", "version"] });
     }
     if (lastState.current === "running" && job.state === "error") {
-      message.error(`镜像部署失败：${job.error ?? "未知错误"}`, 6);
+      Modal.error({
+        title: "镜像部署失败",
+        width: 560,
+        content: <SettingsErrorAlert error={job.error ?? "未知错误"} />,
+      });
     }
     lastState.current = job.state;
   }, [job, queryClient]);
@@ -802,9 +837,10 @@ function VersionBanner() {
               title: "节点依赖预检未通过",
               width: 720,
               content: (
-                <pre style={{ maxHeight: 320, overflow: "auto", whiteSpace: "pre-wrap" }}>
-                  {dependencyPrecheckError(precheck)}
-                </pre>
+                <ErrorDetails
+                  error={precheck.detail ?? "节点依赖预检未通过"}
+                  detail={dependencyPrecheckError(precheck)}
+                />
               ),
             });
             return;
@@ -816,10 +852,18 @@ function VersionBanner() {
           if (res.ok) {
             message.success("重建任务已启动（固化 + 版本对齐一次完成，约数分钟）");
           } else {
-            message.error(res.job?.error ?? "重建任务启动失败");
+            Modal.error({
+              title: "重建任务启动失败",
+              width: 560,
+              content: <SettingsErrorAlert error={res.job?.error ?? "重建任务启动失败"} />,
+            });
           }
         } catch (exc) {
-          message.error(`重建请求失败：${exc instanceof Error ? exc.message : String(exc)}`);
+          Modal.error({
+            title: "重建请求失败",
+            width: 560,
+            content: <SettingsErrorAlert error={exc} />,
+          });
         } finally {
           setAligning(false);
         }

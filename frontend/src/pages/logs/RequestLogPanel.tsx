@@ -16,8 +16,11 @@ import {
   Typography,
 } from "antd";
 import { RedoOutlined } from "@ant-design/icons";
+import { RightOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { BackendTag, type Backend } from "../../components/common/BackendTag";
+import { InlineError } from "../../components/common/ActionableError";
+import { AdvancedFilters } from "../../components/common/AdvancedFilters";
 import { useRequests, type BridgeRequest, type GenType, type RequestStatus } from "../../api/requests";
 import { useDarkMode } from "../../hooks/useDarkMode";
 
@@ -37,12 +40,23 @@ const genTypeMeta: Record<GenType, { color: string; text: string }> = {
   none: { color: "default", text: "非生成" },
 };
 
+const STATUS_FILTER_OPTIONS = [
+  { value: "all", label: "全部状态" },
+  { value: "queued", label: "排队中" },
+  { value: "running", label: "执行中" },
+  { value: "done", label: "完成" },
+  { value: "error", label: "失败" },
+  { value: "cancelled", label: "已中断" },
+  { value: "blocked", label: "待云端通道" },
+  { value: "preflight", label: "预校验拦截" },
+] as const;
+
 function formatDuration(ms?: number): string {
   if (ms == null) return "—";
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
 }
 
-const columns: ColumnsType<BridgeRequest> = [
+const requestColumns = (onOpen: (request: BridgeRequest) => void): ColumnsType<BridgeRequest> => [
   { title: "时间", dataIndex: "created_at", width: 150, render: (v: string) => v?.slice(5, 19) },
   {
     title: "工作流",
@@ -94,6 +108,25 @@ const columns: ColumnsType<BridgeRequest> = [
     width: 110,
     render: (v: string) => <Typography.Text code copyable={{ text: v, tooltips: ["复制 prompt_id", "已复制"] }}>{v?.slice(0, 8)}</Typography.Text>,
   },
+  {
+    title: "详情",
+    key: "detail",
+    width: 72,
+    render: (_, row) => (
+      <Button
+        size="small"
+        type="link"
+        icon={<RightOutlined />}
+        aria-label={`查看请求详情 #${row.id}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpen(row);
+        }}
+      >
+        查看
+      </Button>
+    ),
+  },
 ];
 
 /** 请求日志：桥接器拦截 POST /prompt 后落库的每次请求（GET /api/v1/requests）。 */
@@ -107,6 +140,9 @@ export function RequestLogPanel() {
   const { data, isLoading, isFetching, refetch, error } = useRequests(backendFilter, statusFilter, realtime);
   const items = data?.items ?? [];
   const loadError = error instanceof Error ? error.message : error ? String(error) : null;
+  const statusFilterLabel = statusFilter === "all"
+    ? undefined
+    : STATUS_FILTER_OPTIONS.find((item) => item.value === statusFilter)?.label;
 
   return (
     <Card
@@ -125,22 +161,18 @@ export function RequestLogPanel() {
               { value: "modal", label: "云端" },
             ]}
           />
-          <Select
-            size="small"
-            style={{ width: 110 }}
-            value={statusFilter}
-            onChange={setStatusFilter}
-            options={[
-              { value: "all", label: "全部状态" },
-              { value: "queued", label: "排队中" },
-              { value: "running", label: "执行中" },
-              { value: "done", label: "完成" },
-              { value: "error", label: "失败" },
-              { value: "cancelled", label: "已中断" },
-              { value: "blocked", label: "待云端通道" },
-              { value: "preflight", label: "预校验拦截" },
-            ]}
-          />
+          <AdvancedFilters summary={statusFilterLabel}>
+            <Space direction="vertical" size={6} style={{ width: "100%" }}>
+              <Typography.Text strong>状态筛选</Typography.Text>
+              <Select
+                aria-label="请求状态筛选"
+                style={{ width: "100%" }}
+                value={statusFilter}
+                onChange={setStatusFilter}
+                options={[...STATUS_FILTER_OPTIONS]}
+              />
+            </Space>
+          </AdvancedFilters>
           <Space size={4}>
             <span style={{ fontSize: 12, color: t.colors.textMuted }}>实时</span>
             <Switch size="small" checked={realtime} onChange={setRealtime} />
@@ -160,7 +192,7 @@ export function RequestLogPanel() {
       )}
       <Table<BridgeRequest>
         scroll={{ x: 820 }}
-        columns={columns}
+        columns={requestColumns(setDetail)}
         dataSource={items}
         rowKey="id"
         loading={isLoading}
@@ -227,7 +259,7 @@ export function RequestLogPanel() {
                     key: "err",
                     label: "错误信息",
                     children: (
-                      <pre style={{ fontSize: 12, margin: 0, whiteSpace: "pre-wrap" }}>{detail.error}</pre>
+                      <InlineError error={detail.error} />
                     ),
                   },
                 ]}

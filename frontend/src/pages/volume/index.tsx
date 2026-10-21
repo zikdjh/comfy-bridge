@@ -64,6 +64,7 @@ import type {
   VolumeUsageItem,
 } from "../../api/volume";
 import { EmptyGuide } from "../../components/common/EmptyGuide";
+import { openSettings } from "../../utils/appNavigation";
 import { useDarkMode } from "../../hooks/useDarkMode";
 
 /** 表格横向滚动兜底：窄屏下列宽超出自动出横向滚动条 */
@@ -654,14 +655,33 @@ function VolumeBrowser({
     {
       title: "操作",
       key: "op",
-      width: 100,
+      width: 150,
       render: (_v, r) => (
-        <Button size="small" type="link" danger disabled={deleting} onClick={() => openDelete(r)}>
-          删除
-        </Button>
+        <Space size={4}>
+          {r.type === "dir" ? (
+            <Button size="small" type="link" onClick={() => setPath(path ? `${path}/${r.name}` : r.name)}>
+              打开
+            </Button>
+          ) : (
+            <Button size="small" type="link" onClick={() => toggleEntry(r)}>
+              {selectedKeys.includes(r.name) ? "取消" : "选择"}
+            </Button>
+          )}
+          <Button size="small" type="link" danger disabled={deleting} onClick={() => openDelete(r)}>
+            删除
+          </Button>
+        </Space>
       ),
     },
   ];
+
+  const toggleEntry = (entry: VolumeEntry) => {
+    setSelectedKeys((previous) =>
+      previous.includes(entry.name)
+        ? previous.filter((key) => key !== entry.name)
+        : [...previous, entry.name],
+    );
+  };
 
   return (
     <Card
@@ -717,7 +737,16 @@ function VolumeBrowser({
           ]}
         />
         {meta && !meta.credentials_ok && (
-          <Alert type="warning" showIcon message="未配置 Modal 凭证（设置 → Modal），无法浏览云端数据卷" />
+          <Alert
+            type="warning"
+            showIcon
+            message="未配置 Modal 凭证，无法浏览云端数据卷"
+            action={
+              <Button size="small" onClick={() => openSettings("modal")}>
+                前往设置
+              </Button>
+            }
+          />
         )}
         {isLoading && !data ? (
           <Spin style={{ display: "block", margin: "32px auto" }} />

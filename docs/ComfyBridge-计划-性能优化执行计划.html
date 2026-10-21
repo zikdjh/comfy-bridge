@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyBridge 性能优化执行计划</title>
+<style>
+  :root {
+    --bg: #f6f7fb; --card: #ffffff; --ink: #1f2430; --ink-soft: #5a6272;
+    --line: #e4e7ef; --accent: #4f5be8; --accent-soft: #eef0fe;
+    --ok: #1a9e6c; --warn: #b06a10; --bad: #c0392b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    line-height: 1.7; font-size: 15px;
+  }
+  header.hero {
+    background: linear-gradient(135deg, #232a63 0%, #4f5be8 55%, #8a7bff 100%);
+    color: #fff; padding: 34px 24px 26px; text-align: center;
+  }
+  header.hero h1 { margin: 0 0 10px; font-size: 25px; }
+  header.hero p { margin: 4px 0; opacity: .92; font-size: 14px; }
+  header.hero .meta { font-size: 12.5px; opacity: .8; margin-top: 10px; }
+  main { max-width: 1040px; margin: 0 auto; padding: 26px 20px 50px; }
+  section { margin-bottom: 44px; }
+  h2 { font-size: 20px; margin: 0 0 14px; padding-left: 12px; border-left: 4px solid var(--accent); }
+  h3 { font-size: 16.5px; margin: 22px 0 8px; }
+  h4 { font-size: 14.5px; margin: 16px 0 6px; color: #4353d8; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 26px; }
+  li { margin: 4px 0; }
+  table { width: 100%; border-collapse: collapse; background: var(--card); font-size: 13.5px; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  thead th { background: var(--accent-soft); color: #4353d8; font-weight: 600; }
+  tbody tr:nth-child(even) { background: #fafbfe; }
+  .badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: #4353d8; white-space: nowrap; }
+  .badge.ok { background: #e5f6ef; color: var(--ok); }
+  .badge.warn { background: #fdf1e2; color: var(--warn); }
+  .badge.bad { background: #fdeaea; color: var(--bad); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; margin: 14px 0; }
+  .footer { text-align: center; color: var(--ink-soft); font-size: 12.5px; padding: 18px; border-top: 1px solid var(--line); }
+  a { color: var(--accent); }
+  code { background: #f0f2fa; color: #33398f; padding: 1.5px 6px; border-radius: 5px; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>ComfyBridge 性能优化执行计划</h1>
+  <p>基线采集 · 启动提速 · 交互治理 · 云端受理 · 资源稳定</p>
+  <div class="meta">基线版本：v0.1.0-beta.7 · 编写日期：2026-10-21 · 配套《<a href="ComfyBridge-计划-性能优化路线图.html" style="color:#fff">性能优化路线图</a>》</div>
+</header>
+
+<main>
+  <section id="p1">
+    <h2>1 背景与目标</h2>
+    <p>性能工作已经有第一批成果：路由级拆包、页面轮询可见性治理、请求缓存和 Modal 自检缓存都已落地。下一阶段的目标是把剩余热点收敛，并把性能验证固化成门禁，避免“感觉变快”。</p>
+    <div class="card">
+      <ul>
+        <li><strong>启动</strong>：双击到可交互有稳定基线，冷热启动分开统计。</li>
+        <li><strong>交互</strong>：主页面切换预算统一，长列表不再出现渲染尖刺。</li>
+        <li><strong>受理</strong>：云端提交 p95 继续守住，受理与执行等待分开度量。</li>
+        <li><strong>资源</strong>：空闲 CPU / RSS / 句柄 / 端口不随时间增长。</li>
+        <li><strong>门禁</strong>：关键性能指标进测试，不只停留在文档。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="p2">
+    <h2>2 当前基线</h2>
+    <table>
+      <thead><tr><th style="width:22%">指标</th><th style="width:20%">当前状态</th><th>结论</th></tr></thead>
+      <tbody>
+        <tr><td>页面切换 p95</td><td>多数页面 &lt; 300ms</td><td>预算基本达成，日志页仍有 466ms 尖刺</td></tr>
+        <tr><td>路由规则 / 系统状态</td><td>已从 551ms / 391ms 降至 137ms / 136ms</td><td>轮询与缓存治理有效</td></tr>
+        <tr><td>Modal 控制面请求</td><td>自检、TTL 缓存、单飞与并发闸门已落地</td><td>数据卷目录读取最多 4 路并发，同一路径共享一次请求</td></tr>
+        <tr><td>云端受理</td><td>已有 p95 &lt; 500ms 门禁</td><td>需保持并纳入常规回归</td></tr>
+        <tr><td>桌面启动</td><td>已有启动链路，缺固定冷热基线</td><td>优先补采样与门禁</td></tr>
+        <tr><td>空闲资源</td><td>轮询已按可见性治理</td><td>需补长运行 CPU / RSS / 句柄采样</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="p3">
+    <h2>3 问题清单</h2>
+    <table>
+      <thead><tr><th style="width:18%">主题</th><th style="width:14%">等级</th><th>问题</th><th>目标</th></tr></thead>
+      <tbody>
+        <tr><td>启动性能</td><td><span class="badge bad">P0</span></td><td>冷启动、热启动、后端 ready、窗口可交互缺少统一埋点</td><td>形成固定基线和回归门禁</td></tr>
+        <tr><td>长列表渲染</td><td><span class="badge bad">P0</span></td><td>日志页整表渲染存在尖刺</td><td>虚拟化后 p95 &lt; 300ms</td></tr>
+        <tr><td>云端受理</td><td><span class="badge warn">P1</span></td><td>规则匹配、预检、落库、派发未分段观测</td><td>分段打点，p95 保持 &lt; 500ms</td></tr>
+        <tr><td>数据卷请求</td><td><span class="badge ok">已收敛</span></td><td>并发列出不同目录会共同挤占 VolumeListFiles 限额</td><td>单路径单飞、全局 4 路闸门、写后取消旧在途读取</td></tr>
+        <tr><td>空闲资源</td><td><span class="badge warn">P1</span></td><td>缺少 30 分钟以上长运行采样</td><td>无 CPU 空转、无句柄泄漏</td></tr>
+        <tr><td>发布门禁</td><td><span class="badge">P2</span></td><td>性能指标分散，尚未全部进 CI</td><td>核心阈值自动化</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="p4">
+    <h2>4 执行批次</h2>
+    <h3>4.1 S1 · 基线固化</h3>
+    <ol>
+      <li>新增桌面启动采样：进程、runtime 检查、后端 spawn、端口 ready、窗口可交互。</li>
+      <li>新增页面切换与长任务采样，输出统一 JSON 报告。</li>
+      <li>把 P-06、P-08、启动、资源四类指标接入门禁。</li>
+    </ol>
+    <h3>4.2 S2 · 启动与首屏</h3>
+    <ol>
+      <li>并行化 runtime 检查与后端启动。</li>
+      <li>窗口先显示骨架，后端 ready 后恢复页面。</li>
+      <li>关键 chunk 预取，失败路径立即弹窗。</li>
+    </ol>
+    <h3>4.3 S3 · 交互渲染</h3>
+    <ol>
+      <li>日志页试点虚拟滚动，再扩展到媒体库和模型卷。</li>
+      <li>复杂表格做列级 memo 与筛选态缓存。</li>
+      <li>统一请求去重与 staleTime 策略。</li>
+    </ol>
+    <h3>4.4 S4 · 云端受理</h3>
+    <ol>
+      <li>受理链路分段打点。</li>
+      <li>节点与模型在场结果缓存，写操作按事件失效。</li>
+      <li>审计与图快照异步化，关闭前强制 flush。</li>
+    </ol>
+    <h3>4.5 S5 · 资源稳定</h3>
+    <ol>
+      <li>空闲轮询继续降频。</li>
+      <li>连接池生命周期统一治理。</li>
+      <li>长运行采样纳入发布前检查。</li>
+    </ol>
+    <h3>4.6 本轮 · 数据卷读取收敛</h3>
+    <div class="card">
+      <ul>
+        <li><strong>请求合并</strong>：同一卷、同一目录在缓存未命中时只发起一次 <code>VolumeListFiles</code>，所有并发读者共享结果。</li>
+        <li><strong>并发上限</strong>：不同目录的读取统一经过进程内 4 路闸门，保留原有 TTL、退避重试与错误分类。</li>
+        <li><strong>正确性</strong>：写操作按目录边界失效缓存并取消受影响的在途读取；旧请求即使晚到也不能写回陈旧快照。</li>
+        <li><strong>取消隔离</strong>：单个 HTTP 读者取消不会中断仍有其他消费者的共享读取。</li>
+        <li><strong>覆盖</strong>：单飞复用、并发峰值、TTL 命中、写失效防回填、失败不缓存、等待者取消隔离均有单元回归。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="p5">
+    <h2>5 度量与验收</h2>
+    <table>
+      <thead><tr><th style="width:30%">指标</th><th>预算</th></tr></thead>
+      <tbody>
+        <tr><td>桌面冷启动</td><td>双击到可交互 &lt; 3.0s</td></tr>
+        <tr><td>桌面热启动</td><td>双击到可交互 &lt; 1.5s</td></tr>
+        <tr><td>窗口关闭清理</td><td>进程与端口释放 &lt; 1.0s</td></tr>
+        <tr><td>页面切换</td><td>主页面 p95 &lt; 300ms</td></tr>
+        <tr><td>云端提交受理</td><td>p95 &lt; 500ms</td></tr>
+        <tr><td>审计影响</td><td>开/关 p95 差值 &lt; 20ms</td></tr>
+        <tr><td>空闲资源</td><td>CPU &lt; 3%，整树 RSS &lt; 350MB</td></tr>
+        <tr><td>长运行</td><td>30 分钟无句柄泄漏和端口残留</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="p6">
+    <h2>6 风险与边界</h2>
+    <div class="card">
+      <ul>
+        <li><strong>不牺牲正确性</strong>：缓存必须有 TTL、失效事件和手动刷新。</li>
+        <li><strong>不做假异步</strong>：异步日志和审计必须可落盘、可恢复。</li>
+        <li><strong>不引入重依赖</strong>：优先利用现有 React、FastAPI、SQLite 能力。</li>
+        <li><strong>不用绝对值一刀切</strong>：CI 和本机基线分开比较。</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">ComfyBridge 性能优化执行计划 · 2026-10-21</footer>
+</body>
+</html>

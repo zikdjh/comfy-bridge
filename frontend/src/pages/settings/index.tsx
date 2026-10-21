@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Alert, AutoComplete, Button, Card, Form, Input, InputNumber, Popconfirm, Segmented, Select, Space, Switch, Table, Tabs, Tag, Typography } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
@@ -13,6 +14,7 @@ import AccountProfilesCard from "./AccountProfilesCard";
 import { UpdateCheckCard } from "./UpdateCheckCard";
 import { useDarkMode } from "../../hooks/useDarkMode";
 import type { ThemeMode } from "../../hooks/useDarkMode";
+import { normalizeSettingsTab, SETTINGS_TAB_KEYS } from "../../utils/appNavigation";
 
 /** Modal 常用 GPU 型号建议（控件允许自定义输入；单价随平台调整，估算值在「护栏与预算」维护） */
 const GPU_OPTIONS = [
@@ -29,6 +31,9 @@ const GPU_OPTIONS = [
 ];
 
 export default function SettingsPage() {
+  const [searchParams] = useSearchParams();
+  const requestedTab = normalizeSettingsTab(searchParams.get("tab") ?? undefined) ?? "local";
+  const [activeTab, setActiveTab] = useState<string>(requestedTab);
   const { mode, setMode, tokens: t } = useDarkMode();
   const { data: config, isLoading } = useConfig();
   const saveConfig = useSaveConfig();
@@ -47,6 +52,10 @@ export default function SettingsPage() {
   const [pricing, setPricing] = useState<ModalPricingDto | null>(null);
   const [pricingError, setPricingError] = useState(false);
   const pricingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setActiveTab(requestedTab);
+  }, [requestedTab]);
 
   /** 表单变化时防抖请求预估价：只预览，不保存、不触发部署 */
   const refreshPricing = (values: { gpu?: string; cpu?: number; memoryGb?: number }) => {
@@ -367,7 +376,10 @@ export default function SettingsPage() {
       }
     >
       <Tabs
-        defaultActiveKey="local"
+        activeKey={activeTab}
+        onChange={(key) => {
+          if ((SETTINGS_TAB_KEYS as readonly string[]).includes(key)) setActiveTab(key);
+        }}
         items={[
           {
             key: "local",
