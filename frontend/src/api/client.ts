@@ -10,10 +10,28 @@ export class ApiError extends Error {
   }
 }
 
+/** 管理 API 统一从 JSON detail 提取可行动错误，避免把协议原文直接展示给用户。 */
+export async function apiErrorFromResponse(res: Response): Promise<ApiError> {
+  const raw = await res.text().catch(() => "");
+  let detail = "";
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as { detail?: unknown };
+      detail = typeof parsed.detail === "string" ? parsed.detail : raw;
+    } catch {
+      detail = raw;
+    }
+  }
+  return new ApiError(
+    res.status,
+    detail.slice(0, 400) || `${res.status} ${res.statusText}`,
+  );
+}
+
 export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(path, { signal, headers: { Accept: "application/json" } });
   if (!res.ok) {
-    throw new ApiError(res.status, `${res.status} ${res.statusText}`);
+    throw await apiErrorFromResponse(res);
   }
   return (await res.json()) as T;
 }
@@ -29,8 +47,7 @@ export async function apiSend<T>(
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new ApiError(res.status, `${res.status} ${res.statusText}${detail ? `: ${detail.slice(0, 200)}` : ""}`);
+    throw await apiErrorFromResponse(res);
   }
   return (await res.json()) as T;
 }

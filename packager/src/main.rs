@@ -17,6 +17,7 @@ use std::time::{Duration, Instant};
 
 const LAUNCHER_VERSION: &str = env!("CARGO_PKG_VERSION");
 const EMBEDDED_WHEEL_NAME: &str = env!("CB_EMBEDDED_WHEEL_NAME");
+const BUNDLE_VERSION: &str = env!("CB_BUNDLE_VERSION");
 const DEFAULT_HOST: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 18189;
 const DEFAULT_PORT_CANDIDATES: [u16; 5] = [18189, 18190, 18191, 18192, 18193];
@@ -665,9 +666,8 @@ enum CliMode {
 
 fn version_text() -> String {
     let mut output = format!("launcher: {LAUNCHER_VERSION}\n");
-    let version = wheel_version(EMBEDDED_WHEEL_NAME).unwrap_or("?");
     output.push_str(&format!(
-        "bundle  : ComfyBridge {version}（{EMBEDDED_WHEEL_NAME}）\n"
+        "bundle  : ComfyBridge {BUNDLE_VERSION}（{EMBEDDED_WHEEL_NAME}）\n"
     ));
     output
 }

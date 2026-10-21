@@ -50,6 +50,16 @@ def test_diff_state_single_file_content_hash():
 def rebuild_env(monkeypatch):
     """打通 start_rebuild 的全部 IO：锁文件/预检/部署/版本函数全部打桩，收集调用痕迹。"""
     calls = {"written": [], "restored": [], "pins": [], "rollbacks": [], "prechecks": []}
+    job = {
+        "id": "test-deploy",
+        "state": "running",
+        "created_ms": 1,
+        "started_ms": 1,
+        "finished_ms": None,
+        "label": None,
+        "error": None,
+        "log_tail": [],
+    }
 
     monkeypatch.setattr(ir, "scan_custom_nodes", lambda: {"packages": [], "single_files": []})
     monkeypatch.setattr(
@@ -73,13 +83,15 @@ def rebuild_env(monkeypatch):
     monkeypatch.setattr(ir.lockfile, "restore", lambda *a: calls["restored"].append(a))
 
     async def fake_begin(label):
-        # 与真实 begin_exclusive 一样把任务状态写进 deploy._JOB（start_rebuild 返回 job_state()）
-        ir.deploy._JOB.update(
-            state="running", started_ms=1, finished_ms=None, label=label, error=None, log_tail=[]
-        )
-        return ir.deploy.job_state()
+        job.update(label=label, state="running")
+        return dict(job, log_tail=list(job["log_tail"]))
 
     monkeypatch.setattr(ir.deploy, "begin_exclusive", fake_begin)
+    monkeypatch.setattr(
+        ir.deploy,
+        "job_state",
+        lambda: dict(job, log_tail=list(job["log_tail"])),
+    )
     monkeypatch.setattr(ir.deploy, "spawn", lambda rb: calls["rollbacks"].append(rb))
     monkeypatch.setattr(
         ir, "get_settings", lambda: SimpleNamespace(local=SimpleNamespace(comfy_root="X:/comfy"))
@@ -90,8 +102,7 @@ def rebuild_env(monkeypatch):
 @pytest.fixture()
 def reset_deploy_job():
     yield
-    ir.deploy._JOB.update(state="idle", started_ms=None, finished_ms=None, label=None, error=None, log_tail=[])
-    ir.deploy.set_finish_sink(None)  # 清一次性收尾回调，防串测试
+    ir.deploy.reset()
 
 
 async def test_rebuild_with_align_writes_pin_and_rolls_back_both(rebuild_env, reset_deploy_job, monkeypatch):

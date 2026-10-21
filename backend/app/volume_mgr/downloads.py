@@ -1,8 +1,9 @@
-"""数据卷 URL 下载作业引擎：modal run download_model 后台子进程（内存态作业表）。
+"""数据卷 URL 下载作业引擎：modal run download_model 后台子进程。
 
 - 每个作业 = 一个 `modal run modal-runner/runner.py::download_model` 子进程，
   云端在 CPU 容器里把直链 URL / HF 仓库下载进数据卷指定目录并 commit；
-- 作业状态保存在内存（后端重启清空）；取消 = 终止本地 CLI（云端函数随 ephemeral
+- 作业快照写入 JobStore；后端重启后运行态收敛为 interrupted，不自动重放；
+- 取消 = 终止本地 CLI（云端函数随 ephemeral
   app 一并停止，尽力而为）；
 - 下载目标目录与文件名的合法性在创建时校验（拒绝穿越 / 非 http(s) 链接）。
 """
@@ -18,14 +19,16 @@ import uuid
 from dataclasses import dataclass, field
 
 from .. import runner_assets
+from ..core.job_store import SQLiteJobStore, default_store
 from ..modal_volume import client as modal_cli
 
 # runner.py：仓库布局优先，wheel 安装回落包内副本（app/runner_assets.py）
 _RUNNER_FILE = runner_assets.runner_file("runner.py")
 _LOG_KEEP = 12          # 每作业保留的最近输出行数
 _JOBS_KEEP = 50         # 作业表保留上限（超出淘汰最旧已完成作业）
+_NAMESPACE = "modal_volume_download"
 _NAME_RE = re.compile(r"^[a-z][a-z0-9-]{2,31}$")   # 与 API 侧卷名校验一致
-_JOBS: dict[str, DownloadJob] = {}
+_PROCS: dict[str, subprocess.Popen] = {}
 
 
 def now_ms() -> int:
@@ -47,13 +50,13 @@ class DownloadJob:
     dest_dir: str
     filename: str | None
     volume: str = ""
-    status: str = "running"  # running | done | error
+    status: str = "running"  # running | done | error | interrupted
     error: str | None = None
     log_tail: list[str] = field(default_factory=list)  # 最近的 CLI 输出（截断）
     result_files: list[str] = field(default_factory=list)  # 完成后目标目录内的文件
     created_ms: int = field(default_factory=now_ms)
     finished_ms: int | None = None
-    _cancel: bool = field(default=False, repr=False)
+    cancel_requested: bool = False
     _proc: subprocess.Popen | None = field(default=None, repr=False)
 
     @property
@@ -73,20 +76,66 @@ class DownloadJob:
             "volume": self.volume,
             "status": self.status,
             "error": self.error,
+            "cancel_requested": self.cancel_requested,
             "log_tail": self.log_tail,
             "result_files": self.result_files,
             "created_ms": self.created_ms,
             "finished_ms": self.finished_ms,
         }
 
+    @classmethod
+    def from_dict(cls, data: dict) -> DownloadJob:
+        finished = data.get("finished_ms")
+        return cls(
+            id=str(data.get("id") or ""),
+            url=str(data.get("url") or ""),
+            dest_dir=str(data.get("dest_dir") or ""),
+            filename=data.get("filename"),
+            volume=str(data.get("volume") or ""),
+            status=str(data.get("status") or "running"),
+            error=data.get("error"),
+            log_tail=[str(line) for line in data.get("log_tail", [])][-_LOG_KEEP:],
+            result_files=[
+                str(name) for name in data.get("result_files", [])
+            ][:50],
+            created_ms=int(data.get("created_ms") or now_ms()),
+            finished_ms=int(finished) if finished is not None else None,
+            cancel_requested=bool(data.get("cancel_requested") or False),
+        )
+
+
+def _store():
+    store = default_store()
+    if isinstance(store, SQLiteJobStore):
+        store.set_terminal_predicate(
+            lambda job: (
+                job.status if isinstance(job, DownloadJob) else job.get("status")
+            ) in {"done", "error", "interrupted"},
+            namespace=_NAMESPACE,
+        )
+    return store
+
+
+def _save(job: DownloadJob) -> None:
+    _store().save(_NAMESPACE, job.id, job.to_dict())
+
+
+def _coerce_job(value: DownloadJob | dict) -> DownloadJob:
+    return value if isinstance(value, DownloadJob) else DownloadJob.from_dict(value)
+
 
 def list_jobs(limit: int = 30) -> list[DownloadJob]:
-    jobs = sorted(_JOBS.values(), key=lambda j: j.created_ms, reverse=True)
+    jobs = sorted(
+        (_coerce_job(value) for value in _store().list(_NAMESPACE)),
+        key=lambda job: job.created_ms,
+        reverse=True,
+    )
     return jobs[:limit]
 
 
 def get_job(job_id: str) -> DownloadJob | None:
-    return _JOBS.get(job_id)
+    value = _store().get(_NAMESPACE, job_id)
+    return _coerce_job(value) if value is not None else None
 
 
 def create_download(url: str, dest_dir: str, filename: str | None = None,
@@ -116,29 +165,56 @@ def create_download(url: str, dest_dir: str, filename: str | None = None,
         filename=name,
         volume=vol,
     )
-    _JOBS[job.id] = job
+    _store().create(_NAMESPACE, job.id, job.to_dict())
     _trim_jobs()
     asyncio.get_running_loop().create_task(_run(job))
     return job
 
 
 async def cancel_download(job_id: str) -> bool:
-    job = _JOBS.get(job_id)
+    job = get_job(job_id)
     if job is None or job.status != "running":
         return False
-    job._cancel = True
-    proc = job._proc
+    job.cancel_requested = True
+    _save(job)
+    proc = _PROCS.get(job_id)
     if proc is not None and proc.poll() is None:
         proc.terminate()
     return True
 
 
+def recover_interrupted() -> int:
+    """重启只收敛状态；云端下载可能已写入部分文件，不能自动重放。"""
+    changed = 0
+    for value in _store().list(_NAMESPACE):
+        job = _coerce_job(value)
+        if job.status != "running":
+            continue
+        job.status = "interrupted"
+        job.error = (
+            "桥接器重启，云端 URL 下载已中断；目标目录可能已有部分文件。"
+            "请核对后再显式重试，程序不会自动重放"
+        )
+        job.finished_ms = now_ms()
+        _save(job)
+        changed += 1
+    return changed
+
+
 def _trim_jobs() -> None:
-    finished = [j for j in _JOBS.values() if j.status != "running"]
-    if len(_JOBS) <= _JOBS_KEEP:
-        return
-    for job in sorted(finished, key=lambda j: j.created_ms)[: len(_JOBS) - _JOBS_KEEP]:
-        _JOBS.pop(job.id, None)
+    _store().prune(
+        _NAMESPACE,
+        _JOBS_KEEP,
+        is_running=lambda job: (
+            job.status if isinstance(job, DownloadJob) else job.get("status")
+        ) == "running",
+        created_at=lambda job: (
+            job.created_ms
+            if isinstance(job, DownloadJob)
+            else job.get("created_ms", 0)
+        ),
+        include_running=False,
+    )
 
 
 def _absorb_output(job: DownloadJob, text: str) -> None:
@@ -149,10 +225,15 @@ def _absorb_output(job: DownloadJob, text: str) -> None:
             job.log_tail.append(chunk[:200])
     if len(job.log_tail) > _LOG_KEEP:
         job.log_tail[:] = job.log_tail[-_LOG_KEEP:]
+    _save(job)
 
 
 async def _run(job: DownloadJob) -> None:
     try:
+        if job.cancel_requested:
+            job.status = "error"
+            job.error = "已被取消（尚未开始下载）"
+            return
         cmd = [
             "run", f"{_RUNNER_FILE}::download_model",
             "--source", job.url,
@@ -163,6 +244,9 @@ async def _run(job: DownloadJob) -> None:
         # 挂载卷重定向：modal run 本地导入 runner.py 时读取该环境变量
         proc = modal_cli._popen(*cmd, extra_env={"CB_MODAL_VOLUME": job.volume})
         job._proc = proc
+        _PROCS[job.id] = proc
+        if job.cancel_requested:
+            proc.terminate()
 
         async def pump(pipe, sink: list) -> None:
             while True:
@@ -183,7 +267,7 @@ async def _run(job: DownloadJob) -> None:
                 t.cancel()
         job._proc = None
 
-        if job._cancel:
+        if job.cancel_requested:
             job.status = "error"
             job.error = "已被取消"
         elif proc.returncode != 0:
@@ -201,6 +285,8 @@ async def _run(job: DownloadJob) -> None:
         if job._proc is not None and job._proc.poll() is None:
             job._proc.terminate()
         job._proc = None
+        _PROCS.pop(job.id, None)
         if job.finished_ms is None:
             job.finished_ms = now_ms()
+        _save(job)
         _trim_jobs()

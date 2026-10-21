@@ -15,7 +15,6 @@ import uvicorn
 
 from .core.management_auth import is_loopback_host, management_token
 
-
 DEFAULT_PORT = 18189
 
 

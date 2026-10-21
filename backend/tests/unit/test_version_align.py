@@ -14,11 +14,7 @@ def align_env(tmp_path, monkeypatch):
     lock = tmp_path / "lock" / "comfyui_version.txt"
     monkeypatch.setattr(version_align, "LOCK_FILE", lock)
     monkeypatch.setattr(version_align, "HISTORY_FILE", tmp_path / "align_history.jsonl")
-    monkeypatch.setattr(deploy, "_SINK", None)
-    deploy._JOB.update(
-        state="idle", started_ms=None, finished_ms=None,
-        label=None, error=None, log_tail=[],
-    )
+    deploy.reset()
     return lock
 
 
@@ -109,7 +105,7 @@ def test_start_align_requires_local_version(tmp_path, align_env):
 
 
 def test_start_align_rejects_while_deploy_running(tmp_path, align_env):
-    deploy._JOB.update(state="running", label="x")
+    asyncio.run(deploy.begin_exclusive("x"))
     with pytest.raises(RuntimeError):
         asyncio.run(version_align.start_align(_comfy_root(tmp_path, "0.40.0")))
 
@@ -263,6 +259,7 @@ def test_run_deploy_passes_utf8_cli_env(align_env, monkeypatch):
         return _FakeProc(out=b"Deployed apps\n")
 
     monkeypatch.setattr(deploy.asyncio, "create_subprocess_exec", fake_exec)
+    asyncio.run(deploy.begin_exclusive("直接部署"))
     asyncio.run(deploy.run_deploy(None))
     assert captured["env"]["PYTHONUTF8"] == "1"
     assert captured["env"]["PYTHONIOENCODING"] == "utf-8"

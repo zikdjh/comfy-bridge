@@ -22,6 +22,7 @@ from fastapi import FastAPI, Request, Response
 from starlette.websockets import WebSocket
 
 from .api.v1 import api_router
+from .core import job_store, maintenance, release_state
 from .core.management_auth import install_management_auth
 from .gui_static import mount_gui
 from .logs import store as logs_store
@@ -40,8 +41,68 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    # 暂存备份在打开任何 SQLite 连接前应用，避免运行中替换 WAL 数据库。
+    try:
+        restored = maintenance.apply_pending_restore()
+    except maintenance.RestoreBusyError:
+        # 另一个实例可能正在替换数据文件；此时继续启动会打开半恢复状态。
+        raise
+    except Exception as exc:  # noqa: BLE001 - 恢复失败需要降级到当前数据继续启动
+        logging.getLogger(__name__).error("启动恢复失败，继续使用当前数据: %s", exc)
+    else:
+        if restored:
+            logging.getLogger(__name__).info("已应用用户数据备份 %s", restored.get("name"))
+    # 迁移前备份必须早于 schema 初始化；恢复已先完成，所以备份的是恢复后的数据。
+    # 版本未变化时幂等返回，不会在每次启动重复生成备份。
+    try:
+        release = release_state.prepare_upgrade()
+    except Exception as exc:
+        try:
+            release_state.record_self_check(
+                ok=False,
+                checks=[
+                    {
+                        "name": "upgrade_backup",
+                        "ok": False,
+                        "detail": str(exc),
+                    }
+                ],
+                error=f"迁移前备份失败，未初始化数据库：{exc}",
+            )
+        except OSError as record_exc:
+            logging.getLogger(__name__).error("升级失败且无法写自检记录: %s", record_exc)
+        # 数据尚未迁移，必须停在启动阶段；否则后续 schema 修改会绕过备份边界。
+        # 自检文件已保留具体错误，用户可在「数据安全」查看并主动重试。
+        raise
     init_db()
+    job_store.enable_sqlite(str(logs_store.DB_PATH))
+    from .core import comfy_scan
+    from .modal_volume import jobs as volume_sync_jobs
+    from .nodes_mgr import deploy
+    from .sync import jobs as sync_jobs
+    from .volume_mgr import downloads, moves
+
+    sync_jobs.recover_interrupted()
+    volume_sync_jobs.recover_interrupted()
+    moves.recover_interrupted()
+    downloads.recover_interrupted()
+    deploy.recover_interrupted()
+    comfy_scan.recover_interrupted()
     stale = close_stale_pending()
+    checks = [
+        {"name": "database", "ok": True, "detail": "SQLite 初始化完成"},
+        {"name": "jobs", "ok": True, "detail": "作业状态恢复完成"},
+        {"name": "cloud_runtime", "ok": True, "detail": "后端运行时已就绪"},
+    ]
+    try:
+        release_state.record_self_check(
+            ok=True,
+            checks=checks,
+            version=(release or {}).get("version"),
+        )
+    except OSError as exc:
+        # 自检记录是诊断旁路，不能反过来让已成功初始化的服务起不来。
+        logging.getLogger(__name__).warning("启动自检记录写入失败: %s", exc)
     if stale:
         logging.getLogger(__name__).info("已关闭 %d 条遗留的未完成请求记录（执行跟踪不跨重启）", stale)
     get_upstream_client()
@@ -58,6 +119,7 @@ async def lifespan(_: FastAPI):
     await reconcile.stop()
     await local_tracker.aclose()
     await close_upstream_client()
+    job_store.close_default()
     close_db()
 
 

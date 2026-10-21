@@ -86,7 +86,7 @@ comfy-bridge --port 18189  # 控制台 http://127.0.0.1:18189/bridge/
 - 管理面 GUI 挂在 `/bridge`（SPA 回退）；`/` 与其余路径仍是本地 ComfyUI 数据面透传，**出图地址不变**。
 - 安装包自带 modal-runner 副本：节点同步 / 版本对齐 / 数据卷作业 / `modal deploy` 在安装态均可直接用。
 - Rust 桌面整合包：`uv run python scripts/build_rust_package.py` 产出
-  `backend/dist/ComfyBridge-<版本>-win64.zip`，内置 Python 运行时与全部依赖。
+  `backend/dist/ComfyBridge-<标签版本>-win64.zip`，内置 Python 运行时与全部依赖。
   双击 `comfy-bridge.exe` 直接打开 Tauri/WebView2 桌面窗口；关闭窗口会停止内置服务，
   不需要安装（不含 ComfyUI 本体）。需要浏览器或脚本模式时使用
   `comfy-bridge.exe --console`，详见 `packager/README.md`。
@@ -164,16 +164,18 @@ Set-Content -Path "$HOME\.comfybridge\management_token" -Value "<随机长令牌
 
 ### 单实例限制（P2-2）
 
-当前版本是**单机单实例**：同一配置目录、同一后端实例、单进程。请求日志与成本
-存本地 SQLite，作业状态（同步、卷上传下载、卷移动、镜像部署、本机扫描）存进程
-内存，后端重启后历史作业清空、在途记录会收尾为 cancelled。不要启动多个后端
-进程共享同一个 `CB_CONFIG_DIR` / `~/.comfybridge`，也不要对 `/api/v1` 做多实例
-负载均衡。
+当前版本是**单机单实例**：同一配置目录、同一后端实例、单进程。请求日志、成本
+与同步作业历史存本地 SQLite；同步作业重启后仍可查看，遗留运行态会收敛为
+`interrupted`，已完成条目保留，未确认条目需由用户显式重试。卷上传下载、卷移动、
+镜像部署、本机扫描仍是进程内状态，后端重启后会消失或由各自恢复逻辑收敛。
+不要启动多个后端进程共享同一个 `CB_CONFIG_DIR` / `~/.comfybridge`，也不要对
+`/api/v1` 做多实例负载均衡。
 
 需要多实例时，应先把状态迁到共享存储（PostgreSQL / Redis；事件流同理换
 Redis Pub/Sub），再考虑横向扩展。作业状态已抽出统一接缝
 `app/core/job_store.py`：`sync/jobs.py` 与 `modal_volume/jobs.py` 已改用
-`JobStore` 协议，未来替换 Redis / PostgreSQL 实现无需重写业务模块。
+`JobStore` 协议；同步作业生产默认使用 SQLite 快照，未来替换 Redis / PostgreSQL
+实现无需重写业务模块。
 
 ### 预算护栏边界（P2-4）
 

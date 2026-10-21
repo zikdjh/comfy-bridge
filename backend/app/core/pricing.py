@@ -50,8 +50,7 @@ def parse_gpu_spec(spec: str) -> tuple[str, int]:
 def _gpu_key(model: str) -> str | None:
     """把用户输入归一到价格表键；兼容 NVIDIA 前缀、A100 内存后缀与 RTX 写法。"""
     key = re.sub(r"[\s_-]+", "", model).removeprefix("NVIDIA")
-    if key.startswith("RTXPRO"):
-        key = key[6:]
+    key = key.removeprefix("RTXPRO")
     if key in {"6000", "PRO6000"}:
         key = "RTXPRO6000"
     if key == "A100":

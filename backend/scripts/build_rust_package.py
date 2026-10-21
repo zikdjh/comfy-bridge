@@ -5,7 +5,7 @@
 + 使用说明。整合包不含 ComfyUI 本体；数据面由用户已有的本地 ComfyUI / Modal 云端提供。
 
 用法：cd backend && python scripts/build_rust_package.py [--no-frontend] [--skip-wheel]
-产物：backend/dist/ComfyBridge-<版本>-win64.zip
+产物：backend/dist/ComfyBridge-<标签版本>-win64.zip（例如 beta.8）
 """
 
 from __future__ import annotations
@@ -226,7 +226,9 @@ def main() -> None:
         run([uv, "build"], cwd=BACKEND)
 
     wheel = latest_wheel()
-    version = wheel_version(wheel.name)
+    wheel_ver = wheel_version(wheel.name)
+    tag_version = bundle_version()
+    bundle_ver = tag_version.removeprefix("v")
     base = runtime_base()
 
     # staging 放仓库 tmp 下：避开系统临时目录的权限重定向，同时仍被 .gitignore 排除。
@@ -234,7 +236,7 @@ def main() -> None:
     tmp_root.mkdir(parents=True, exist_ok=True)
     workdir = Path(tempfile.mkdtemp(prefix="cb-bundle-", dir=tmp_root))
     bundle = workdir
-    stage = bundle / f"ComfyBridge-{version}"
+    stage = bundle / f"ComfyBridge-{bundle_ver}"
     runtime = stage / "runtime"
 
     try:
@@ -255,7 +257,8 @@ def main() -> None:
         cargo = shutil.which("cargo")
         if not cargo:
             sys.exit("未找到 cargo（需要 Rust 工具链）")
-        run([cargo, "build", "--release"], cwd=REPO / "packager")
+        build_env = {**os.environ, "CB_BUNDLE_VERSION": bundle_ver}
+        run([cargo, "build", "--release"], cwd=REPO / "packager", env=build_env)
         exe_name = "comfy-bridge.exe" if sys.platform == "win32" else "comfy-bridge"
         built = REPO / "packager" / "target" / "release" / exe_name
         if not built.is_file():
@@ -263,9 +266,9 @@ def main() -> None:
         shutil.copy2(built, stage / exe_name)
 
         print("[5/7] 写入版本与用户文档", flush=True)
-        (stage / "version.txt").write_text(bundle_version(), encoding="ascii")
+        (stage / "version.txt").write_text(tag_version, encoding="ascii")
 
-        (stage / "使用说明.txt").write_text(usage_text(version), encoding="utf-8-sig")
+        (stage / "使用说明.txt").write_text(usage_text(bundle_ver), encoding="utf-8-sig")
 
         copy_docs(stage)
 
@@ -274,9 +277,12 @@ def main() -> None:
         smoke_check(python)
 
         print("[7/7] 生成 zip", flush=True)
-        out = BACKEND / "dist" / f"ComfyBridge-{version}-win64.zip"
+        out = BACKEND / "dist" / f"ComfyBridge-{bundle_ver}-win64.zip"
         make_zip(bundle, stage, out)
-        print(f"OK {out.name}  ({out.stat().st_size / 1024 / 1024:.1f} MiB)  app={wheel.name}  python={base.name}")
+        print(
+            f"OK {out.name}  ({out.stat().st_size / 1024 / 1024:.1f} MiB)  "
+            f"tag={tag_version}  wheel={wheel.name}  python={base.name}"
+        )
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 

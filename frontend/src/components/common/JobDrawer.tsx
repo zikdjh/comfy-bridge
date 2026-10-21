@@ -24,6 +24,7 @@ const STATE_META: Record<SyncJob["state"], { text: string; color: string; icon: 
   ok: { text: "已完成", color: "success", icon: <CheckCircleOutlined /> },
   error: { text: "失败", color: "error", icon: <CloseCircleOutlined /> },
   cancelled: { text: "已取消", color: "default", icon: <MinusCircleOutlined /> },
+  interrupted: { text: "已中断", color: "warning", icon: <MinusCircleOutlined /> },
 };
 
 function jobTime(ms: number) {
@@ -82,10 +83,20 @@ function JobCard({ job, onRetried }: { job: SyncJob; onRetried?: (jobId: string)
     try {
       const names = [...new Set(failed.map((item) => item.name))];
       let res: Awaited<ReturnType<typeof startNodeSync>>;
-      if (job.kind === "node_sync") {
+    if (job.kind === "node_sync") {
+        if (names.some((name) => name.startsWith("未完成条目（"))) {
+          message.warning("重启中断的任务缺少条目明细，请重新发起原同步操作");
+          return;
+        }
         res = await startNodeSync(names);
       } else {
-        const actions = failed.map((item) => ({ name: item.name, action: item.action ?? "push" }));
+        const actions = failed
+          .filter((item) => !item.name.startsWith("未完成条目（"))
+          .map((item) => ({ name: item.name, action: item.action ?? "push" }));
+        if (!actions.length) {
+          message.warning("重启中断的任务缺少条目明细，请重新发起原同步操作");
+          return;
+        }
         res = await startWorkflowSync(actions);
       }
       if (!res.ok || !res.job) {
@@ -146,7 +157,7 @@ function JobCard({ job, onRetried }: { job: SyncJob; onRetried?: (jobId: string)
       <Progress
         size="small"
         percent={running ? percent : 100}
-        status={running ? "active" : job.state === "error" ? "exception" : job.state === "ok" ? "success" : "normal"}
+        status={running ? "active" : job.state === "error" || job.state === "interrupted" ? "exception" : job.state === "ok" ? "success" : "normal"}
         format={() => `${job.done}/${job.total}`}
         style={{ maxWidth: 480, margin: "4px 0" }}
       />

@@ -17,7 +17,7 @@ uv run python scripts/build_rust_package.py            # 全量：前端 → whe
 uv run python scripts/build_rust_package.py --skip-wheel --no-frontend
 ```
 
-产物：`backend/dist/ComfyBridge-<版本>-win64.zip`。
+产物：`backend/dist/ComfyBridge-<标签版本>-win64.zip`（例如 `ComfyBridge-0.1.0-beta.8-win64.zip`）。
 
 - 运行依赖直接取自 `backend/.venv`（与测试环境同版本），构建阶段不解析、
   不下载依赖；只有重建 wheel 需要 uv。
@@ -27,7 +27,7 @@ uv run python scripts/build_rust_package.py --skip-wheel --no-frontend
 ## 包内结构
 
 ```text
-ComfyBridge-<版本>/
+ComfyBridge-<标签版本>/
 ├── comfy-bridge.exe      # 桌面应用入口
 ├── runtime/              # 裁剪版 CPython + site-packages（含 app、GUI 产物、modal-runner）
 ├── docs/                 # 使用说明手册 + Modal 密钥获取指南（HTML，浏览器直接打开）

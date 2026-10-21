@@ -137,7 +137,16 @@ test("设置：六 Tab、设置同步面板与任务抽屉空态", async ({ page
   await page.goto("/bridge/");
   await dismissWizard(page);
   await gotoMenu(page, "设置");
-  for (const tab of ["本地", "启动命令", "桥接", "Modal", "护栏与预算", "设置同步"]) {
+  for (const tab of [
+    "本地",
+    "启动命令",
+    "桥接",
+    "Modal",
+    "护栏与预算",
+    "设置同步",
+    "数据安全",
+    "检查更新",
+  ]) {
     await expect(page.getByRole("tab", { name: tab })).toBeVisible();
   }
   await page.getByRole("tab", { name: "设置同步" }).click();
@@ -149,6 +158,134 @@ test("设置：六 Tab、设置同步面板与任务抽屉空态", async ({ page
   const drawer = page.locator(".ant-drawer-open");
   await expect(drawer).toBeVisible();
   await expect(drawer).toContainText("暂无任务");
+});
+
+test("设置：数据安全页签可备份、下载、清理和暂存恢复", async ({ page }) => {
+  const backupName = "ComfyBridge-backup-20261021-120000-test.zip";
+  let backups = [
+    {
+      name: backupName,
+      size: 2 * 1024 * 1024,
+      created_ms: Date.now(),
+      reason: "manual",
+    },
+  ];
+  let cleanupCalls = 0;
+  let restoreCalls = 0;
+  await page.route("**/api/v1/maintenance", async (route) => {
+    await route.fulfill({
+      json: {
+        retention: { days: 90 },
+        backups,
+        restore_pending: restoreCalls > 0,
+        last_restore: null,
+        data_dir: "C:/data",
+        backup_dir: "C:/backups",
+        release: {
+          version: "v0.1.0-beta.8",
+          previous_version: "untracked",
+          installed_at_ms: Date.now(),
+          version_file: "C:/ComfyBridge/version.txt",
+          history: [],
+          upgrade_backups: [],
+          last_self_check: {
+            ok: true,
+            version: "v0.1.0-beta.8",
+            checked_at_ms: Date.now(),
+            checks: [],
+            error: null,
+          },
+          packaged: true,
+        },
+      },
+    });
+  });
+  await page.route("**/api/v1/maintenance/backup", async (route) => {
+    backups = [
+      {
+        name: "ComfyBridge-backup-new.zip",
+        size: 1024,
+        created_ms: Date.now(),
+        reason: "manual",
+      },
+      ...backups,
+    ];
+    await route.fulfill({
+      json: {
+        name: "ComfyBridge-backup-new.zip",
+        size: 1024,
+        path: "C:/backups/ComfyBridge-backup-new.zip",
+        contains_secrets: true,
+      },
+    });
+  });
+  await page.route("**/api/v1/maintenance/cleanup", async (route) => {
+    cleanupCalls += 1;
+    await route.fulfill({
+      json: { days: 90, requests_removed: 2, jobs_removed: 1, graphs_removed: 3 },
+    });
+  });
+  await page.route("**/api/v1/maintenance/restore", async (route) => {
+    restoreCalls += 1;
+    await route.fulfill({
+      json: { name: "restore.zip", pending: true, applies_on: "next_startup" },
+    });
+  });
+
+  await page.goto("/bridge/settings?tab=maintenance");
+  await dismissWizard(page);
+  await expect(page.getByRole("tab", { name: "数据安全" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.getByText(backupName, { exact: true })).toBeVisible();
+  await expect(page.getByText("v0.1.0-beta.8", { exact: true })).toBeVisible();
+  await expect(page.getByText("旧版（无版本状态）", { exact: true })).toBeVisible();
+  await expect(page.getByText("最近启动自检", { exact: true })).toBeVisible();
+  await expect(page.getByText("备份包含 Modal 凭证", { exact: false })).toBeVisible();
+  await expect(page.getByRole("link", { name: "下载" }).first()).toHaveAttribute(
+    "href",
+    new RegExp(backupName),
+  );
+
+  await page.getByRole("button", { name: "立即备份" }).click();
+  await expect(page.getByText("备份已创建", { exact: false })).toBeVisible();
+  await expect(page.getByText("ComfyBridge-backup-new.zip", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "立即按周期清理" }).click();
+  await page.locator(".ant-popconfirm-buttons").getByRole("button").last().click();
+  await expect(page.getByText("请求 2 条", { exact: false })).toBeVisible();
+  expect(cleanupCalls).toBe(1);
+
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "restore.zip",
+    mimeType: "application/zip",
+    buffer: Buffer.from("zip"),
+  });
+  await page.getByRole("button", { name: "校验并暂存恢复" }).click();
+  await page.locator(".ant-popconfirm-buttons").getByRole("button").last().click();
+  await expect(page.getByText("已有备份等待恢复")).toBeVisible();
+  expect(restoreCalls).toBe(1);
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+test("设置：数据安全错误显示后端中文建议", async ({ page }) => {
+  await page.route("**/api/v1/maintenance/backup", async (route) => {
+    await route.fulfill({
+      status: 507,
+      contentType: "application/json",
+      body: JSON.stringify({
+        detail: "磁盘空间不足。请清理下载目录、旧备份或回收站后重试；当前数据未被删除。",
+      }),
+    });
+  });
+  await page.goto("/bridge/settings?tab=maintenance");
+  await dismissWizard(page);
+  await page.getByRole("button", { name: "立即备份" }).click();
+  const notice = page.locator(".ant-message-notice").filter({ hasText: "备份失败" });
+  await expect(notice).toContainText("磁盘空间不足");
+  await expect(notice).not.toContainText('{"detail"');
+  await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
 test("任务抽屉：展示当前阶段与运行耗时", async ({ page }) => {
@@ -524,6 +661,48 @@ test("请求日志：表格行可用键盘打开详情并展示可行动错误",
   await expect.poll(() => lastRequestUrl).toContain("status=error");
   await filterButton.click();
   await expect(page.getByRole("button", { name: /高级筛选，当前条件：失败/ })).toBeVisible();
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+test("请求日志：大列表虚拟渲染可控且行交互不丢失", async ({ page }) => {
+  const now = Date.now();
+  const items = Array.from({ length: 500 }, (_, index) => ({
+    id: 1000 - index,
+    prompt_id: `prompt-virtual-${1000 - index}`,
+    created_at: "2026-10-21T10:00:00+08:00",
+    created_ms: now - index * 1000,
+    backend: "modal",
+    final_backend: "modal",
+    gen_type: "image",
+    workflow_name: `virtual-flow-${index}`,
+    graph_hash: null,
+    graph_file: null,
+    client_id: null,
+    status: "done",
+    rule_trace: [],
+    error: null,
+    started_ms: now - index * 1000,
+    finished_ms: now - index * 1000 + 900,
+    duration_ms: 900,
+    gpu_seconds: null,
+    est_cost_usd: null,
+  }));
+  await page.route("**/api/v1/requests?**", async (route) => {
+    await route.fulfill({ json: { total: items.length, returned: items.length, items } });
+  });
+
+  await page.goto("/bridge/");
+  await dismissWizard(page);
+  await gotoMenu(page, "日志");
+  await expect(page.getByText("请求日志（拦截层共 500 条）", { exact: true })).toBeVisible();
+  const detailButton = page.getByRole("button", { name: "查看请求详情 #1000" });
+  await expect(detailButton).toBeVisible();
+  const renderedRows = page.getByRole("button", { name: /^查看请求详情 #/ });
+  expect(await renderedRows.count()).toBeLessThan(100);
+  await detailButton.click();
+  const drawer = page.locator(".ant-drawer-open");
+  await expect(drawer).toContainText("请求详情 #1000");
+  await expect(drawer).toContainText("prompt-virtual-1000");
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 

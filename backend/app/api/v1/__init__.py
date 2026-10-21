@@ -10,6 +10,7 @@ from . import (
     jobs,
     launch,
     logs,
+    maintenance,
     media,
     modal,
     modal_volume,
@@ -33,6 +34,7 @@ api_router.include_router(jobs.router)
 api_router.include_router(media.router)
 api_router.include_router(logs.router)
 api_router.include_router(events.router)
+api_router.include_router(maintenance.router)
 api_router.include_router(requests.router)
 api_router.include_router(routing.router)
 api_router.include_router(settings_sync.router)

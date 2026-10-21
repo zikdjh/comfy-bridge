@@ -12,7 +12,7 @@ import statistics
 import time
 from typing import ClassVar
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from app.core.config import AppConfig, BridgeConfig
@@ -27,9 +27,12 @@ class _Decision:
     fallback = None
 
 
-def _client(monkeypatch) -> TestClient:
+def _client(monkeypatch, stages: list[dict[str, float]]) -> TestClient:
     app = FastAPI()
-    app.post("/prompt")(prompt_submit.handle_prompt_submit)
+    async def _prompt(request: Request):
+        return await prompt_submit._handle_prompt_submit(request, timing_sink=stages.append)
+
+    app.post("/prompt")(_prompt)
     settings = AppConfig(bridge=BridgeConfig(privacy_confirm=True))
     monkeypatch.setattr(prompt_submit, "get_settings", lambda: settings)
     monkeypatch.setattr(privacy, "get_settings", lambda: settings)
@@ -74,7 +77,8 @@ def _pct(values: list[float], p: float) -> float:
 
 
 def test_cloud_submit_p95_under_500ms(monkeypatch) -> None:
-    client = _client(monkeypatch)
+    stages: list[dict[str, float]] = []
+    client = _client(monkeypatch, stages)
     body = {"prompt": {"1": {"class_type": "KSampler", "inputs": {}}}, "client_id": "perf"}
     raw = json.dumps(body).encode()
     headers = {"content-type": "application/json", "x-bridge-privacy-confirmed": "1",
@@ -90,4 +94,13 @@ def test_cloud_submit_p95_under_500ms(monkeypatch) -> None:
     p50, p95 = _pct(latencies, 0.5), _pct(latencies, 0.95)
     mean = statistics.mean(latencies)
     print(f"P-08 cloud submit n=100 p50/p95/mean = {p50:.2f}/{p95:.2f}/{mean:.2f} ms")
+    assert len(stages) == len(latencies)
+    expected = {"read_body", "parse", "classify", "modal_state", "presence_budget",
+                "decide", "preflight", "persist", "dispatch", "total"}
+    assert expected <= stages[0].keys()
+    stage_p95 = {
+        name: _pct([sample[name] for sample in stages if name in sample], 0.95)
+        for name in expected
+    }
+    print("P-08 stage p95", json.dumps(stage_p95, ensure_ascii=False, sort_keys=True))
     assert p95 < 500.0, f"云端受理 p95 {p95:.2f}ms 超过 500ms 目标"

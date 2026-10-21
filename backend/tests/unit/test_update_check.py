@@ -26,7 +26,7 @@ def test_is_newer_garbage_is_false():
 
 @pytest.mark.asyncio
 async def test_check_update_not_packaged(monkeypatch, tmp_path):
-    monkeypatch.setattr(update_check, "_VERSION_FILES", (tmp_path / "nope.txt",))
+    monkeypatch.setattr(update_check, "read_current_version", lambda: (None, None))
     result = await update_check.check_update()
     assert result["available"] is False
     assert result["reason"] == "not_packaged"
@@ -34,8 +34,11 @@ async def test_check_update_not_packaged(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_check_update_cache_hit(monkeypatch, tmp_path):
-    monkeypatch.setattr(update_check, "_VERSION_FILES", (tmp_path / "version.txt",))
-    tmp_path.joinpath("version.txt").write_text("v0.1.0-beta.4", encoding="ascii")
+    monkeypatch.setattr(
+        update_check,
+        "read_current_version",
+        lambda: ("v0.1.0-beta.4", tmp_path / "version.txt"),
+    )
     cache = tmp_path / "update_check.json"
     monkeypatch.setattr(update_check, "_CACHE_PATH", cache)
     cache.write_text(json.dumps({
@@ -50,8 +53,11 @@ async def test_check_update_cache_hit(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_check_update_network_failure_degrades(monkeypatch, tmp_path):
-    monkeypatch.setattr(update_check, "_VERSION_FILES", (tmp_path / "version.txt",))
-    tmp_path.joinpath("version.txt").write_text("v0.1.0-beta.4", encoding="ascii")
+    monkeypatch.setattr(
+        update_check,
+        "read_current_version",
+        lambda: ("v0.1.0-beta.4", tmp_path / "version.txt"),
+    )
     monkeypatch.setattr(update_check, "_CACHE_PATH", tmp_path / "update_check.json")
 
     class _Boom:

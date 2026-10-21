@@ -12,6 +12,7 @@ import { SettingsSyncTab } from "./SettingsSyncTab";
 import { ConfigWizard } from "./ConfigWizard";
 import AccountProfilesCard from "./AccountProfilesCard";
 import { UpdateCheckCard } from "./UpdateCheckCard";
+import { MaintenanceTab } from "./MaintenanceTab";
 import { useDarkMode } from "../../hooks/useDarkMode";
 import type { ThemeMode } from "../../hooks/useDarkMode";
 import { normalizeSettingsTab, SETTINGS_TAB_KEYS } from "../../utils/appNavigation";
@@ -867,6 +868,11 @@ export default function SettingsPage() {
             key: "sync",
             label: "设置同步",
             children: <SettingsSyncTab />,
+          },
+          {
+            key: "maintenance",
+            label: "数据安全",
+            children: <MaintenanceTab />,
           },
           {
             key: "update",

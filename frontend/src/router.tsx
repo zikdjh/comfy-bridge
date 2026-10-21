@@ -17,6 +17,33 @@ const CostPage = lazy(() => import("./pages/cost"));
 const SettingsPage = lazy(() => import("./pages/settings"));
 const StatusPage = lazy(() => import("./pages/status"));
 
+const PREFETCH_PAGES = [
+  () => import("./pages/routing"),
+  () => import("./pages/nodes"),
+  () => import("./pages/workflows"),
+  () => import("./pages/models"),
+  () => import("./pages/volume"),
+  () => import("./pages/logs"),
+  () => import("./pages/media"),
+  () => import("./pages/cost"),
+  () => import("./pages/settings"),
+  () => import("./pages/status"),
+];
+
+if (typeof window !== "undefined") {
+  const prefetch = () => {
+    for (const load of PREFETCH_PAGES) void load().catch(() => undefined);
+  };
+  const idle = window.requestIdleCallback as
+    | ((callback: () => void, options?: { timeout?: number }) => number)
+    | undefined;
+  if (idle) {
+    idle(prefetch, { timeout: 2_000 });
+  } else {
+    window.setTimeout(prefetch, 300);
+  }
+}
+
 function NotFoundPage() {
   return (
     <Result

@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import contextlib
 import json
+import time
 import uuid
+from collections.abc import Callable
 
 import httpx
 from fastapi import Request, Response
@@ -27,6 +29,8 @@ from ..runner import executor
 from . import local_tracker, precheck
 from . import privacy as privacy_gate
 from .passthrough import get_upstream_client, upstream_headers
+
+TimingSink = Callable[[dict[str, float]], None]
 
 
 def _extract_manual_backend(payload: dict) -> str | None:
@@ -58,29 +62,66 @@ def _workflow_name_fallback(request: Request) -> str | None:
 
 
 async def handle_prompt_submit(request: Request) -> Response:
+    """POST /prompt 入口；不向 FastAPI 暴露内部性能参数。"""
+    return await _handle_prompt_submit(request)
+
+
+async def _handle_prompt_submit(
+    request: Request, *, timing_sink: TimingSink | None = None
+) -> Response:
+    """受理入口；timing_sink 仅供性能基准接收分段耗时，不进入生产响应。"""
+    started = time.perf_counter()
+    timings: dict[str, float] = {}
+
+    def mark(stage: str, since: float) -> None:
+        timings[stage] = round((time.perf_counter() - since) * 1000, 3)
+
+    def finish() -> None:
+        mark("total", started)
+        if timing_sink is not None:
+            timing_sink(dict(timings))
+
+    stage_started = time.perf_counter()
     raw = await request.body()
+    mark("read_body", stage_started)
+    stage_started = time.perf_counter()
     try:
         payload = json.loads(raw)
         assert isinstance(payload, dict)
     except Exception:  # noqa: BLE001 —— 非 JSON 载荷交本地原样报错，保持协议兼容
         # 非 JSON 载荷：交给本地 ComfyUI 原样报错，保持协议兼容
-        return await _forward_raw(request, raw)
+        result = await _forward_raw(request, raw)
+        finish()
+        return result
+
+    mark("parse", stage_started)
 
     prompt = payload.get("prompt")
     if not isinstance(prompt, dict) or not prompt:
-        return await _forward_raw(request, raw)
+        result = await _forward_raw(request, raw)
+        finish()
+        return result
 
+    stage_started = time.perf_counter()
     facts = classify_graph(prompt)
+    mark("classify", stage_started)
 
     # 模型引用归属：本地索引 vs 云端索引（快照，不做 IO；过期由后台重建保鲜）
     cloud_index.kick_refresh_if_stale()
     node_presence.kick_refresh_if_stale()  # 节点 class 两端在场（node_missing_* 规则数据源）
+    stage_started = time.perf_counter()
     await runner_client.ensure_state()  # Modal 应用部署状态保鲜（TTL 60s，过期才探一次 CLI）
+    mark("modal_state", stage_started)
+
+    stage_started = time.perf_counter()
     local_names = await local_index.local_names()
     cloud_only, missing = classify_model_refs(
         facts.get("model_refs") or [], local_names, cloud_index.snapshot()
     )
     budget = await cost_svc.abudget_state()  # 月度预算护栏现状（决策前采集，纯本地 SQL）
+    mark("presence_budget", stage_started)
+
+    stage_started = time.perf_counter()
     workflow_name = _extract_workflow_name(payload) or _workflow_name_fallback(request)
     decision = decide(
         facts,
@@ -91,11 +132,13 @@ async def handle_prompt_submit(request: Request) -> Response:
         presence=node_presence.snapshot(),
         cloud_active=await store.acount_active_modal(),  # 并发护栏计数（本请求尚未入库，不含自身）
     )
+    mark("decide", stage_started)
 
     # 提交前隐私确认（P2-5）：首次把工作流分流到 Modal 时先返回数据边界说明，
     # 调用方带确认头重试放行。放在落库/改写 prompt_id 之前，避免把确认拦截记成执行。
     privacy = privacy_gate.challenge(request)
     if decision.final_backend == "modal" and privacy is not None:
+        finish()
         return JSONResponse(status_code=409, content=privacy)
 
     if decision.backend == "modal" and budget.get("exceeded"):
@@ -112,9 +155,10 @@ async def handle_prompt_submit(request: Request) -> Response:
         })
 
     # —— 提交前预校验（M3-5 余项）：目标端缺节点/缺模型提前拦截或自动供给（off = 历史行为）——
-    preflight_mode = get_settings().bridge.preflight
     preflight_block_error: str | None = None
     preflight_options: list[dict] | None = None
+    stage_started = time.perf_counter()
+    preflight_mode = get_settings().bridge.preflight
     if preflight_mode in {"strict", "ask", "auto"} and decision.final_backend in {"local", "modal"}:
         pfr = precheck.scan(
             prompt,
@@ -150,7 +194,9 @@ async def handle_prompt_submit(request: Request) -> Response:
         if action == "block":
             preflight_block_error = precheck.blocked_message(pfr)
             preflight_options = options
+    mark("preflight", stage_started)
 
+    stage_started = time.perf_counter()
     prompt_id = str(uuid.uuid4())
     payload["prompt_id"] = prompt_id
     graph_file, graph_hash = await store.asave_graph_snapshot(prompt_id, raw)
@@ -172,6 +218,7 @@ async def handle_prompt_submit(request: Request) -> Response:
         "error": preflight_block_error,
     }
     await store.ainsert_request(record)
+    mark("persist", stage_started)
 
     if preflight_block_error:
         # 预校验拦截：零执行零费用，strict 不带选项，ask/auto 附可操作选项
@@ -182,11 +229,13 @@ async def handle_prompt_submit(request: Request) -> Response:
         }
         if preflight_options is not None:
             content["options"] = preflight_options
+        finish()
         return JSONResponse(status_code=409, content=content)
 
     if decision.final_backend == "":
         # Modal 不可用且策略为 reject：不落地执行
         await store.aupdate_status(prompt_id, "error", decision.fallback)
+        finish()
         return JSONResponse(
             status_code=509,
             content={"error": decision.fallback, "prompt_id": prompt_id,
@@ -196,13 +245,17 @@ async def handle_prompt_submit(request: Request) -> Response:
     if decision.final_backend == "modal":
         # M1 Runner 通道：立即应答（prompt_id 即提交时的桥接 id），云端执行后台接力。
         # 冷启动/输入上传/输出回传都在执行器内完成，浏览器经 WS 收到映射后的进度事件。
+        stage_started = time.perf_counter()
         if executor.dispatch(prompt_id, payload):
+            mark("dispatch", stage_started)
+            finish()
             return JSONResponse(
                 status_code=200,
                 content={"prompt_id": prompt_id, "number": None, "node_errors": {}},
             )
         error = "云端执行器重复受理该请求"
         await store.aupdate_status(prompt_id, "error", error)
+        finish()
         return JSONResponse(status_code=500, content={"error": error, "prompt_id": prompt_id})
 
     # 云端专有模型且回落本地（Modal 通道未就绪）：本地校验必然拒绝（模型不在本地图清单），
@@ -215,6 +268,7 @@ async def handle_prompt_submit(request: Request) -> Response:
             "可在「模型卷」页同步到本地后执行，或恢复通道后重试。"
         )
         await store.aupdate_status(prompt_id, "blocked", error)
+        finish()
         return JSONResponse(
             status_code=409,
             content={"error": error, "prompt_id": prompt_id,
@@ -222,6 +276,7 @@ async def handle_prompt_submit(request: Request) -> Response:
         )
 
     body = json.dumps(payload, ensure_ascii=False).encode()
+    stage_started = time.perf_counter()
     headers = {"content-type": "application/json"}
     client = get_upstream_client()
     try:
@@ -231,7 +286,11 @@ async def handle_prompt_submit(request: Request) -> Response:
     except httpx.HTTPError as exc:
         error = f"本地 ComfyUI 不可达: {exc}"
         await store.aupdate_status(prompt_id, "error", error)
+        mark("local_submit", stage_started)
+        finish()
         return JSONResponse(status_code=502, content={"error": error, "prompt_id": prompt_id})
+
+    mark("local_submit", stage_started)
 
     if up.status_code != 200:
         error = f"提交被 ComfyUI 拒绝（HTTP {up.status_code}）: {up.text[:300]}"
@@ -248,6 +307,7 @@ async def handle_prompt_submit(request: Request) -> Response:
             # 断线）时记录会永远停在 queued，这里用 /history 轮询兜底收敛。
             local_tracker.dispatch(prompt_id)
 
+    finish()
     return Response(content=up.content, status_code=up.status_code,
                     media_type=up.headers.get("content-type", "application/json"))
 

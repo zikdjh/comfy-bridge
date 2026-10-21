@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Alert,
   Button,
@@ -56,6 +56,7 @@ function formatDuration(ms?: number): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
 }
 
+/** 静态列定义保持在组件外，实时刷新时避免重复创建列与丢失列宽状态。 */
 const requestColumns = (onOpen: (request: BridgeRequest) => void): ColumnsType<BridgeRequest> => [
   { title: "时间", dataIndex: "created_at", width: 150, render: (v: string) => v?.slice(5, 19) },
   {
@@ -135,10 +136,12 @@ export function RequestLogPanel() {
   const [backendFilter, setBackendFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [realtime, setRealtime] = useState(true);
+  const [pageSize, setPageSize] = useState(50);
   const [detail, setDetail] = useState<BridgeRequest | null>(null);
 
-  const { data, isLoading, isFetching, refetch, error } = useRequests(backendFilter, statusFilter, realtime);
+  const { data, isLoading, refetch, error } = useRequests(backendFilter, statusFilter, realtime, 500);
   const items = data?.items ?? [];
+  const columns = useMemo(() => requestColumns(setDetail), []);
   const loadError = error instanceof Error ? error.message : error ? String(error) : null;
   const statusFilterLabel = statusFilter === "all"
     ? undefined
@@ -147,7 +150,7 @@ export function RequestLogPanel() {
   return (
     <Card
       size="small"
-      title={`请求日志（拦截层共 ${items.length} 条）`}
+      title={`请求日志（拦截层共 ${data?.total ?? items.length} 条）`}
       extra={
         <Space wrap style={{ justifyContent: "flex-end", maxWidth: "100%" }}>
           <Select
@@ -190,18 +193,32 @@ export function RequestLogPanel() {
           style={{ marginBottom: 12 }}
         />
       )}
-      <Table<BridgeRequest>
-        scroll={{ x: 820 }}
-        columns={requestColumns(setDetail)}
-        dataSource={items}
-        rowKey="id"
-        loading={isLoading}
-        rowClassName={() => "clickable-row"}
-        onRow={(record) => ({ onClick: () => setDetail(record), style: { cursor: "pointer" } })}
-        // 日志实时轮询 5s，分页 20 条控制 DOM 节点数；上一版 50 条在低端机有渲染尖刺
-        pagination={{ pageSize: 20, showSizeChanger: false }}
-        size="small"
-      />
+      {isLoading && !data ? (
+        <div aria-busy="true" aria-label="正在加载请求日志" style={{ minHeight: 260 }}>
+          <div className="cb-skeleton" style={{ height: 18, width: "45%", marginBottom: 16 }} />
+          {[0, 1, 2, 3, 4].map((row) => (
+            <div key={row} className="cb-skeleton" style={{ height: 42, marginBottom: 8 }} />
+          ))}
+        </div>
+      ) : (
+        <Table<BridgeRequest>
+          virtual
+          scroll={{ x: 820, y: 520 }}
+          columns={columns}
+          dataSource={items}
+          rowKey="id"
+          rowClassName={() => "clickable-row"}
+          onRow={(record) => ({ onClick: () => setDetail(record), style: { cursor: "pointer" } })}
+          // 虚拟表格只渲染视口附近行，实时轮询时可安全展示更大的单页数据量
+          pagination={{
+            pageSize,
+            showSizeChanger: true,
+            pageSizeOptions: [20, 50, 100],
+            onShowSizeChange: (_, size) => setPageSize(size),
+          }}
+          size="small"
+        />
+      )}
 
       <Drawer
         title={detail ? `请求详情 #${detail.id}` : ""}

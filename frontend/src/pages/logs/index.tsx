@@ -1,9 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Segmented, Tabs } from "antd";
-import { LiveConsole } from "./LiveConsole";
-import { ModalConsole } from "./ModalConsole";
 import { RequestLogPanel } from "./RequestLogPanel";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
+
+const LiveConsole = lazy(() => import("./LiveConsole").then((m) => ({ default: m.LiveConsole })));
+const ModalConsole = lazy(() => import("./ModalConsole").then((m) => ({ default: m.ModalConsole })));
 
 type ConsoleLayout = "auto" | "row" | "column";
 
@@ -12,6 +13,17 @@ const LAYOUT_STORAGE_KEY = "console.layout";
 const BOTTOM_PADDING = 16;
 /** 高度测量到位前的兜底值（页头 64 + 内容边距 32 + 页签导航 ~46） */
 const FALLBACK_CHROME = 158;
+
+function PanelSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="正在加载请求日志" style={{ minHeight: 260 }}>
+      <div className="cb-skeleton" style={{ width: "45%", height: 18, marginBottom: 16 }} />
+      {[0, 1, 2, 3].map((row) => (
+        <div key={row} className="cb-skeleton" style={{ height: 42, marginBottom: 8 }} />
+      ))}
+    </div>
+  );
+}
 
 export default function LogsPage() {
   const [tab, setTab] = useState("requests");
@@ -50,6 +62,7 @@ export default function LogsPage() {
     <Tabs
       activeKey={tab}
       onChange={setTab}
+      destroyOnHidden
       tabBarExtraContent={
         tab === "console" && {
           right: (
@@ -76,21 +89,23 @@ export default function LogsPage() {
           key: "console",
           label: "实时控制台",
           children: (
-            <div
-              ref={wrapRef}
-              style={{
-                display: "flex",
-                flexDirection: direction,
-                flexWrap: "nowrap",
-                gap: 16,
-                alignItems: "stretch",
-                height: `calc(100vh - ${chrome + BOTTOM_PADDING}px)`,
-                minHeight: direction === "row" ? 560 : 640,
-              }}
-            >
-              <LiveConsole />
-              <ModalConsole />
-            </div>
+            <Suspense fallback={<PanelSkeleton />}>
+              <div
+                ref={wrapRef}
+                style={{
+                  display: "flex",
+                  flexDirection: direction,
+                  flexWrap: "nowrap",
+                  gap: 16,
+                  alignItems: "stretch",
+                  height: `calc(100vh - ${chrome + BOTTOM_PADDING}px)`,
+                  minHeight: direction === "row" ? 560 : 640,
+                }}
+              >
+                <LiveConsole />
+                <ModalConsole />
+              </div>
+            </Suspense>
           ),
         },
       ]}

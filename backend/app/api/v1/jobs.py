@@ -4,8 +4,9 @@ GET  /api/v1/jobs              最近作业列表（新→旧，默认 50 条）
 GET  /api/v1/jobs/{id}         作业详情（进度条目 + 日志）
 POST /api/v1/jobs/{id}/cancel  协作式取消（当前条目完成后停止）
 
-作业体在 sync/jobs.py 注册表内运行（内存态，保留最近 100 个）；镜像重建/卷移动/
-URL 直下作业保持各自既有 API 面不变，不走这里。
+作业体在 sync/jobs.py 注册表内运行；生产状态持久化到 SQLite，保留最近 100 个，
+重启后遗留运行态显示为 interrupted。镜像重建/卷移动/URL 直下作业保持各自
+既有 API 面不变，不走这里。
 """
 
 from __future__ import annotations

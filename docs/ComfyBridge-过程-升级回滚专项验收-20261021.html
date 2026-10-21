@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyBridge 升级与回滚专项验收</title>
+<style>
+  :root { --bg:#f6f7fb; --card:#fff; --ink:#1f2430; --soft:#5a6272; --line:#e4e7ef;
+    --accent:#315fad; --accent-soft:#edf3fb; --ok:#177a57; --warn:#9a6211; --bad:#b83232; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.7 system-ui,"Segoe UI","Microsoft YaHei",sans-serif; }
+  header { background:#1f355c; color:#fff; padding:30px 24px; }
+  header h1 { margin:0 0 8px; font-size:25px; }
+  header p { margin:4px 0; opacity:.9; }
+  main { max-width:1180px; margin:auto; padding:24px 18px 50px; }
+  section { margin-bottom:40px; }
+  h2 { margin:0 0 12px; font-size:20px; border-left:4px solid var(--accent); padding-left:11px; }
+  h3 { font-size:16.5px; margin:22px 0 8px; }
+  table { width:100%; border-collapse:collapse; background:var(--card); font-size:13.5px; }
+  th,td { border:1px solid var(--line); padding:8px 9px; vertical-align:top; text-align:left; }
+  th { background:var(--accent-soft); color:#274b86; }
+  tr:nth-child(even) td { background:#fafbfe; }
+  code { background:#eef1f6; color:#334d78; padding:1px 5px; border-radius:4px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px 17px; margin:12px 0; }
+  .ok { color:var(--ok); font-weight:600; }
+  .warn { color:var(--warn); font-weight:600; }
+  .bad { color:var(--bad); font-weight:600; }
+  .mono { font-family:ui-monospace,Consolas,monospace; font-size:12.5px; }
+  footer { border-top:1px solid var(--line); padding:18px; text-align:center; color:var(--soft); font-size:12.5px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ComfyBridge 升级与回滚专项验收</h1>
+  <p>适用：v0.1.0-beta.8 及后续整合包 · 可靠性 R3</p>
+  <p>执行原则：保留旧版目录；使用隔离配置或真实用户数据副本；不触发真实 Modal 生图。</p>
+</header>
+<main>
+  <section>
+    <h2>1. 验收目标与边界</h2>
+    <div class="card">
+      <p>本专项验证整合包从旧版目录切换到新版目录时的版本识别、升级前自动备份、启动自检、数据恢复以及程序回退顺序。验收对象是桌面整合包与本地管理台，不验证打包产物内部依赖是否齐全，也不执行真实 Modal 出图、卷写入或本地生图。</p>
+      <ul>
+        <li><strong>用户数据根：</strong><code>~/.comfybridge</code>；程序根为两个独立解压目录。</li>
+        <li><strong>备份边界：</strong>备份包含 Modal 凭证和上传会话元数据，下载需要管理面认证。</li>
+        <li><strong>回滚边界：</strong>程序回退通过重新打开旧版目录完成；数据回退通过版本迁移备份和下一次启动恢复完成。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. 环境与证据准备</h2>
+    <table>
+      <thead><tr><th style="width:15%">项目</th><th style="width:34%">准备要求</th><th>记录</th></tr></thead>
+      <tbody>
+        <tr><td>旧版</td><td>准备上一可用测试版整合包，解压到独立目录 <code>ComfyBridge-old</code>，记录 <code>--version</code>。</td><td>版本：<br>路径：</td></tr>
+        <tr><td>新版</td><td>准备本次待验收整合包，解压到独立目录 <code>ComfyBridge-new</code>，记录 <code>--version</code>。</td><td>版本：<br>路径：</td></tr>
+        <tr><td>系统</td><td>记录 Windows 版本、WebView2 状态、磁盘剩余空间、是否配置系统代理。</td><td>Windows：<br>WebView2：<br>剩余空间：<br>代理：</td></tr>
+        <tr><td>数据基线</td><td>在旧版创建一条可识别的手动备份；请求记录、配置键与上传元数据各选一个核对点。</td><td>备份文件名：<br>请求 ID：<br>配置键：<br>上传会话：</td></tr>
+        <tr><td>证据</td><td>截图命名 <code>R3-序号-步骤-结果.png</code>；日志和接口响应另存 JSON/TXT。</td><td>证据目录：</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>3. 自动化基线（已完成）</h2>
+    <table>
+      <thead><tr><th>检查</th><th>状态</th><th>证据</th></tr></thead>
+      <tbody>
+        <tr><td>旧数据无版本状态识别、版本迁移、备份先于状态切换、失败保留旧版本、降级、自检容错、公开状态不泄露凭证</td><td class="ok">7 passed</td><td><code>backend/tests/unit/test_release_state.py</code></td></tr>
+        <tr><td>旧库只读快照、维护备份/恢复/保留、跨进程恢复互斥、启动顺序</td><td class="ok">20 passed</td><td><code>backend/tests/unit/test_maintenance.py</code></td></tr>
+        <tr><td>更新版本语义、缓存与断网降级</td><td class="ok">5 passed</td><td><code>backend/tests/unit/test_update_check.py</code>；Windows ACL 问题在沙箱外复跑</td></tr>
+        <tr><td>设置页版本卡片、备份、恢复、错误建议、页签</td><td class="ok">3 passed</td><td><code>frontend/e2e/flows.spec.ts</code> 专项 Playwright</td></tr>
+        <tr><td>嵌入构建、类型检查、ruff、mypy</td><td class="ok">通过</td><td>2026-10-21；构建仅保留既有大 chunk 警告</td></tr>
+      </tbody>
+    </table>
+    <p class="warn">以上自动化不构成真机升级验收。下列表格必须实际启动两个整合包目录并填写结果。</p>
+  </section>
+
+  <section>
+    <h2>4. 必测用例</h2>
+    <table>
+      <thead><tr><th style="width:8%">编号</th><th style="width:14%">前置</th><th style="width:30%">操作步骤</th><th style="width:20%">预期结果</th><th style="width:12%">实际结果</th><th style="width:7%">状态</th><th>证据/缺陷</th></tr></thead>
+      <tbody>
+        <tr><td>R3-01</td><td>旧版可启动</td><td>运行旧版 <code>--version</code> 与 <code>--doctor</code>，打开设置 → 数据安全。</td><td>版本、Python、app、GUI 项均正确；无升级备份时显示“未记录/无”且不报错。</td><td></td><td></td><td></td></tr>
+        <tr><td>R3-02</td><td>旧版有用户数据</td><td>在旧版创建手动备份，记录名称、时间、大小；下载一次并核对是否为有效 zip。</td><td>备份出现在列表；下载成功；内容哈希可校验；不泄露凭证明文。</td><td></td><td></td><td></td></tr>
+        <tr><td>R3-03</td><td>旧版完全退出</td><td>关闭旧版窗口，确认端口 <code>18189-18193</code> 无监听；从新版目录双击 exe。</td><td>新版成功打开；无残留旧进程或黑框；可直接访问管理台。</td><td></td><td></td><td></td></tr>
+        <tr><td>R3-04</td><td>已进入新版</td><td>打开设置 → 数据安全 → 版本与升级，读取版本、时间、上一版本、自检状态。</td><td>当前版本等于新版 <code>version.txt</code>；上一版本等于旧版；自检通过；升级时间合理。</td><td></td><td></td><td></td></tr>
+        <tr><td>R3-05</td><td>R3-04</td><td>刷新设置页并关闭后重新打开新版，再进入版本卡片。</td><td>版本与历史不重复追加；不会每次启动重复生成升级备份。</td><td></td><td></td><td></td></tr>
+        <tr><td>R3-06</td><td>R3-04</td><td>在版本迁移备份列表下载对应 zip，核对备份名称和旧版手动备份仍可访问。</td><td>迁移备份存在且可下载；手动备份不被覆盖；下载失败有可读错误。</td><td></td><td></td><td></td></tr>
+        <tr><td>R3-07</td><td>已记录数据基线</td><td>在新版核对请求 ID、关键配置、上传会话元数据；创建一条可识别的新请求记录（离线接口测试即可）。</td><td>旧数据完整；新数据写入正常；备份与恢复边界不破坏现有功能。</td><td></td><td></td><td></td></tr>
+        <tr><td>R3-08</td><td>R3-07</td><td>选择 R3-06 的版本迁移备份 → “校验并暂存恢复”，确认后不重启。</td><td>提示“等待恢复”；当前页面数据不热替换；恢复前自动备份成功。</td><td></td><td></td><td></td></tr>
+        <tr><td>R3-09</td><td>R3-08</td><td>完全退出新版并重新打开。</td><td>启动早期应用恢复；R3-07 新增数据消失，基线数据回来；自检仍显示当前版本通过。</td><td></td><td></td><td></td></tr>
+        <tr><td>R3-10</td><td>R3-09</td><td>再次重启新版。</td><td>恢复不再重复执行；请求、配置和上传元数据保持一致。</td><td></td><td></td><td></td></tr>
+        <tr><td>R3-11</td><td>保留旧版目录</td><td>关闭新版，从旧版目录启动；检查管理台、版本卡片和用户数据。</td><td>旧版进程可独占默认端口；旧版程序可用；用户数据按恢复后的状态可见。</td><td></td><td></td><td></td></tr>
+        <tr><td>R3-12</td><td>已回到旧版</td><td>再次启动新版，指定另一个端口；检查两个程序是否允许同时运行。</td><td>若设计为单机单实例，第二个实例应明确拒绝或提示端口；不得静默共用错误数据库。</td><td></td><td></td><td></td></tr>
+        <tr><td>R3-13</td><td>隔离测试环境</td><td>把用户目录磁盘空间限制到不足或对备份目录设只读，模拟版本迁移备份失败。</td><td>新版停止在数据库初始化前；旧数据文件保持不变；错误提示磁盘/权限建议。</td><td></td><td></td><td></td></tr>
+        <tr><td>R3-14</td><td>R3-13</td><td>修复空间或权限后重新启动新版。</td><td>重新尝试备份；成功后完成版本切换；不产生半迁移数据库。</td><td></td><td></td><td></td></tr>
+        <tr><td>R3-15</td><td>故意损坏暂存备份</td><td>把恢复上传文件截断或改一个字节，点击校验并暂存。</td><td>返回 422 可读错误；不生成待恢复标记；不覆盖现有数据。</td><td></td><td></td><td></td></tr>
+        <tr><td>R3-16</td><td>版本目录共存</td><td>覆盖解压新目录后，删除新目录中非程序的测试文件；检查 <code>~/.comfybridge</code>。</td><td>版本状态与备份不迁移、不丢失；只有程序目录变化；用户数据根保持独立。</td><td></td><td></td><td></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>5. 接口与 UI 点击覆盖</h2>
+    <table>
+      <thead><tr><th style="width:16%">入口</th><th style="width:23%">操作</th><th style="width:24%">检查点</th><th style="width:12%">实际结果</th><th style="width:7%">状态</th><th>证据</th></tr></thead>
+      <tbody>
+        <tr><td><code>GET /api/v1/maintenance</code></td><td>管理员认证后读取</td><td><code>release.version/previous_version/installed_at_ms/last_self_check</code> 完整；无 secret</td><td></td><td></td><td></td></tr>
+        <tr><td><code>POST /api/v1/maintenance/backup</code></td><td>手动备份 + 升级自动备份</td><td>两次都成功；文件名与原因可区分；不超过保留上限</td><td></td><td></td><td></td></tr>
+        <tr><td><code>GET /api/v1/maintenance/backups/{name}</code></td><td>下载普通/升级备份</td><td>有效 zip；路径穿越返回 400/404；无缓存头</td><td></td><td></td><td></td></tr>
+        <tr><td><code>POST /api/v1/maintenance/restore</code></td><td>原始 zip 上传</td><td>有效包暂存；截断/篡改包 422；不热替换数据库</td><td></td><td></td><td></td></tr>
+        <tr><td>数据安全页</td><td>立即备份、下载、清理、选择文件、校验并暂存、取消确认</td><td>按钮忙碌态、成功/失败提示、空态、等待恢复提示清晰</td><td></td><td></td><td></td></tr>
+        <tr><td>版本与升级卡片</td><td>刷新、重新进入页签、查看自检失败提示</td><td>版本/上一版本/时间/历史正确；失败错误可行动</td><td></td><td></td><td></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>6. 失败判定与收口</h2>
+    <div class="card">
+      <ul>
+        <li><strong>P0：</strong>升级备份包含明文凭证泄露；未备份就迁移数据库；恢复覆盖错误文件；新版失败后旧版无法启动；数据丢失或静默污染。</li>
+        <li><strong>P1：</strong>版本卡片显示错误；升级历史重复；恢复需要重启但没有明确提示；新进程残留导致旧版端口冲突。</li>
+        <li><strong>P2：</strong>时间格式、空态、按钮文案或表格换行问题，不影响数据边界。</li>
+      </ul>
+      <p>任一 P0 或 P1 未关闭，不满足 R3 正式发布条件。P2 可带问题放行，但需登记到修复清单并在下一测试版回归。</p>
+    </div>
+    <table>
+      <thead><tr><th>汇总</th><th>填写</th></tr></thead>
+      <tbody>
+        <tr><td>执行日期 / 人员</td><td></td></tr>
+        <tr><td>通过 / 失败 / 阻塞 / 跳过</td><td></td></tr>
+        <tr><td>P0 / P1 / P2 数量</td><td></td></tr>
+        <tr><td>结论</td><td>□ 可进入下一批　□ 需修复后重测　□ 阻塞</td></tr>
+        <tr><td>遗留项与负责人</td><td></td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+<footer>ComfyBridge 升级与回滚专项验收 · 2026-10-21 · 实际结果需在真机执行时实时填写</footer>
+</body>
+</html>

@@ -1,4 +1,4 @@
-//! 构建期读取 backend/dist 最新 wheel 名，用于启动器 --version / --doctor 展示。
+//! 构建期读取 backend/dist 最新 wheel 名与整合包标签版本，用于 --version / --doctor 展示。
 
 use std::env;
 use std::fs;
@@ -7,6 +7,10 @@ use std::time::SystemTime;
 
 fn main() {
     tauri_build::build();
+
+    let bundle_version =
+        env::var("CB_BUNDLE_VERSION").unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_string());
+    println!("cargo:rustc-env=CB_BUNDLE_VERSION={bundle_version}");
 
     let manifest = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR 必须存在");
     let repo = Path::new(&manifest)

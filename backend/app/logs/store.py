@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import sqlite3
 import threading
 import time
@@ -15,7 +16,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+
+def _data_dir() -> Path:
+    """请求库目录；CB_DATA_DIR 用于测试和多实例隔离，默认保持安装态布局。"""
+    override = os.environ.get("CB_DATA_DIR", "").strip()
+    return Path(override) if override else Path(__file__).resolve().parents[2] / "data"
+
+
+DATA_DIR = _data_dir()
 GRAPH_DIR = DATA_DIR / "graphs"
 DB_PATH = DATA_DIR / "bridge.sqlite3"
 

@@ -81,7 +81,7 @@
 <body>
 <header class="hero">
   <h1>ComfyBridge 使用说明手册</h1>
-  <div class="meta">ComfyBridge 文档 · 生成于 2026-10-16 · 适用版本 0.1.0</div>
+<div class="meta">ComfyBridge 文档 · 生成于 2026-10-21 · 适用版本 0.1.0-beta.8 及后续版本</div>
 </header>
 <nav class="toc"><a href="#c1">1. 产品概览</a><a href="#c2">2. 安装与启动</a><a href="#c3">3. 首次配置</a><a href="#c4">4. 管理台导览</a><a href="#c5">5. 出图流程</a><a href="#c6">6. 路由与分流</a><a href="#c7">7. 节点与模型</a><a href="#c8">8. 数据卷</a><a href="#c9">9. 成本与预算</a><a href="#c10">10. 配置项参考</a><a href="#c11">11. API 参考</a><a href="#c12">12. 安全与数据边界</a></nav>
 <main>
@@ -140,6 +140,16 @@
 .\comfy-bridge.exe --console --host 127.0.0.1 --port 18189</code></pre>
 <p>桌面模式仅支持本机 <code>--host</code> / <code>--port</code>；需要监听非回环地址时请使用 <code>--console</code>。桌面窗口使用系统 WebView2，Windows 10/11 通常已自带。</p>
 <p>整合包<strong>不含 ComfyUI 本体</strong>，数据面仍需你已有的本地 ComfyUI 或 Modal 云端提供。彻底卸载只需删除解压目录；配置与数据保存在用户目录 <code>~/.comfybridge</code>，与整合包目录无关。</p>
+
+<h3>整合包升级与回滚</h3>
+<ol>
+<li>先在「设置 → 检查更新」确认版本；退出 ComfyBridge，确认窗口关闭后内置服务也已停止。</li>
+<li>把新整合包解压到新的空目录，不要直接覆盖正在运行的旧目录。程序文件按目录版本保留，用户数据继续共用 <code>~/.comfybridge</code>。</li>
+<li>首次启动新版本时，后端会在数据库 schema 初始化或迁移前自动创建版本迁移备份；备份失败会停止启动，避免在无保护状态下改库。旧版已有配置或用户数据但尚未记录版本状态时，也会按旧安装升级处理并先创建备份。</li>
+<li>在「设置 → 数据安全 → 版本与升级」确认当前版本、升级时间与最近启动自检。自检通过后可继续使用，并保留上一版目录一段时间。</li>
+</ol>
+<p><strong>回滚边界：</strong>程序回滚通过重新打开上一版解压目录完成；用户数据回滚则需在「数据安全 → 版本迁移备份」下载对应备份，选择该文件并「校验并暂存恢复」，重启应用后生效。恢复前系统还会创建当前状态备份，因此回滚操作本身也可撤回。升级前备份只读取复制旧数据库，不会在备份阶段自动补表或执行 schema 迁移。备份含 Modal 凭证，只保存在可信位置并仅通过管理员认证下载。</p>
+<p>启动自检失败时不要继续删除数据目录。先在「数据安全」查看失败项和错误建议：磁盘空间不足先清理空间；权限不足先关闭占用文件的程序；数据库损坏则从已验证备份恢复。若新版本仍无法通过自检，打开上一版解压目录，并用版本迁移备份恢复数据。</p>
 
 <h3>2.2 方式二：wheel + pipx</h3>
 <pre><span class="lang">powershell</span><code>python -m pip install --user pipx
@@ -207,7 +217,7 @@ powershell -File scripts/dev.ps1</code></pre>
 <tr><td>成本</td><td>请求费用估算、账单对账、导出</td></tr>
 <tr><td>日志</td><td>请求日志与实时执行输出（SSE）</td></tr>
 <tr><td>状态</td><td>系统状态页：依赖、CLI、运行环境诊断</td></tr>
-<tr><td>设置</td><td>本地 / 启动命令 / 桥接 / Modal / 护栏与预算 / 设置同步</td></tr>
+<tr><td>设置</td><td>本地 / 启动命令 / 桥接 / Modal / 护栏与预算 / 设置同步 / 数据安全 / 检查更新</td></tr>
 </tbody>
 </table>
 
@@ -221,6 +231,8 @@ powershell -File scripts/dev.ps1</code></pre>
 <tr><td>Modal</td><td>凭证、Environment、卷名、应用名、<code>web_url</code>、任务超时、账号档案</td></tr>
 <tr><td>护栏与预算</td><td>月度预算、并发上限、超预算动作、系统代理开关（云端出站请求，默认关闭）</td></tr>
 <tr><td>设置同步</td><td>两端设置项对齐，敏感项以掩码显示</td></tr>
+<tr><td>数据安全</td><td>版本与升级状态、启动自检、版本迁移备份、手动备份、恢复与保留清理</td></tr>
+<tr><td>检查更新</td><td>检查 GitHub Latest；存在系统代理时按系统代理访问，未开启代理则直连</td></tr>
 </tbody>
 </table>
 
@@ -265,6 +277,20 @@ powershell -File scripts/dev.ps1</code></pre>
 <li>模型删除有引用保护，会检查工作流引用并支持回收站。</li>
 <li><code>object_info</code> 合并策略（设置 → 桥接）决定本地与云端模型清单如何合并：<code>local-first</code>（默认）/ <code>union</code> / <code>local-only</code>。</li>
 </ul>
+<h3>7.3 常见异常的处理顺序</h3>
+<table>
+<thead><tr><th>现象</th><th>优先检查</th><th>下一步</th></tr></thead>
+<tbody>
+<tr><td>启动时提示端口被占用</td><td><code>Get-NetTCPConnection -LocalPort 18189</code> 查看占用进程</td><td>关闭残留的 ComfyBridge/ComfyUI，或用 <code>--port</code> 指定空闲端口；显式端口不会自动回退</td></tr>
+<tr><td>更新检查失败</td><td>是否启用系统代理，代理是否能访问 GitHub</td><td>检查 <code>HTTP_PROXY</code>/<code>HTTPS_PROXY</code>；更新检查会随系统代理，桥接器的代理开关不影响它</td></tr>
+<tr><td>升级后启动自检失败</td><td>「设置 → 数据安全 → 版本与升级」的错误项</td><td>按磁盘/权限/数据库建议处理；无法通过时打开上一版目录，恢复版本迁移备份</td></tr>
+<tr><td>恢复后没有变化</td><td>是否仍在运行恢复前的进程</td><td>完全退出并重新打开；恢复只在启动早期应用</td></tr>
+<tr><td>提示另一个实例正在恢复</td><td>是否同时启动了多个 ComfyBridge 目录或进程</td><td>等待另一个实例完成；若超过 30 秒仍占用，关闭残留实例后再启动。不要删除 <code>.restore.lock</code> 或数据目录</td></tr>
+<tr><td>卷同步任务因重启中断</td><td>任务抽屉中的 <code>interrupted</code> 状态</td><td>先核对云端文件是否存在，再显式重试；不要假设中断任务已写入</td></tr>
+<tr><td>部署任务因重启中断</td><td>任务状态为 <code>interrupted</code>，提示远端结果不确定</td><td>先执行 <code>modal app list</code> 核对应用状态与部署时间，再查看部署和镜像日志；确认前不要重复部署，也不要回滚无法确认的远端变更</td></tr>
+<tr><td>本机扫描因重启中断</td><td>扫描状态为 <code>interrupted</code></td><td>按需点击「扫描本机」重新发起；系统不会在启动时自动扫描磁盘</td></tr>
+</tbody>
+</table>
 
 <h2 id="c8">8. 数据卷</h2>
 <p>模型、自定义节点、输入输出、工作流全部持久化在 Modal 数据卷（默认 <code>comfyui-data</code>，挂载到容器 <code>/data</code>）。</p>
@@ -353,8 +379,25 @@ powershell -File scripts/dev.ps1</code></pre>
 <tr><td>uploads</td><td><code>/uploads</code></td><td>分块上传会话</td></tr>
 <tr><td>volume</td><td><code>/volume</code></td><td>卷用量与同步任务</td></tr>
 <tr><td>settings-sync</td><td><code>/settings-sync</code></td><td>两端设置对齐</td></tr>
+<tr><td>maintenance</td><td><code>/maintenance</code></td><td>数据保留、备份下载、版本/自检状态与启动时恢复</td></tr>
 </tbody>
 </table>
+<h3>数据安全操作</h3>
+<p>管理台「设置 → 数据安全」可设置请求记录保留期（默认 90 天）、创建和下载备份，以及选择备份恢复。保留清理只删除已结束请求、已结束作业和失去引用的图快照，不删除模型、成片、配置或上传会话。</p>
+<p>备份包含 <code>config.toml</code>（含 Modal 凭证）、请求数据库、图快照、上传会话元数据和审计日志，应存放在可信位置。恢复文件会先校验结构、文件哈希和 SQLite 完整性，再暂存到 <code>~/.comfybridge/restore-staging.zip</code>；必须重启 ComfyBridge 才应用。恢复会整体替换请求历史、配置、图快照和上传会话元数据，应用前会额外生成一份当前状态备份。</p>
+<p>恢复前自动备份失败时，新恢复文件不会进入待恢复队列。启动应用恢复时，图快照和上传元数据按整组切换，配置、审计日志与数据库依次原子替换；任一替换失败会尽力回滚已切换资源，原数据库还会保留为 <code>bridge.sqlite3.pre-restore</code>。若提示磁盘空间不足、目录权限不足或数据库损坏，请按提示清理空间、关闭占用文件的程序或从「数据安全」选择已验证备份恢复。</p>
+<p>恢复暂存和启动应用共用 <code>~/.comfybridge/.restore.lock</code> 操作系统文件锁。多个实例同时启动时，只有一个实例可以消费暂存恢复包；其他实例会等待并在拿锁后重新检查。等待超过 30 秒会拒绝继续启动，避免在数据文件切换过程中打开半恢复数据库。锁文件由程序维护，不要手动删除。</p>
+<pre><span class="lang">powershell</span><code># 创建备份并下载（需管理员令牌时附带 Authorization）
+Invoke-RestMethod -Method Post http://127.0.0.1:18189/api/v1/maintenance/backup `
+  -ContentType 'application/json' -Body '{"reason":"manual"}'
+Invoke-WebRequest http://127.0.0.1:18189/api/v1/maintenance/backups/&lt;name&gt; `
+  -OutFile .\ComfyBridge-backup.zip
+
+# 恢复请求体为原始 zip；不是 multipart 表单
+Invoke-WebRequest -Method Post http://127.0.0.1:18189/api/v1/maintenance/restore `
+  -ContentType 'application/zip' -InFile .\ComfyBridge-backup.zip</code></pre>
+<p>恢复前请退出正在执行的任务，确认没有部署、卷上传、下载或移动任务。备份不会包含模型权重、生成成片或 ComfyUI 本体。</p>
+<p><code>GET /api/v1/maintenance</code> 的 <code>release</code> 字段只返回版本、安装时间、迁移历史、备份记录与启动自检摘要，不返回凭证。版本迁移备份自动出现在同一备份列表和版本历史中，恢复接口与手动备份完全相同。</p>
 <pre><span class="lang">powershell</span><code># 健康检查（示例）
 Invoke-RestMethod http://127.0.0.1:18189/api/v1/health | ConvertTo-Json -Depth 6</code></pre>
 

@@ -6,12 +6,29 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
+import uuid
+from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
 
 from app.api.v1 import jobs as jobs_api
 from app.sync import jobs
+
+
+@pytest.fixture()
+def workspace_tmp_path():
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "data"
+        / f"cb-sync-test-{uuid.uuid4().hex[:10]}"
+    )
+    path.mkdir(parents=True)
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
 
 
 @pytest.fixture(autouse=True)
@@ -149,19 +166,53 @@ async def test_jobs_api_list_detail_cancel():
         await jobs_api.cancel_job("missing")
 
 
+async def test_interrupted_job_is_listed_and_detail_shows_retry_guidance():
+    from app.core import job_store
+    from app.events import publish
+
+    job_store.default_store().create("sync", "restart-job", {
+        "id": "restart-job",
+        "kind": "workflow_sync",
+        "label": "重启前工作流同步",
+        "state": "interrupted",
+        "phase": "已中断（重启恢复）",
+        "total": 2,
+        "done": 1,
+        "items": [{"name": "ok.json", "ok": True, "action": "push"}],
+        "logs": [],
+        "error": "桥接器重启，作业已中断",
+        "cancellable": True,
+        "created_ms": 1,
+        "started_ms": 1,
+        "finished_ms": 2,
+    })
+    listed = await jobs_api.list_jobs(limit=10)
+    assert listed["running"] == 0
+    assert listed["jobs"][0]["state"] == "interrupted"
+    detail = await jobs_api.job_detail("restart-job")
+    assert detail["job"]["items"][0] == {"name": "ok.json", "ok": True, "action": "push"}
+    assert detail["job"]["items"][1]["ok"] is False
+    assert "未完成条目（1 项）" == detail["job"]["items"][1]["name"]
+    assert publish("job", {"action": "test", "job": detail["job"]})["event"] == "job"
+
+
 # ---------------- 端点级：工作流同步任务化（复用假卷，见 test_workflows_sync） ----------------
 
 
-async def test_nodes_sync_endpoint_returns_job(monkeypatch, tmp_path):
+async def test_nodes_sync_endpoint_returns_job(monkeypatch, workspace_tmp_path):
     from app.api.v1 import nodes as nodes_api
     from app.nodes_mgr import diff_cache
 
+    tmp_path = workspace_tmp_path
     monkeypatch.setattr(diff_cache, "_path", lambda: tmp_path / "cache.json")
     diff_cache._doc = None
     monkeypatch.setattr(nodes_api, "custom_nodes_dir", lambda: tmp_path)
     pkg = tmp_path / "p1"
     pkg.mkdir()
     (pkg / "__init__.py").write_text("", encoding="utf-8")
+    staged_pkg = tmp_path / "staged" / "p1"
+    staged_pkg.mkdir(parents=True)
+    monkeypatch.setattr(nodes_api, "_stage_dir", lambda _src: staged_pkg)
     monkeypatch.setattr(
         nodes_api, "scan_custom_nodes",
         lambda: {"path": str(tmp_path),
@@ -194,7 +245,11 @@ async def test_nodes_sync_endpoint_returns_job(monkeypatch, tmp_path):
     assert res["job"]["total"] == 1
 
     job = await nodes_api.jobs.wait_job(res["job"]["id"])
-    assert job["state"] == "ok"
+    assert job["state"] == "ok", {
+        "error": job.get("error"),
+        "logs": job.get("logs"),
+        "items": job.get("items"),
+    }
     assert job["items"][0]["ok"] is True
     assert not puts
     assert len(dir_puts) == 1 and dir_puts[0][1] == "custom_nodes/p1"

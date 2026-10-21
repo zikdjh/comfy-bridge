@@ -28,3 +28,17 @@ body {
     min-width: 0;
   }
 }
+/* 路由/页签懒加载占位：保持布局稳定并避免首次访问白屏。 */
+.cb-skeleton {
+  border-radius: 4px;
+  background: var(--ant-color-fill-secondary, #f0f0f0);
+  animation: cb-skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes cb-skeleton-pulse {
+  50% { opacity: 0.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cb-skeleton { animation: none; }
+}

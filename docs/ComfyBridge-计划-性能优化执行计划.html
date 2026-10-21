@@ -73,12 +73,12 @@
     <table>
       <thead><tr><th style="width:22%">指标</th><th style="width:20%">当前状态</th><th>结论</th></tr></thead>
       <tbody>
-        <tr><td>页面切换 p95</td><td>多数页面 &lt; 300ms</td><td>预算基本达成，日志页仍有 466ms 尖刺</td></tr>
+        <tr><td>页面切换 p95</td><td>11 页本轮实测最差 260ms（日志页）</td><td>全部进入 300ms 预算；独立报告检查器判定冷热预算</td></tr>
         <tr><td>路由规则 / 系统状态</td><td>已从 551ms / 391ms 降至 137ms / 136ms</td><td>轮询与缓存治理有效</td></tr>
         <tr><td>Modal 控制面请求</td><td>自检、TTL 缓存、单飞与并发闸门已落地</td><td>数据卷目录读取最多 4 路并发，同一路径共享一次请求</td></tr>
         <tr><td>云端受理</td><td>已有 p95 &lt; 500ms 门禁</td><td>需保持并纳入常规回归</td></tr>
-        <tr><td>桌面启动</td><td>已有启动链路，缺固定冷热基线</td><td>优先补采样与门禁</td></tr>
-        <tr><td>空闲资源</td><td>轮询已按可见性治理</td><td>需补长运行 CPU / RSS / 句柄采样</td></tr>
+        <tr><td>桌面启动</td><td>已有启动链路与采样工具；旧整合包短探测未稳定就绪</td><td>需在新构建产物上补冷热基线</td></tr>
+        <tr><td>空闲资源</td><td>已新增资源报告检查器；旧包离线路径出现异常卡住</td><td>需补齐真实 30 分钟采样</td></tr>
       </tbody>
     </table>
   </section>
@@ -89,7 +89,7 @@
       <thead><tr><th style="width:18%">主题</th><th style="width:14%">等级</th><th>问题</th><th>目标</th></tr></thead>
       <tbody>
         <tr><td>启动性能</td><td><span class="badge bad">P0</span></td><td>冷启动、热启动、后端 ready、窗口可交互缺少统一埋点</td><td>形成固定基线和回归门禁</td></tr>
-        <tr><td>长列表渲染</td><td><span class="badge bad">P0</span></td><td>日志页整表渲染存在尖刺</td><td>虚拟化后 p95 &lt; 300ms</td></tr>
+        <tr><td>长列表渲染</td><td><span class="badge ok">已优化</span></td><td>日志页整表与未激活控制台同时挂载</td><td>虚拟表格 + 页签懒加载后 p95 &lt; 300ms</td></tr>
         <tr><td>云端受理</td><td><span class="badge warn">P1</span></td><td>规则匹配、预检、落库、派发未分段观测</td><td>分段打点，p95 保持 &lt; 500ms</td></tr>
         <tr><td>数据卷请求</td><td><span class="badge ok">已收敛</span></td><td>并发列出不同目录会共同挤占 VolumeListFiles 限额</td><td>单路径单飞、全局 4 路闸门、写后取消旧在途读取</td></tr>
         <tr><td>空闲资源</td><td><span class="badge warn">P1</span></td><td>缺少 30 分钟以上长运行采样</td><td>无 CPU 空转、无句柄泄漏</td></tr>
@@ -140,6 +140,33 @@
         <li><strong>覆盖</strong>：单飞复用、并发峰值、TTL 命中、写失效防回填、失败不缓存、等待者取消隔离均有单元回归。</li>
       </ul>
     </div>
+    <h3>4.7 本轮 · 日志渲染与导航门禁</h3>
+    <div class="card">
+      <ul>
+        <li><strong>虚拟表格</strong>：请求日志启用 Ant Design 虚拟列表和固定滚动高度，500 条测试数据只渲染视口附近行；分页可选 20 / 50 / 100 条。</li>
+        <li><strong>首屏挂载</strong>：首次请求尚未返回时显示稳定骨架，数据就位后再挂载虚拟表格，避免空表初始化与首屏模块加载争用主线程。</li>
+        <li><strong>按需加载</strong>：日志页在路由层懒加载，默认请求日志随页面 chunk 一次就位，实时控制台按页签拆分；未激活控制台不再随日志页首屏挂载。首屏空闲时预取其他页面 chunk。</li>
+        <li><strong>可操作口径</strong>：导航耗时以目标页关键内容可见为终点，不再以 SSE 长连接的 networkidle 作为页面完成信号。</li>
+        <li><strong>回归</strong>：500 行虚拟列表 E2E 验证渲染行数受控且详情可打开；导航 E2E 输出原始样本，由独立报告检查器按首轮冷加载与后续热路径中位数判定预算。</li>
+      </ul>
+    </div>
+    <h3>4.8 本轮 · 云端受理分段观测</h3>
+    <div class="card">
+      <ul>
+        <li>P-08 基准新增 <code>read_body</code>、<code>parse</code>、<code>classify</code>、<code>modal_state</code>、<code>presence_budget</code>、<code>decide</code>、<code>preflight</code>、<code>persist</code>、<code>dispatch</code>、<code>total</code> 分段 p95。</li>
+        <li>计时仅通过内部测试回调输出，不改变 <code>/prompt</code> 响应契约、不落库、不增加生产请求的常驻内存。</li>
+      </ul>
+    </div>
+    <h3>4.9 本轮 · 桌面启动与资源采样工具</h3>
+    <div class="card">
+      <ul>
+        <li><strong>采样器</strong>：新增 <code>scripts/sample_desktop_perf.py</code>，记录启动到健康接口就绪、后端进程树 CPU / 工作集 / 私有内存 / 句柄，以及关闭后端口和子进程释放；也支持只读采样已有 PID。</li>
+        <li><strong>检查器</strong>：新增 <code>scripts/check_desktop_perf_report.py</code>，按首轮冷启动、后续热启动中位数、关闭清理、空闲 CPU 与整树 RSS 判定预算，并支持只验资源趋势。</li>
+        <li><strong>隔离</strong>：采样使用独立配置目录、空 Modal 凭证、绕过系统代理；只读健康接口，不提交提示词，不触发 ComfyUI 或云端生图。</li>
+        <li><strong>验证</strong>：检查器 8 项单元测试通过，采样器通过 ruff / mypy；旧 <code>ComfyBridge-0.1.0-win64.zip</code> 在隔离端口短探测中多次出现健康接口不就绪，不能作为当前发布性能基线，需用最新构建产物复测。</li>
+        <li><strong>未完成</strong>：30 分钟空闲资源长跑尚未执行，不能标记为通过。</li>
+      </ul>
+    </div>
   </section>
 
   <section id="p5">
@@ -170,8 +197,21 @@
       </ul>
     </div>
   </section>
+
+  <section id="p7">
+    <h2>7 本轮执行记录</h2>
+    <table>
+      <thead><tr><th>日期</th><th>项目</th><th>结果</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>2026-10-21</td><td>导航 11 页 × 3 轮</td><td>最差 p95 260ms</td><td>本地隔离后端 + Vite；目标页内容可见口径；预算 300ms 通过</td></tr>
+        <tr><td>2026-10-21</td><td>日志大列表 E2E</td><td>通过</td><td>500 条数据、虚拟渲染少于 100 个详情按钮、首行详情可打开</td></tr>
+        <tr><td>2026-10-21</td><td>P-08 云端受理</td><td>通过并输出分段 p95</td><td>dispatch 桩化，不触发真实 Modal/GPU</td></tr>
+      </tbody>
+    </table>
+    <p>仍需在后续批次完成：用最新整合包采集冷/热桌面启动样本、30 分钟空闲资源长跑、CI 中的启动与资源阈值、媒体库和模型卷长列表扩展。本轮旧包短探测暴露“进程在但健康接口不就绪”，应先作为发布前可靠性问题复验。</p>
+  </section>
 </main>
 
-<footer class="footer">ComfyBridge 性能优化执行计划 · 2026-10-21</footer>
+<footer class="footer">ComfyBridge 性能优化执行计划 · 2026-10-21 · 导航与日志批次已更新</footer>
 </body>
 </html>

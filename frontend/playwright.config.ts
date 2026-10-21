@@ -41,6 +41,10 @@ export default defineConfig({
     env: {
       // 配置/历史/缓存整体重定向，保证离线空态的确定性并与真实用户配置隔离
       CB_CONFIG_DIR: resolve("e2e/.tmp-config"),
+      CB_DATA_DIR: resolve("e2e/.tmp-config/data"),
+      // 空凭证覆盖系统环境；避免隔离测试意外读取真实 Modal 凭证访问云端卷
+      MODAL_TOKEN_ID: "",
+      MODAL_TOKEN_SECRET: "",
     },
   },
 });

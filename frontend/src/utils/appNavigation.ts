@@ -1,4 +1,4 @@
-export const SETTINGS_TAB_KEYS = ["local", "launch", "bridge", "modal", "budget", "sync", "update"] as const;
+export const SETTINGS_TAB_KEYS = ["local", "launch", "bridge", "modal", "budget", "sync", "maintenance", "update"] as const;
 
 export type SettingsTabKey = (typeof SETTINGS_TAB_KEYS)[number];
 

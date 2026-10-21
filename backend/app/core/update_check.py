@@ -13,14 +13,12 @@ from __future__ import annotations
 
 import json
 import logging
-import re
-import sys
 import time
-from pathlib import Path
 
 import httpx
 
 from .config import config_dir
+from .release_state import is_newer, is_valid_version, read_current_version
 
 logger = logging.getLogger(__name__)
 
@@ -29,56 +27,9 @@ _CACHE_PATH = config_dir() / "update_check.json"
 _CACHE_TTL = 24 * 3600.0
 _HTTP_TIMEOUT = 10.0
 
-# 搜索顺序：整合包（runtime/../version.txt，即包根）> 开发树仓库根。首个存在的生效。
-_VERSION_FILES = (
-    Path(__file__).resolve().parents[3] / "version.txt",
-    Path(__file__).resolve().parents[4] / "version.txt",
-    Path(sys.executable).resolve().parent.parent / "version.txt",
-)
-
-_VERSION_RE = re.compile(
-    r"^v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)"
-    r"(?:[-.]?(?P<pre>beta|rc|a|alpha|b)[-.]?(?P<prenum>\d+))?$",
-    re.IGNORECASE,
-)
-_PRE_RANK = {"a": 0, "alpha": 0, "b": 1, "beta": 2, "rc": 3}
-_STABLE_RANK = 4  # 正式版高于任何 prerelease（semver 语义）
-
-
 def current_version() -> str | None:
     """包内 version.txt 的原始内容（如 v0.1.0-beta.4）；找不到返回 None。"""
-    for f in _VERSION_FILES:
-        try:
-            if f.is_file():
-                text = f.read_text(encoding="utf-8-sig").strip()
-                if text:
-                    return text
-        except OSError:
-            continue
-    return None
-
-
-def _parse(tag: str) -> tuple[int, int, int, int, int] | None:
-    m = _VERSION_RE.match(tag.strip())
-    if not m:
-        return None
-    pre_tag = (m.group("pre") or "").lower()
-    pre = _STABLE_RANK if not pre_tag else _PRE_RANK.get(pre_tag, -1)
-    return (
-        int(m.group("major")),
-        int(m.group("minor")),
-        int(m.group("patch")),
-        pre,
-        int(m.group("prenum") or 0),
-    )
-
-
-def is_newer(candidate: str, current: str) -> bool:
-    """语义化比较：v0.1.0-beta.5 > v0.1.0-beta.4 > v0.1.0-beta.3 > v0.1.0。"""
-    c, n = _parse(candidate), _parse(current)
-    if not c or not n:
-        return False
-    return c > n
+    return read_current_version()[0]
 
 
 def _read_cache() -> dict:
@@ -104,7 +55,7 @@ async def check_update(*, force: bool = False) -> dict:
     """返回 {available, current, latest, release_url, reason, checked_at, cached?}。"""
     now = time.time()
     current = current_version()
-    if not current or not _parse(current):
+    if not current or not is_valid_version(current):
         return {
             "available": False,
             "current": current,
